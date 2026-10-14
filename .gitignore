@@ -1,0 +1,8 @@
+# Godot cache and exports
+.godot/
+build/
+*.tmp
+
+# Android signing key: keep it safe, never commit it
+keys/
+*.keystore

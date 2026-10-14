@@ -1,0 +1,34 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/store.gd" id="1_store"]
+[ext_resource type="Script" path="res://scripts/floor.gd" id="2_floor"]
+[ext_resource type="Script" path="res://scripts/hud.gd" id="3_hud"]
+[ext_resource type="Script" path="res://scripts/build_mode.gd" id="4_build"]
+[ext_resource type="Script" path="res://scripts/store_lights.gd" id="5_lights"]
+
+[node name="Main" type="Node2D"]
+
+[node name="Store" type="Node2D" parent="."]
+script = ExtResource("1_store")
+
+[node name="Floor" type="Node2D" parent="Store"]
+z_index = -2
+script = ExtResource("2_floor")
+
+[node name="Decals" type="Node2D" parent="Store"]
+
+[node name="World" type="Node2D" parent="Store"]
+y_sort_enabled = true
+
+[node name="Collision" type="StaticBody2D" parent="Store"]
+
+[node name="Mood" type="CanvasModulate" parent="Store"]
+
+[node name="Lights" type="Node2D" parent="Store"]
+script = ExtResource("5_lights")
+
+[node name="BuildMode" type="Node2D" parent="Store"]
+script = ExtResource("4_build")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("3_hud")
