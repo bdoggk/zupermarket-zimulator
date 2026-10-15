@@ -35,6 +35,11 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.8.4
+
+- The Controls list in Options puts everything you do with **E** in one row:
+  **Interact** (E, A on a controller, or tap it).
+
 ## What's new in 0.8.3
 
 - **Sprint:** hold **Shift** (LT or a click of the left stick on a controller, or the
@@ -400,16 +405,9 @@ computer. A scanner icon appears next to your money once you own it.
 |---|---|---|
 | Move | WASD / arrow keys, or click a spot | Tap a spot |
 | Sprint | Hold Shift | RUN button (tap again to stop) |
-| Use | E or Space (or click the object) | Tap the object, or the big button |
+| Interact: pick up / drop boxes, stock or empty shelves, ring up shoppers, take over a register, racks, the computer, the OPEN sign, the mop, a jammed self-checkout, Bone Mart's prices | E (or click the thing) | Tap it, or the big button |
 | Scan a shelf | Q | SCAN button |
-| Drop a box | E with nothing usable nearby | Big button ("Drop box") |
-| Grab / return the mop | E at the mop bucket | Tap the bucket |
-| Mop up blood | E next to a puddle (holding the mop) | Tap the puddle |
-| Take items off a shelf / remove its label | E at the shelf with empty hands | Tap the shelf |
-| Put a box on a rack / take one | E at a storage rack | Tap the rack |
-| Check a Bone Mart price | E at one of its shelves | Tap the shelf |
-| Fix a jammed self-checkout | E next to it | Tap it |
-| Take over a register from a cashier | E at the register | Tap the register |
+| Next day (end of the day) | Space | Tap the bar at the bottom |
 | Build mode | B | Build button |
 | Turn something (build mode) | R | Rotate button, then tap it |
 | Zoom | Mouse wheel or the +/- buttons | +/- buttons |

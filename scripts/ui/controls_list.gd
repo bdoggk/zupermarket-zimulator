@@ -3,23 +3,18 @@ class_name ControlsList
 ## key you forgot. PCs show keyboard & mouse and controller; phones and
 ## handhelds show touch and controller.
 
-## [what it does, keyboard & mouse, controller, touch]. "" = not available.
+## [what it does, keyboard & mouse, controller, touch, (what it covers)].
+## "" = not available.
 static func rows() -> Array:
-	var list := [
+	var does := "Whatever is in front of you: boxes, shelves, registers, the computer, the OPEN sign"
+	if Brand.SPILLS:
+		does += ", the mop"
+	return [
 		["Move", "WASD or arrow keys, or click a spot", "Left stick", "Tap a spot"],
 		["Sprint", "Hold Shift", "Hold LT, or click the left stick", "RUN button"],
-		["Use / pick up / stock", "E or Space (or click it)", "A", "Tap it, or the big button"],
+		["Interact", "E", "A", "Tap it, or the big button", does + "."],
 		["Scan a shelf (scanner)", "Q", "X", "SCAN button"],
-		["Drop the box you carry", "E with nothing to use nearby", "A", "Big button (\"Drop box\")"],
-		["Take items off a shelf", "E at it with empty hands", "A", "Tap the shelf"],
-		["Ring up a shopper", "E at the register", "A", "Tap the register"],
-		["Take over a register", "E at a cashier's register", "A", "Tap the register"],
-	]
-	if Brand.SPILLS:
-		list.append(["Grab the mop / mop up", "E at the bucket or a puddle", "A", "Tap it"])
-	list.append_array([
-		["Open the store", "E at the OPEN sign", "A", "Tap the sign"],
-		["End of day / next day", "Space", "A", "Tap the bar at the bottom"],
+		["Next day (end of the day)", "Space", "A", "Tap the bar at the bottom"],
 		["Build mode", "B", "Y", "Build button"],
 		["Turn something (build mode)", "R", "RB", "Rotate button, then tap it"],
 		["Place / confirm (build mode)", "Click", "", "Tap twice"],
@@ -28,8 +23,7 @@ static func rows() -> Array:
 		["Zoom", "Mouse wheel, or the - / + buttons", "", "- / + buttons"],
 		["Pause menu", "Esc or P", "Start", "II button"],
 		["Menus", "Arrow keys, Enter, Esc", "D-pad, A, B", "Tap"],
-	])
-	return list
+	]
 
 
 ## A table of the controls: what it does, then the keys for each way of
@@ -45,7 +39,18 @@ static func build(touch: bool) -> GridContainer:
 	for r: Array in rows():
 		var name_label := UI.label(r[0])
 		name_label.custom_minimum_size.x = 250
-		grid.add_child(name_label)
+		if r.size() > 4:  # with a note on what it covers
+			var cell := VBoxContainer.new()
+			cell.add_theme_constant_override("separation", 2)
+			cell.add_child(name_label)
+			var note := UI.label(r[4], UI.DIM)
+			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			note.custom_minimum_size.x = 250
+			note.add_theme_font_size_override("font_size", 14)
+			cell.add_child(note)
+			grid.add_child(cell)
+		else:
+			grid.add_child(name_label)
 		var keys := UI.label(r[3] if touch else r[1], UI.INFO)
 		keys.custom_minimum_size.x = 300
 		keys.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

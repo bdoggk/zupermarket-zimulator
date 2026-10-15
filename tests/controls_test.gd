@@ -96,9 +96,12 @@ func _ready() -> void:
 	var grid: GridContainer = opt.controls_scroll.get_child(0)
 	var texts := []
 	for c in grid.get_children():
-		texts.append((c as Label).text)
+		texts.append((c as Label).text if c is Label else (c.get_child(0) as Label).text)
 	check(grid.get_child_count() == (ControlsList.rows().size() + 1) * 3, "every control is listed (%d rows)" % ControlsList.rows().size())
 	check(texts.has("Sprint") and texts.has("Hold Shift"), "including sprinting")
+	var interact := texts.find("Interact")
+	check(interact >= 0 and texts[interact + 1] == "E" and texts[interact + 2] == "A", "everything you do with E is one row: Interact, E")
+	check(not texts.any(func(t: String): return t.begins_with("E ") or t.contains(" E ")), "and no other row mentions E")
 	check(texts.has("Turn something (build mode)") and texts.has("R"), "and turning things in build mode")
 	check(opt.controls_scroll.custom_minimum_size.y <= get_viewport().get_visible_rect().size.y - 200, "the list scrolls instead of running off the screen")
 	opt.close()
