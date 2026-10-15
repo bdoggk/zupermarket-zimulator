@@ -1998,6 +1998,17 @@ def crawler():
     return img
 
 
+def splash():
+    """What shows while the game starts up (instead of Godot's logo): the
+    title, 6x bigger, on a 640x360 canvas. The game scales it up to fit the
+    screen without smoothing (project setting application/boot_splash)."""
+    img = new(640, 360)
+    t = title()
+    big = t.resize((t.width * 6, t.height * 6), Image.NEAREST)
+    img.alpha_composite(big, ((img.width - big.width) // 2, (img.height - big.height) // 2 - 10))
+    return img
+
+
 def app_icon(beans):
     bg = new(64, 64)
     rect(bg, 0, 0, 63, 63, (30, 40, 32) if ZOMBIE else (38, 42, 50))
@@ -2155,6 +2166,7 @@ def main():
         sign_open = (120, 230, 120)
     save(scanner(), "scanner")
     save(title(), "title")
+    save(splash(), "splash")
     # The sign stands at an angle: *_r1 is it turned to face the other way
     # (drawn separately so the letters don't come out backwards).
     save(sign("OPEN", sign_open, 1), "sign_open")

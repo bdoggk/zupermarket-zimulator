@@ -35,6 +35,12 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.8.5
+
+- No more Godot logo when the game starts: it shows the Zupermarket Zimulator title
+  instead (`assets/sprites/splash.png`, set in Project Settings > Application > Boot
+  Splash).
+
 ## What's new in 0.8.4
 
 - The Controls list in Options puts everything you do with **E** in one row:
@@ -545,6 +551,10 @@ Or edit the colors in `tools/make_sprites.py` and run:
 pip install pillow
 python3 tools/make_sprites.py
 ```
+
+The start-up screen is `assets/sprites/splash.png` (the title, drawn by
+`make_sprites.py`); it's shown on the dark background color set in Project Settings >
+Application > Boot Splash.
 
 Iso rules the game expects:
 - Floor tiles are 64x32 diamonds.

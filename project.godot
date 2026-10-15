@@ -12,11 +12,14 @@ config_version=5
 
 config/name="Zupermarket Zimulator"
 config/description="A 2D pixel-art isometric zombie supermarket simulator."
-config/version="0.8.4"
+config/version="0.8.5"
 run/main_scene="res://scenes/menu.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.7")
 config/icon="res://icon.png"
+boot_splash/bg_color=Color(0.07, 0.075, 0.085, 1)
+boot_splash/image="res://assets/sprites/splash.png"
+boot_splash/use_filter=false
 
 [autoload]
 
