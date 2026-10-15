@@ -21,6 +21,12 @@ func can_interact(_player: Player) -> bool:
 	return false
 
 
+## When several things nearby can be used, the highest priority wins (then
+## the closest). Things you'd rarely want to do by accident return 0.
+func use_priority(_player: Player) -> int:
+	return 1
+
+
 ## How long the action takes in seconds (0 = instant). While it runs the
 ## player stands still and a progress bar fills, like Project Zomboid.
 func get_action_time(_player: Player) -> float:

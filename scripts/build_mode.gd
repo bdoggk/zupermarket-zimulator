@@ -59,6 +59,7 @@ func enter() -> void:
 		return
 	active = true
 	_end_drag()
+	Game.tutorial_step_done("build")
 	get_tree().paused = true
 	select_tool(Tool.NONE)
 

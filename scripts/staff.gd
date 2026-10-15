@@ -472,6 +472,13 @@ func _cashier(delta: float) -> void:
 				_go_to_post()
 
 
+## Standing at their post, and it's still a good place to work the
+## register from (next to it, not in anyone's line).
+func _post_still_ok() -> bool:
+	return post != Store.NO_CELL and current_cell() == post and Iso.chebyshev(post, register.cell) == 1 \
+		and store.is_walkable(post) and not store.is_line_spot(post)
+
+
 func _go_to_post() -> void:
 	post = store.cashier_post(register, self)
 	if post == Store.NO_CELL or not _go_to(post):
@@ -561,7 +568,10 @@ func on_layout_changed() -> void:
 			_give_up()
 		Job.TO_POST, Job.AT_POST, Job.SCANNING, Job.NO_POST:
 			if is_instance_valid(register) and register in store.registers:
-				_go_to_post()
+				if job in [Job.AT_POST, Job.SCANNING] and _post_still_ok():
+					pass  # still in a good spot: keep ringing people up
+				else:
+					_go_to_post()
 			else:
 				register = null
 				job = Job.IDLE

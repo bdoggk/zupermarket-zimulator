@@ -1,13 +1,21 @@
 class_name Shelf
 extends Interactable
-## A shelf unit. Holds one product at a time; once empty it takes any
-## product that isn't cold. Fridges (fridge.gd) are shelves for cold food.
+## A shelf unit. Holds one product at a time. Fridges (fridge.gd) are
+## shelves for cold food.
+##
+## The first product you put on a shelf gives it a label (the little sign on
+## top). A labeled shelf only takes that product, even when it's empty, so
+## you and your stockers know what goes where. With empty hands, use a shelf
+## to take its items off (they go into a box you carry), and use the empty
+## shelf again to peel the label off; then it takes anything.
 ##
 ## With the handheld scanner you can scan a shelf to order more of its
 ## product without walking to the computer.
 
 const CAPACITY := 12
 const STOCK_SECONDS_PER_ITEM := 0.15
+const TAKE_SECONDS_PER_ITEM := 0.1
+const LABEL_SECONDS := 0.35
 
 ## Where items are drawn: (x of the item's left edge, height of the board it
 ## sits on). Ordered so the eye-level shelf fills first.
@@ -17,8 +25,9 @@ const SLOTS := [
 	Vector2i(-24, 28), Vector2i(4, 28), Vector2i(-14, 28), Vector2i(14, 28),
 ]
 
-## What's on the shelf. Stays set when it runs empty, so the scanner still
-## knows what to reorder.
+## What the shelf is labeled for ("" = no label). Stays set when the shelf
+## runs empty, so stockers know what to refill it with and the scanner knows
+## what to reorder.
 var product_id := ""
 var stock := 0
 
@@ -45,6 +54,22 @@ func _draw() -> void:
 			var y := _floor_edge(slot.x + 4) - slot.y - tex.get_height()
 			draw_texture(tex, Vector2(slot.x, y))
 	_draw_front()
+	if is_labeled():
+		_draw_label()
+
+
+## The label: a little sign standing on top of the shelf with the product on it.
+func _draw_label() -> void:
+	var top := -float(Game.FURNITURE[furniture_id].texture.get_height() - 32)
+	var card := Rect2(-7, top - 15, 14, 13)
+	draw_rect(Rect2(-1, top - 3, 2, 4), Color(0.25, 0.24, 0.26))
+	draw_rect(card, Color(0.94, 0.92, 0.84) if stock > 0 else Color(0.98, 0.86, 0.52))
+	draw_rect(card, Color(0.16, 0.15, 0.17), false, 1.0)
+	draw_texture(Game.icon(product_id), Vector2(-4, top - 14))
+
+
+func is_labeled() -> bool:
+	return product_id != ""
 
 
 ## Drawn on top of the items. Fridges draw their glass doors here.
@@ -66,32 +91,69 @@ func get_prompt(p: Player) -> String:
 		if Game.is_cold(id) != holds_cold():
 			return "Cold food goes in a fridge" if Game.is_cold(id) else "Fridges are for cold food"
 		if not accepts(id):
-			return "This %s holds %s" % [kind_name(), Game.product_name(product_id)]
+			return "This %s is labeled for %s" % [kind_name(), Game.product_name(product_id)]
 		if stock >= CAPACITY:
 			return "%s is full" % kind_name().capitalize()
 		return "Stock %s (%d/%d)" % [Game.product_name(id), stock, CAPACITY]
-	if stock <= 0:
-		return "Empty %s" % kind_name()
-	return "%s: %d/%d" % [Game.product_name(product_id), stock, CAPACITY]
+	if p.holding_mop:
+		return "%s: %d/%d" % [Game.product_name(product_id), stock, CAPACITY] if is_labeled() else "Empty %s" % kind_name()
+	if stock > 0:
+		return "Take %s off the %s (%d/%d)" % [Game.product_name(product_id), kind_name(), stock, CAPACITY]
+	if is_labeled():
+		return "Remove the %s label (empty %s)" % [Game.product_name(product_id), kind_name()]
+	return "Empty %s (no label)" % kind_name()
 
 
+## Carrying a box: stock the shelf. Empty hands: take the items off, or
+## remove the label from an empty shelf.
 func can_interact(p: Player) -> bool:
-	return p.is_carrying() and accepts(p.carry_product) and stock < CAPACITY
+	if p.is_carrying():
+		return accepts(p.carry_product) and stock < CAPACITY
+	return not p.holding_mop and (stock > 0 or is_labeled())
+
+
+## Taking things off a shelf loses to anything else you could do right
+## there (like picking up a box), so you don't do it by accident.
+func use_priority(p: Player) -> int:
+	return 1 if p.is_carrying() else 0
 
 
 func get_action_time(p: Player) -> float:
-	return mini(p.carry_count, CAPACITY - stock) * STOCK_SECONDS_PER_ITEM
+	if p.is_carrying():
+		return mini(p.carry_count, CAPACITY - stock) * STOCK_SECONDS_PER_ITEM
+	if stock > 0:
+		return stock * TAKE_SECONDS_PER_ITEM
+	return LABEL_SECONDS
 
 
 func get_action_label(p: Player) -> String:
-	return "Stocking %s..." % Game.product_name(p.carry_product)
+	if p.is_carrying():
+		return "Stocking %s..." % Game.product_name(p.carry_product)
+	if stock > 0:
+		return "Taking %s off the %s..." % [Game.product_name(product_id), kind_name()]
+	return "Peeling off the label..."
 
 
 func interact(p: Player) -> void:
 	if not can_interact(p):
 		return
-	var n := add_stock(p.carry_product, p.carry_count)
-	p.take_from_carry(n)
+	if p.is_carrying():
+		var n := add_stock(p.carry_product, p.carry_count)
+		p.take_from_carry(n)
+	elif stock > 0:
+		var n := stock
+		stock = 0
+		p.pick_up(product_id, n)
+		Game.show_popup(position + Vector2(0, -64), "-%d %s (into a box)" % [n, Game.product_name(product_id)], Color(1.0, 0.85, 0.6))
+		Game.tutorial_step_done("labels")
+		queue_redraw()
+	else:
+		Game.show_popup(position + Vector2(0, -64), "%s label removed" % Game.product_name(product_id), Color(1.0, 0.85, 0.6))
+		product_id = ""
+		Game.tutorial_step_done("labels")
+		queue_redraw()
+		if Game.in_game():
+			Game.store.release(self)
 	Settings.vibrate(0.25, 0.04)
 
 
@@ -109,9 +171,10 @@ func add_stock(id: String, count: int) -> int:
 	return n
 
 
-## True if this shelf can take `id` right now.
+## True if this shelf can take `id`: the right temperature, and either it
+## has no label yet or it's labeled for `id`.
 func accepts(id: String) -> bool:
-	return Game.is_cold(id) == holds_cold() and (stock <= 0 or id == product_id)
+	return Game.is_cold(id) == holds_cold() and (product_id == "" or id == product_id)
 
 
 ## A customer takes one item. Returns false if the shelf is empty.

@@ -34,6 +34,19 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.8.1
+
+- **Shelf labels:** the first product you put on a shelf gives it a label (a little
+  sign on top). A labeled shelf only takes that product, even when it's empty, so
+  your stockers know what to refill it with.
+- **Take items off a shelf:** with empty hands, use a shelf to take everything off it
+  into a box you can carry somewhere else. Use the empty shelf again to peel off its
+  label.
+- **First-day tips:** on day 1 a tip box walks you through the basics and each tip
+  stays up until you've done it. Messages also stay on screen longer on day 1.
+- Fixed: cashiers no longer drop a checkout halfway and start over when you move
+  furniture around.
+
 ## What's new in 0.8
 
 - **Step outside:** walk out the front door into a barren town, with wrecked cars,
@@ -106,7 +119,8 @@ Boxes you order still get delivered while you're closed.
 1. **Boxes** arrive on the yellow-striped delivery zone in the back corner (you can
    move it in build mode). Pick one up.
 2. **Stock a shelf**: carry the box to a shelf and use it. A shelf holds one product
-   at a time (12 max); once it's empty it takes anything.
+   at a time (12 max), and the first product you put on it gives it a **label**
+   (see below).
 3. **Zombies** walk in from the edge of town with a shopping list (the bubble over
    their head), grab items and line up at the register with the shortest line.
 4. **Scan** their items at the register to get paid. Wait too long and they leave
@@ -118,6 +132,20 @@ Boxes you order still get delivered while you're closed.
    the sign).
 
 Actions take time with a progress bar, like Project Zomboid. Moving cancels them.
+
+**On day 1, tips** in the top left walk you through all of this. Each one stays up until
+you've done it; **Next tip** skips one and **Hide tips** turns them off.
+
+### Shelf labels
+The little sign on top of a shelf is its label: the product it's for. A shelf gets its
+label from the first product you (or a stocker) put on it, and keeps it when it sells
+out, so the empty shelf only takes that product. Stockers refill each shelf with the
+product on its label and only use unlabeled shelves for new products.
+
+To change what a shelf is for, walk up to it with empty hands and use it: everything
+on it comes off into a box you carry (take it to another shelf, a storage rack, or put
+it down). Use the empty shelf again to peel the label off; then it takes anything.
+If a box is on the floor right there too, using picks up the box first.
 
 ### Blood and the mop
 About a third of the zombies drip blood as they walk around, leaving puddles on the
@@ -285,6 +313,7 @@ computer. A scanner icon appears next to your money once you own it.
 | Drop a box | E with nothing usable nearby | Big button ("Drop box") |
 | Grab / return the mop | E at the mop bucket | Tap the bucket |
 | Mop up blood | E next to a puddle (holding the mop) | Tap the puddle |
+| Take items off a shelf / remove its label | E at the shelf with empty hands | Tap the shelf |
 | Put a box on a rack / take one | E at a storage rack | Tap the rack |
 | Check a Bone Mart price | E at one of its shelves | Tap the shelf |
 | Fix a jammed self-checkout | E next to it | Tap it |
@@ -333,7 +362,8 @@ scripts/
                        kinds of shoppers
   staff.gd             Staff AI: stockers, cashiers and janitors, staff levels
   interactable.gd      Base class for anything the player can use
-  shelf.gd             Shelves (and the items drawn on them), scanner support
+  shelf.gd             Shelves (the items drawn on them, labels, taking items
+                       off), scanner support
   fridge.gd            Meat cooler = a shelf for cold products
   decoration.gd        Gravestones
   stock_box.gd         Delivery boxes
@@ -348,6 +378,7 @@ scripts/
   hud.gd               Main UI (status bar, prompts, messages, summary)
   ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades tabs
   ui/rival_panel.gd    Bone Mart's price list (and buying it out)
+  ui/tutorial.gd       The first-day tips
   ui/build_bar.gd      The build mode toolbar and paint menu
   ui/pause_menu.gd     The in-game pause menu
   ui/options_menu.gd   The Options screen (main menu and pause menu)
@@ -432,6 +463,7 @@ godot --headless --path . res://tests/feature_test.tscn     # 60+ rule checks
 godot --headless --path . -s res://tests/flow_test.gd       # menus + saving, 50+ checks
 godot --headless --path . --fixed-fps 60 res://tests/staff_test.tscn  # registers, staff, spills
 godot --headless --path . --fixed-fps 60 res://tests/town_test.tscn   # 0.8: town, Bone Mart, lots, racks, self-checkout...
+godot --headless --path . --fixed-fps 60 res://tests/label_test.tscn  # shelf labels, taking items off, first-day tips
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn  # build mode view
 DAYS=5 godot --headless --path . --fixed-fps 60 res://tests/bot_test.tscn   # a bot plays 5 days
 STAFF=1 SHUFFLE=1 godot --headless --path . --fixed-fps 60 res://tests/stuck_test.tscn  # busy-store stress test

@@ -25,6 +25,7 @@ signal staff_leveled(id: int, level: int)
 signal store_expanded  # bought the next lot
 signal rival_requested  # open the rival's price list
 signal rival_bought
+signal tutorial_changed
 
 const OPEN_MINUTE := 8 * 60
 const CLOSE_MINUTE := 20 * 60
@@ -81,6 +82,8 @@ var rival_owned := false  # bought out the rival store
 var rival_factor := {}  # product id -> the rival's price today / market price
 var rival_deal := ""  # the rival's deal of the day
 var rival_seen := {}  # product id -> [price, day] when you last checked the rival
+var tutorial := {}  # first-day tips you've done (see ui/tutorial.gd)
+var tutorial_hidden := false  # you pressed "Hide tips"
 
 # Set by these nodes when they load.
 var player: Node2D
@@ -119,6 +122,8 @@ func reset() -> void:
 	expansions = 0
 	rival_owned = false
 	rival_seen = {}
+	tutorial = {}
+	tutorial_hidden = false
 	player = null
 	store = null
 	build_mode = null
@@ -588,6 +593,13 @@ func record_spill_cleaned() -> void:
 	stats.cleaned += 1
 
 
+## You did one of the first-day tips (ui/tutorial.gd).
+func tutorial_step_done(step: String) -> void:
+	if not tutorial.has(step):
+		tutorial[step] = true
+		tutorial_changed.emit()
+
+
 ## A shopper went to the rival store instead.
 func record_lost() -> void:
 	stats.lost += 1
@@ -624,6 +636,7 @@ func to_dict() -> Dictionary:
 		"play_time": play_time,
 		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
 		"rival": {"owned": rival_owned, "factor": rival_factor, "deal": rival_deal, "seen": rival_seen},
+		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden,
 		"market": {"factor": market.factor, "previous": market.previous, "demand": market.demand, "news": market.news},
 	}
 
@@ -680,6 +693,9 @@ func from_dict(d: Dictionary) -> void:
 			rival_factor[id] = clampf(float(factors[id]), 0.3, 2.0)
 	if PRODUCTS.has(str(r.get("deal", ""))):
 		rival_deal = str(r.deal)
+	for step in d.get("tutorial", []):
+		tutorial[str(step)] = true
+	tutorial_hidden = bool(d.get("tutorial_hidden", false))
 	var seen: Dictionary = r.get("seen", {})
 	for id: String in seen:
 		if PRODUCTS.has(id) and seen[id] is Array and seen[id].size() >= 2:

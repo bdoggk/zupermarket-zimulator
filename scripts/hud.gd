@@ -7,11 +7,13 @@ extends CanvasLayer
 const ComputerMenu := preload("res://scripts/ui/computer_menu.gd")
 const BuildBar := preload("res://scripts/ui/build_bar.gd")
 const RivalPanel := preload("res://scripts/ui/rival_panel.gd")
+const Tutorial := preload("res://scripts/ui/tutorial.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
 const MARGIN := 14.0
 const MAX_MESSAGES := 3
 const MESSAGE_SECONDS := 4.0
+const FIRST_DAY_MESSAGE_SECONDS := 8.0  # messages stay up longer while you learn
 
 ## Tick this in the Inspector (HUD node in main.tscn) to preview the phone
 ## controls on your PC.
@@ -26,6 +28,7 @@ var clock_label: Label
 var scanner_icon: TextureRect
 var mess_label: Label
 var prep_panel: PanelContainer
+var tutorial: PanelContainer  # first-day tips
 var corner_box: VBoxContainer
 var build_button: Button
 var prompt_panel: PanelContainer
@@ -111,7 +114,9 @@ func _process(_delta: float) -> void:
 	message_box.visible = not paused
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
-	prep_panel.visible = not Game.opened and not Game.day_over and not building and not paused
+	var menu_open: bool = computer.visible or rival_panel.visible or summary_panel.visible
+	tutorial.visible = tutorial.current != "" and not building and not paused and not menu_open
+	prep_panel.visible = not Game.opened and not Game.day_over and not building and not paused and not tutorial.visible
 	prompt_panel.visible = not is_touch and not building and (_prompt[0] != "" or _prompt[2] != "")
 	use_button.visible = is_touch and not building and _prompt[0] != ""
 	scan_button.visible = is_touch and not building and _prompt[2] != ""
@@ -123,6 +128,7 @@ func _process(_delta: float) -> void:
 	build_bar.custom_minimum_size.x = minf(1180.0, s.x - 2 * MARGIN)
 	_place(status_panel, Vector2(MARGIN, MARGIN))
 	_place(prep_panel, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
+	_place(tutorial, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
 	_place(corner_box, Vector2(s.x - corner_box.size.x - MARGIN, MARGIN))
 	_place(message_box, Vector2((s.x - message_box.size.x) / 2.0, 70))
 	_place(prompt_panel, Vector2((s.x - prompt_panel.size.x) / 2.0, s.y - prompt_panel.size.y - MARGIN))
@@ -199,7 +205,7 @@ func show_message(text: String) -> void:
 		message_box.remove_child(old)
 		old.queue_free()
 	var tw := l.create_tween()
-	tw.tween_interval(MESSAGE_SECONDS)
+	tw.tween_interval(FIRST_DAY_MESSAGE_SECONDS if Game.day == 1 else MESSAGE_SECONDS)
 	tw.tween_property(l, "modulate:a", 0.0, 0.6)
 	tw.tween_callback(l.queue_free)
 
@@ -239,6 +245,8 @@ func _build_status() -> void:
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size.x = 420
 	prep_panel.add_child(hint)
+	tutorial = Tutorial.new()
+	root.add_child(tutorial)
 
 
 func _build_corner_buttons() -> void:
@@ -325,7 +333,7 @@ func _show_popup(world_pos: Vector2, text: String, color: Color) -> void:
 	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	l.add_theme_font_size_override("font_size", 20 if is_touch else 16)
 	root.add_child(l)
-	root.move_child(l, message_box.get_index())  # under the menus and panels
+	root.move_child(l, 0)  # under all the menus and panels
 	l.reset_size()
 	var screen := get_viewport().get_canvas_transform() * world_pos
 	l.position = (screen - Vector2(l.size.x / 2.0, l.size.y)).round()

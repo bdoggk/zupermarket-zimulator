@@ -118,6 +118,10 @@ func _watch(delta: float) -> void:
 			spawned += 1
 		var w: Dictionary = watch[c]
 		w.age += delta
+		var st: String = Customer.State.keys()[c.state]
+		if not w.has("states"):
+			w.states = {}
+		w.states[st] = snappedf(w.states.get(st, 0.0) + delta, 0.1)
 		if c.position.distance_to(w.pos) > 0.5 or w.get("state", -1) != c.state:
 			w.still = 0.0
 			w.pos = c.position
@@ -135,14 +139,15 @@ func _watch(delta: float) -> void:
 			why = "standing still for %.0fs" % w.still
 		elif c.state == Customer.State.IN_LINE and c.current_cell() != c.register.spot(c.line_index):
 			why = "in line but not on their spot"
-		elif w.age > LIFE_LIMIT:
+		elif w.age > LIFE_LIMIT * (c.max_patience / Customer.PATIENCE) / minf(1.0, c.speed / Customer.SPEED):
+			# (slow or extra-patient kinds of shoppers get longer)
 			why = "in the store for %.0fs" % w.age
 		if why != "" and not w.reported:
 			w.reported = true
 			problems += 1
-			print("STUCK [%.0fs]: %s | state=%s cell=%s path=%s line=%d list=%s target=%s patience=%.0f" % [
-				elapsed, why, Customer.State.keys()[c.state], c.current_cell(), c.path,
-				c.line_index, c.shopping_list, c.target_shelf.cell if is_instance_valid(c.target_shelf) else "-", c.patience])
+			print("STUCK [%.0fs]: %s | %s with %d items | state=%s cell=%s path=%s line=%d list=%s target=%s patience=%.0f | time per state %s" % [
+				elapsed, why, c.kind.get("name", "?"), c.item_count(), Customer.State.keys()[c.state], c.current_cell(), c.path,
+				c.line_index, c.shopping_list, c.target_shelf.cell if is_instance_valid(c.target_shelf) else "-", c.patience, w.get("states", {})])
 		if w.reported and w.get("traced", 0) < 4 and OS.get_environment("TRACE") == "1":
 			w.traced = w.get("traced", 0) + 1
 			var tgt: Vector2 = Iso.cell_to_world(c.path[0]) if not c.path.is_empty() else c.position

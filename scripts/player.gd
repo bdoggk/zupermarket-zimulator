@@ -338,12 +338,15 @@ func _update_focus() -> void:
 	var info: Interactable = null
 	var scannable: Interactable = null
 	var best_d := INF
+	var best_pr := -1
 	var info_d := INF
 	var scan_d := INF
 	for obj in store.interactables_near(current_cell()):
 		var d := position.distance_to(obj.position)
 		if obj.can_interact(self):
-			if d < best_d:
+			var pr := obj.use_priority(self)
+			if pr > best_pr or (pr == best_pr and d < best_d):
+				best_pr = pr
 				best_d = d
 				best = obj
 		elif d < info_d and obj.get_prompt(self) != "":
