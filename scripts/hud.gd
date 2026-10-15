@@ -46,7 +46,10 @@ var pause_button: Button
 var dimmer: ColorRect
 var summary_panel: PanelContainer
 var summary_label: Label
+var summary_hint: Label
 var next_day_button: Button
+var day_over_bar: Button  # "Day 3 is over! Press Space..." along the bottom
+var _summary := {}  # the day that just ended, waiting to be shown
 var _prompt := ["", false, ""]
 
 
@@ -84,12 +87,16 @@ func _ready() -> void:
 	options = OptionsMenu.new()
 	root.add_child(options)
 	options.closed.connect(_on_options_closed)
+	# Panels keep the mouse to themselves: scrolling or clicking on a menu
+	# mustn't zoom the view or walk you somewhere behind it.
+	for panel: Control in [status_panel, tutorial, computer, rival_panel, build_bar, summary_panel, pause_menu, options, day_over_bar]:
+		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	Game.message.connect(show_message)
 	Game.popup.connect(_show_popup)
 	Game.prompt_changed.connect(_on_prompt_changed)
 	Game.computer_requested.connect(open_computer)
-	Game.day_ended.connect(_show_summary)
+	Game.day_ended.connect(_on_day_ended)
 	Game.build_mode.changed.connect(_on_build_changed)
 
 	if is_touch:
@@ -115,11 +122,12 @@ func _process(_delta: float) -> void:
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
 	var menu_open: bool = computer.visible or rival_panel.visible or summary_panel.visible
-	tutorial.visible = tutorial.current != "" and not building and not paused and not menu_open
+	day_over_bar.visible = Game.day_over and not _summary.is_empty() and not summary_panel.visible and not paused
+	tutorial.visible = tutorial.current != "" and not building and not paused and not menu_open and not Game.day_over
 	prep_panel.visible = not Game.opened and not Game.day_over and not building and not paused and not tutorial.visible
-	prompt_panel.visible = not is_touch and not building and (_prompt[0] != "" or _prompt[2] != "")
-	use_button.visible = is_touch and not building and _prompt[0] != ""
-	scan_button.visible = is_touch and not building and _prompt[2] != ""
+	prompt_panel.visible = not is_touch and not building and not Game.day_over and (_prompt[0] != "" or _prompt[2] != "")
+	use_button.visible = is_touch and not building and not Game.day_over and _prompt[0] != ""
+	scan_button.visible = is_touch and not building and not Game.day_over and _prompt[2] != ""
 
 	# Keep things pinned to the screen edges whatever the window size.
 	var s := root.size
@@ -138,11 +146,24 @@ func _process(_delta: float) -> void:
 	_place(rival_panel, (s - rival_panel.size) / 2.0)
 	_place(build_bar, Vector2((s.x - build_bar.size.x) / 2.0, s.y - build_bar.size.y - MARGIN))
 	_place(summary_panel, (s - summary_panel.size) / 2.0)
+	_place(day_over_bar, Vector2((s.x - day_over_bar.size.x) / 2.0, s.y - day_over_bar.size.y - MARGIN))
 	_place(pause_menu, (s - pause_menu.size) / 2.0)
 	_place(options, (s - options.size) / 2.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# End of the day: Space (or A, or Enter) shows the summary, then starts
+	# the next day.
+	if (event.is_action_pressed("interact") or event.is_action_pressed("ui_accept")) \
+			and not pause_menu.visible and not options.visible:
+		if summary_panel.visible:
+			get_viewport().set_input_as_handled()
+			_on_next_day()
+			return
+		if day_over_bar.visible:
+			get_viewport().set_input_as_handled()
+			show_day_summary()
+			return
 	if not (event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause")):
 		return
 	if Game.build_mode.active:
@@ -298,6 +319,14 @@ func _build_summary_panel() -> void:
 	next_day_button = UI.button("Next day", _on_next_day, Vector2(240, 56))
 	next_day_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(next_day_button)
+	summary_hint = UI.label("", UI.DIM)
+	summary_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(summary_hint)
+
+	day_over_bar = UI.button("", show_day_summary, Vector2(560, 64))
+	day_over_bar.visible = false
+	day_over_bar.add_theme_color_override("font_color", UI.WARN)
+	root.add_child(day_over_bar)
 
 
 # ---------------------------------------------------------------- updates
@@ -343,6 +372,27 @@ func _show_popup(world_pos: Vector2, text: String, color: Color) -> void:
 	tw.chain().tween_callback(l.queue_free)
 
 
+## The last shopper has left: ask before showing how the day went.
+func _on_day_ended(s: Dictionary) -> void:
+	_summary = s
+	day_over_bar.text = "Day %d is over!  %s to see how you did." % [s.day, _key_hint("here")]
+
+
+## "Press Space" / "Press A" / "Tap here", for whatever you play with.
+## `tap_what` is what to tap on a touch screen.
+func _key_hint(tap_what: String) -> String:
+	if not Input.get_connected_joypads().is_empty():
+		return "Press A" if not is_touch else "Press A (or tap %s)" % tap_what
+	if is_touch:
+		return "Tap %s" % tap_what
+	return "Press Space"
+
+
+func show_day_summary() -> void:
+	if not _summary.is_empty():
+		_show_summary(_summary)
+
+
 func _show_summary(s: Dictionary) -> void:
 	summary_label.text = "\n".join([
 		"DAY %d COMPLETE" % s.day,
@@ -364,9 +414,12 @@ func _show_summary(s: Dictionary) -> void:
 	].filter(func(line: String): return (Brand.SPILLS or not line.begins_with("Blood")) \
 		and (not line.begins_with("Went to") or s.get("lost", 0) > 0)))
 	next_day_button.text = "Go to Day %d" % (s.day + 1)
+	summary_hint.text = "" if is_touch and Input.get_connected_joypads().is_empty() else "%s to go to Day %d" % [_key_hint("the button"), s.day + 1]
+	summary_hint.visible = summary_hint.text != ""
 	summary_panel.visible = true
 
 
 func _on_next_day() -> void:
 	summary_panel.visible = false
+	_summary = {}
 	Game.start_next_day()

@@ -11,9 +11,11 @@ extends Node2D
 ## between the two. Store cells are marked @ in the map.
 
 const NO_CELL := Vector2i(-1, -1)
-const SHAMBLE_MIN := 14.0  # seconds between zombies wandering through town
-const SHAMBLE_MAX := 34.0
-const MAX_SHAMBLERS := 3
+const SHAMBLE_MIN := 10.0  # seconds between townsfolk wandering through town
+const SHAMBLE_MAX := 24.0
+const MAX_SHAMBLERS := 4
+const LOCALS := 3  # skeletons who hang around town all the time
+const SKELETON_CHANCE := 0.5  # how many of the passers-by are skeletons
 const LAMP_DAY := 0.14
 const LAMP_NIGHT := 0.8
 const GROUND := {
@@ -139,6 +141,7 @@ func start() -> void:
 	refresh_rival_stock()
 	if not Game.rival_owned:
 		_hire_rival_staff()
+	_add_locals()
 	_apply_settings()
 
 
@@ -400,6 +403,8 @@ func send_to_rival(kind: Dictionary) -> Wanderer:
 	return w
 
 
+## Someone passing through town: in at one edge, a stop or two along the
+## way, out at another edge. Half of them are skeletons.
 func _send_shambler() -> void:
 	var shamblers := walkers.filter(func(w): return w.has_meta("shambler"))
 	if shamblers.size() >= MAX_SHAMBLERS or spawns.size() < 2:
@@ -408,14 +413,42 @@ func _send_shambler() -> void:
 	var to: Vector2i = spawns.pick_random()
 	while to == from:
 		to = spawns.pick_random()
-	var kind := Game.pick_shopper_kind()
-	var middle := _random_street_cell()
+	var kind: Dictionary = Brand.SHOPPERS.skeleton if randf() < SKELETON_CHANCE else Game.pick_shopper_kind()
 	var stops := [[to, 0.0]]
-	if middle != NO_CELL:
-		stops.push_front([middle, randf_range(2.0, 6.0)])
+	for i in randi_range(1, 2):
+		var middle := _random_street_cell()
+		if middle != NO_CELL:
+			stops.push_front([middle, randf_range(2.0, 6.0)])
 	var w := _walker((kind.looks as Array).pick_random(), from, stops, 1.6 * kind.speed)
 	w.set_meta("shambler", true)
 	walkers.append(w)
+
+
+## A few skeletons who live in town: they stroll around between spots on
+## the street, the cemetery and the ruins, all day and all night.
+func _add_locals() -> void:
+	var looks: Array = Brand.SHOPPERS.skeleton.looks
+	for i in LOCALS:
+		var stops := []
+		for j in 4:
+			var c := _random_town_cell()
+			if c != NO_CELL:
+				stops.append([c, randf_range(3.0, 9.0)])
+		if stops.size() < 2:
+			continue
+		var w := _walker(looks[i % looks.size()], stops[0][0], stops, 1.3)
+		w.loop = true
+		w.modulate.a = 1.0
+		w.set_meta("local", true)
+
+
+## Somewhere outdoors anyone can walk to (not in either store, not on a lot).
+func _random_town_cell() -> Vector2i:
+	for i in 40:
+		var c := Vector2i(randi_range(1, size.x - 2), randi_range(12, size.y - 2))
+		if ground.has(c) and not rival_floor.has(c) and store.is_walkable(c) and store.reachable.has(c):
+			return c
+	return NO_CELL
 
 
 func _random_street_cell() -> Vector2i:

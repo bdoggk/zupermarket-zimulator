@@ -1,7 +1,7 @@
 extends Node
-# Build mode used to keep dragging the view after a click was let go over
-# the build bar (or outside the window): the camera then followed the mouse
-# around. Needs a real window (xvfb) so input goes through the GUI:
+# Build mode used to keep dragging the view after you let go of the mouse:
+# the camera then followed the mouse around. Also: the mouse wheel or a click
+# on the store computer used to reach the game behind it. Needs a real window (xvfb) so input goes through the GUI:
 #   xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn
 
 var fails := 0
@@ -57,6 +57,36 @@ func _ready() -> void:
 	check(cam.offset.is_equal_approx(after_drag), "and it stops when you let go")
 
 	b.exit()
+
+	# Scrolling or clicking on the store computer stays in the computer.
+	await _frames(2)
+	hud.open_computer()
+	await _frames(4)
+	var zoom := cam.zoom
+	var mid: Vector2 = hud.computer.get_global_rect().get_center()
+	var empty_spot: Vector2 = hud.computer.get_global_rect().position + Vector2(hud.computer.size.x * 0.5, 14)
+	_motion(mid, Vector2(1, 1), 0)
+	await _frames(2)
+	for i in 6:
+		_wheel(mid, MOUSE_BUTTON_WHEEL_UP if i % 2 == 0 else MOUSE_BUTTON_WHEEL_UP)
+		await _frames(1)
+	check(cam.zoom.is_equal_approx(zoom), "the mouse wheel over the computer doesn't zoom the view (zoom %s -> %s)" % [zoom, cam.zoom])
+	_motion(empty_spot, Vector2(1, 1), 0)
+	await _frames(1)
+	var pos := Game.player.position
+	_button(empty_spot, true)
+	_button(empty_spot, false)
+	await _frames(20)
+	check(Game.player.path.is_empty() and Game.player.position.is_equal_approx(pos), "clicking on the computer doesn't walk you somewhere")
+	hud.computer.close()
+	await _frames(2)
+	var world_spot := Vector2(get_viewport().get_visible_rect().size.x * 0.5, get_viewport().get_visible_rect().size.y * 0.5)
+	_motion(world_spot, Vector2(1, 1), 0)
+	await _frames(1)
+	_wheel(world_spot, MOUSE_BUTTON_WHEEL_UP)
+	await _frames(1)
+	check(not cam.zoom.is_equal_approx(zoom), "the wheel still zooms over the store")
+
 	print("RESULT: %d failure%s" % [fails, "" if fails == 1 else "s"])
 	get_tree().quit(1 if fails > 0 else 0)
 
@@ -69,6 +99,16 @@ func _button(pos: Vector2, pressed: bool) -> void:
 	e.global_position = pos
 	e.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
 	Input.parse_input_event(e)
+
+
+func _wheel(pos: Vector2, which: MouseButton) -> void:
+	for pressed in [true, false]:
+		var e := InputEventMouseButton.new()
+		e.button_index = which
+		e.pressed = pressed
+		e.position = pos
+		e.global_position = pos
+		Input.parse_input_event(e)
 
 
 func _motion(pos: Vector2, rel: Vector2, mask: int) -> void:

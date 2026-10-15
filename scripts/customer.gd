@@ -16,6 +16,7 @@ const SPEED := 2.2  # cells per second for a regular shopper
 const PICK_SECONDS := 0.9
 const PATIENCE := 60.0  # seconds a regular shopper waits for checkout
 const BROWSE_RADIUS := 3  # how far they wander while waiting for room in line
+const UNSTICK_AFTER := 4.0  # standing still this long when they should be walking: find a new way
 const DRIP_MIN := 10.0  # seconds between drips
 const DRIP_MAX := 22.0
 const LOOKS := [
@@ -44,6 +45,8 @@ var drip_timer := 0.0
 var patience := PATIENCE
 var timer := 0.0
 var _top := -34.0  # top of their sprite (for the thought bubble)
+var _still := 0.0  # seconds without moving
+var _last_pos := Vector2.INF
 var _wanted := ""  # product shown in the thought bubble
 var _walk_anim := 0.0
 
@@ -85,7 +88,9 @@ func _process(delta: float) -> void:
 				_next_item()
 		State.ARRIVING:
 			modulate.a = minf(1.0, modulate.a + delta * 2.5)
-			if _walk(delta):
+			if not Game.is_open:
+				turn_back()  # it closed before they got there
+			elif _walk(delta):
 				_next_item()
 		State.SHOPPING, State.LEAVING, State.WALKING_AWAY:
 			if _walk(delta):
@@ -117,8 +122,54 @@ func _process(delta: float) -> void:
 				queue_free()
 	if leaky and not path.is_empty():
 		_drip(delta)
+	_watch_for_stuck(delta)
 	_animate(delta)
 	queue_redraw()
+
+
+## A safety net: if they've stopped somewhere they shouldn't have (walking
+## nowhere, or "in line" away from their spot), they work out a new plan.
+func _watch_for_stuck(delta: float) -> void:
+	if position.distance_to(_last_pos) > 0.5:
+		_last_pos = position
+		_still = 0.0
+		return
+	_still += delta
+	if _still < UNSTICK_AFTER:
+		return
+	var should_walk := state in [State.ARRIVING, State.SHOPPING, State.TO_LINE, State.LEAVING, State.WALKING_AWAY]
+	var off_spot := state == State.IN_LINE and (not is_instance_valid(register) or current_cell() != register.spot(line_index))
+	if should_walk or off_spot:
+		_still = 0.0
+		_unstick()
+
+
+func _unstick() -> void:
+	if not store.is_walkable(current_cell()):  # somehow on a blocked tile: step off it
+		for d: Vector2i in Store.SIDES + Store.CORNERS:
+			if store.is_walkable(current_cell() + d):
+				position = Iso.cell_to_world(current_cell() + d)
+				break
+	path.clear()
+	match state:
+		State.ARRIVING:
+			if not _go_to(store.door_cell):
+				state = State.ENTERING
+		State.SHOPPING:
+			target_shelf = null
+			_next_item()
+		State.TO_LINE, State.IN_LINE:
+			if is_instance_valid(register) and _go_to(register.spot(line_index)):
+				state = State.TO_LINE
+			else:
+				if is_instance_valid(register):
+					register.leave_line(self)
+				on_bumped_from_line()
+		State.LEAVING:
+			if not _go_to(store.door_cell):
+				state = State.EXITING
+		State.WALKING_AWAY:
+			state = State.EXITING
 
 
 func _draw() -> void:
@@ -302,6 +353,19 @@ func _leave() -> void:
 	_wanted = ""
 	if _go_to(store.door_cell):
 		state = State.LEAVING
+	else:
+		state = State.EXITING
+
+
+## Still walking over from town when the store closes: they turn around
+## and go home instead of walking in after closing time.
+func turn_back() -> void:
+	if state != State.ARRIVING:
+		return
+	store.customer_left(self)
+	Game.show_popup(position + Vector2(0, -44), "Closed?!", Color(1.0, 0.75, 0.45))
+	if _go_to(store.exit_cell_near(current_cell())):
+		state = State.WALKING_AWAY
 	else:
 		state = State.EXITING
 

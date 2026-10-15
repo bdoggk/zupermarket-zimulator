@@ -32,10 +32,16 @@ func _init() -> void:
 	furniture_id = "storage"
 
 
+## Where each box sits on its board (the floor center of the box, on the
+## sprite's front face, before mirroring): back one first.
+const SPOTS := [Vector2(-19, -2), Vector2(-7, 4)]
+
+
 func _draw() -> void:
 	draw_object_sprite(Game.FURNITURE[furniture_id].texture)
 	for i in mini(boxes.size(), CAPACITY):
-		var foot := Vector2(-11 if i % 2 == 0 else 9, -LEVELS[i / 2] + (2 if i % 2 == 0 else -1))
+		var spot: Vector2 = SPOTS[i % 2]
+		var foot := Vector2(mirror_x(spot.x), spot.y - LEVELS[i / 2])
 		draw_texture(SMALL_BOX, foot - Vector2(10, 13))
 		draw_texture(Game.icon(boxes[i].product_id), foot - Vector2(4, 11))
 

@@ -182,14 +182,19 @@ func box_cost(id: String) -> float:
 	return snappedf(p.unit_cost * p.box_size * market.factor[id], 0.05)
 
 
-func order_box(id: String) -> bool:
+## Buys a box of `id` (it arrives after delivery_seconds()). `quiet`
+## skips the messages, for staff who order (they say it themselves).
+func order_box(id: String, quiet := false) -> bool:
 	if not is_licensed(id):
+		return false
+	if quiet and money + 0.001 < box_cost(id):
 		return false
 	if not spend(box_cost(id), true):
 		return false
 	box_ordered.emit(id)
-	var t := delivery_seconds()
-	message.emit("Ordered %s. It arrives in %s." % [product_name(id), "%d seconds" % roundi(t) if t >= 1.5 else "a moment"])
+	if not quiet:
+		var t := delivery_seconds()
+		message.emit("Ordered %s. It arrives in %s." % [product_name(id), "%d seconds" % roundi(t) if t >= 1.5 else "a moment"])
 	return true
 
 
@@ -406,6 +411,8 @@ func upgrade_problem(id: String) -> String:
 		return "Needs the %s" % UPGRADES[needs].name
 	if level < int(u.get("level", 1)):
 		return "Store level %d" % int(u.level)
+	if u.has("zone") and is_instance_valid(store):
+		return store.grow_error(store.zone_size_for(u.zone))
 	return ""
 
 
@@ -413,6 +420,8 @@ func buy_upgrade(id: String) -> bool:
 	if upgrade_problem(id) != "" or not spend(UPGRADES[id].cost):
 		return false
 	upgrades[id] = true
+	if UPGRADES[id].has("zone") and is_instance_valid(store):
+		store.grow_delivery_zone(store.zone_size_for(UPGRADES[id].zone))
 	message.emit("Bought the %s!" % UPGRADES[id].name)
 	unlocks_changed.emit()
 	return true

@@ -10,10 +10,12 @@ const ITEM_LIMIT := 5  # shoppers with more items go to a normal register
 const SECONDS_PER_ITEM := 0.75
 const JAM_CHANCE := 0.12
 const FIX_SECONDS := 0.6
+const JAM_RESETS_AFTER := 25.0  # nobody came: it reboots itself (slowly)
 const SELF_TEXTURE := preload("res://assets/sprites/selfcheckout.png")
 const LAMP := Vector2(9, -47)  # the light on top of the pole (local pixels)
 
 var jammed := false
+var _jam_time := 0.0
 var _scanning: Customer = null
 var _scan_t := 0.0
 var _jam_at := -1.0  # seconds into this scan when it goes wrong (-1 = it won't)
@@ -27,7 +29,7 @@ func _draw() -> void:
 		lamp = Color(1.0, 0.25, 0.2) if int(_t * 4.0) % 2 == 0 else Color(0.45, 0.1, 0.1)
 	elif _scanning == null:
 		lamp = Color(0.55, 0.7, 0.55)
-	draw_rect(Rect2(LAMP - Vector2(2, 1), Vector2(4, 3)), lamp)
+	draw_rect(Rect2(mirror_x(LAMP.x - 2, 4), LAMP.y - 1, 4, 3), lamp)
 	if jammed:
 		var y := -66.0 - absf(sin(_t * 5.0)) * 4.0
 		draw_rect(Rect2(-5, y, 10, 14), Color(0.95, 0.3, 0.25))
@@ -48,11 +50,16 @@ func _process(delta: float) -> void:
 		_scan_t = 0.0
 		jammed = false
 		_jam_at = randf_range(0.2, 0.8) * scan_time(c) if c and randf() < JAM_CHANCE else -1.0
-	if _scanning and not jammed:
+	if jammed:
+		_jam_time += delta
+		if _jam_time > JAM_RESETS_AFTER:
+			fix(false)
+	elif _scanning:
 		_scan_t += delta
 		if _jam_at >= 0.0 and _scan_t >= _jam_at:
 			_jam_at = -1.0
 			jammed = true
+			_jam_time = 0.0
 			Game.message.emit(Brand.SAY.get("jam", "Unexpected item in the bagging area!"))
 			Game.show_popup(position + Vector2(0, -70), "Help!", Color(1.0, 0.5, 0.4))
 		elif _scan_t >= scan_time(_scanning):
@@ -120,6 +127,12 @@ func get_action_label(_p: Player) -> String:
 func interact(_p: Player) -> void:
 	if not jammed:
 		return
-	jammed = false
+	fix()
 	Settings.vibrate(0.3, 0.05)
-	Game.show_popup(position + Vector2(0, -60), "Fixed!", Color(0.6, 1.0, 0.6))
+
+
+## Unjams it (you or the manager fixed it, or it rebooted by itself).
+func fix(by_someone := true) -> void:
+	jammed = false
+	_jam_time = 0.0
+	Game.show_popup(position + Vector2(0, -60), "Fixed!" if by_someone else "Rebooted...", Color(0.6, 1.0, 0.6))

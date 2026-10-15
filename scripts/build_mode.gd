@@ -3,19 +3,22 @@ extends Node2D
 ## Build mode: buy, move and sell furniture (shelves, fridges, plants,
 ## storage racks and extra registers), and move the first register (its
 ## checkout line comes along), the computer, the OPEN sign, the mop bucket
-## and the delivery zone. With a town outside, you can also buy the lot next
-## door to make the store bigger (the Expand tool).
+## and the delivery zone. Anything you can move you can also turn (the
+## Rotate tool, or R while placing or moving something); a register's line
+## turns with it. With a town outside, you can also buy the lot next door to
+## make the store bigger (the Expand tool).
 ## Repainting is done from the build bar in the HUD. The game is paused
 ## while you build.
 ##
 ##   PC:     B to open/close. Hover to preview, click to confirm.
+##           R turns what you're holding (or what's under the mouse).
 ##           Right-click or Esc cancels. Drag or WASD to look around.
 ##   Touch:  Tap a tile to preview, tap it again to confirm.
 ##           Drag to look around.
 
 signal changed  # tool, selection or status text changed (the HUD listens)
 
-enum Tool { NONE, PLACE, MOVE, SELL, EXPAND }
+enum Tool { NONE, PLACE, MOVE, SELL, EXPAND, ROTATE }
 
 const PAN_SPEED := 600.0
 const DRAG_THRESHOLD := 12.0
@@ -34,6 +37,8 @@ var cursor := Store.NO_CELL
 var cursor_error := ""
 var preview_line: Array[Vector2i] = []  # where a register's checkout line would go
 var zone_grab := Vector2i.ZERO  # which cell of the delivery zone you picked it up by
+var zone_size := Vector2i.ZERO  # the delivery zone you're moving (turning it swaps the sides)
+var place_rotation := -1  # which way what you're placing or moving faces (-1 = its usual way)
 var _expand_armed := false  # touch: the lot was tapped once, tap again to buy
 var status := ""
 
@@ -41,6 +46,7 @@ var _grid: Node2D  # draws the floor markings underneath the furniture
 var _pressed := false
 var _dragging := false
 var _press_pos := Vector2.ZERO
+var _hover_pos := Vector2.INF  # where the mouse is in the world (for R with nothing in hand)
 
 @onready var store: Store = get_parent()
 
@@ -105,6 +111,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event.is_action_pressed("build") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
 		_back()
+	elif event.is_action_pressed("rotate") and not event.is_echo():
+		rotate_pressed()
 	elif event is InputEventMouseButton:
 		match event.button_index:
 			MOUSE_BUTTON_LEFT:
@@ -122,10 +130,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				if event.pressed:
 					_back()
 			MOUSE_BUTTON_WHEEL_UP:
-				if event.pressed:
+				if event.pressed and get_viewport().gui_get_hovered_control() == null:
 					Game.player.zoom_by(1.1)
 			MOUSE_BUTTON_WHEEL_DOWN:
-				if event.pressed:
+				if event.pressed and get_viewport().gui_get_hovered_control() == null:
 					Game.player.zoom_by(1.0 / 1.1)
 	elif event is InputEventMouseMotion:
 		if not (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
@@ -135,7 +143,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _dragging:
 			_pan(-event.relative)
 		elif event.device != InputEvent.DEVICE_ID_EMULATION:
-			_hover(_to_world(event.position))
+			_hover_pos = _to_world(event.position)
+			_hover(_hover_pos)
 	else:
 		return
 	get_viewport().set_input_as_handled()
@@ -197,6 +206,8 @@ func _hover(world_pos: Vector2) -> void:
 		Tool.EXPAND:
 			var c := Iso.world_to_cell(world_pos)
 			_set_cursor(c if c in next_lot() else Store.NO_CELL)
+		Tool.ROTATE:
+			_set_selected(movable_at(world_pos))
 
 
 ## A click or tap on the store. With `touch`, the first tap only previews
@@ -218,6 +229,7 @@ func tap(world_pos: Vector2, touch := false) -> void:
 					return
 				if obj is DeliveryZone:
 					zone_grab = cell - store.delivery_anchor()
+					zone_size = store.delivery_size
 				_pick_up(obj)
 			else:
 				if touch and cell != cursor:
@@ -246,6 +258,13 @@ func tap(world_pos: Vector2, touch := false) -> void:
 				_set_cursor(cell)
 				return
 			_try_expand()
+		Tool.ROTATE:
+			var obj := movable_at(world_pos)
+			if obj == null:
+				Game.message.emit("Tap something to turn it." if touch else "Click something to turn it.")
+				return
+			turn(obj)
+			_set_selected(obj)
 	_refresh()
 
 
@@ -274,6 +293,68 @@ func _object_at(world_pos: Vector2, ok: Callable) -> Interactable:
 
 
 # ---------------------------------------------------------------- actions
+
+## R or the Rotate button: turns what you're placing or moving. With
+## nothing in hand, R turns whatever is under the mouse; the button picks
+## the Rotate tool (tap things to turn them).
+func rotate_pressed(from_button := false) -> void:
+	if tool == Tool.PLACE or is_instance_valid(moving):
+		if moving is DeliveryZone:
+			zone_size = Vector2i(zone_size.y, zone_size.x)
+			zone_grab = Vector2i(zone_grab.y, zone_grab.x)
+		else:
+			place_rotation = (held_step() + 1) % 4
+		_set_cursor(cursor)
+		return
+	if from_button:
+		select_tool(Tool.NONE if tool == Tool.ROTATE else Tool.ROTATE)
+		return
+	var obj: Interactable = selected if is_instance_valid(selected) else null
+	if obj == null and _hover_pos != Vector2.INF:
+		obj = movable_at(_hover_pos)
+	if obj:
+		turn(obj)
+	else:
+		select_tool(Tool.ROTATE)
+
+
+## Turns `obj` a quarter turn where it stands. If a register's line doesn't
+## fit the next way, it tries the way after that.
+func turn(obj: Interactable) -> void:
+	if not obj.can_rotate():
+		Game.message.emit("The %s can't be turned." % obj.display_name())
+		return
+	var problem := ""
+	for i in range(1, 4):
+		var step := (obj.rotation_step + i) % 4
+		var err := store.rotate_error(obj, step)
+		if err == "":
+			store.rotate_object(obj, step)
+			Settings.vibrate(0.2, 0.04)
+			if obj is DeliveryZone and store.delivery_size.x == store.delivery_size.y:
+				Game.message.emit("The delivery zone is square, so it looks the same turned.")
+			_refresh()
+			return
+		if problem == "":
+			problem = err
+	Game.message.emit("Can't turn the %s: %s" % [obj.display_name(), problem])
+	Settings.vibrate(0.6, 0.1)
+
+
+## Which way what you're placing or moving faces right now.
+func held_step() -> int:
+	if place_rotation >= 0:
+		return place_rotation
+	if (_placing_register() or moving is Register) and cursor != Store.NO_CELL and not preview_line.is_empty():
+		var i := Interactable.FACINGS.find(preview_line[0] - cursor)
+		if i >= 0:
+			return i  # a register faces where its line ends up
+	if is_instance_valid(moving):
+		return moving.rotation_step
+	if _placing_register():
+		return maxi(0, Interactable.FACINGS.find(store.register.facing))
+	return 0
+
 
 ## The cells of the next lot you can buy ([] if none are left).
 func next_lot() -> Array:
@@ -318,7 +399,7 @@ func _try_place(cell: Vector2i) -> void:
 	var cost: float = Game.FURNITURE[place_id].cost
 	if not Game.spend(cost):
 		return
-	store.add_furniture(place_id, cell)
+	store.add_furniture(place_id, cell, place_rotation)
 	store.layout_changed()
 	Settings.vibrate(0.3, 0.05)
 	Game.show_popup(Iso.cell_to_world(cell) + Vector2(0, -50), "-$%d" % int(cost), BAD_COLOR)
@@ -327,6 +408,7 @@ func _try_place(cell: Vector2i) -> void:
 
 func _pick_up(obj: Interactable) -> void:
 	_set_selected(null)
+	place_rotation = -1
 	moving = obj
 	moving.modulate = Color(1, 1, 1, 0.35)
 	_set_cursor(obj.cell + zone_grab if obj is DeliveryZone else obj.cell)
@@ -335,22 +417,28 @@ func _pick_up(obj: Interactable) -> void:
 func _try_move(cell: Vector2i) -> void:
 	if moving is DeliveryZone:
 		var anchor := cell - zone_grab
-		if anchor == store.delivery_anchor():
+		if anchor == store.delivery_anchor() and zone_size == store.delivery_size:
 			_put_down()
 		elif cursor_error != "":
 			Game.message.emit(cursor_error)
 		else:
-			store.move_delivery_zone(anchor)
+			store.move_delivery_zone(anchor, zone_size)
 			Settings.vibrate(0.3, 0.05)
 			_put_down()
 		return
-	if cell == moving.cell:
+	var turned := place_rotation >= 0 and place_rotation != moving.rotation_step
+	if cell == moving.cell and not turned:
 		_put_down()  # dropped it back where it was
 		return
 	if cursor_error != "":
 		Game.message.emit(cursor_error)
 		return
-	store.move_object(moving, cell)
+	if cell == moving.cell:
+		store.rotate_object(moving, place_rotation)
+		Settings.vibrate(0.3, 0.05)
+		_put_down()
+		return
+	store.move_object(moving, cell, place_rotation)
 	Settings.vibrate(0.3, 0.05)
 	_put_down()
 
@@ -359,6 +447,7 @@ func _put_down() -> void:
 	if is_instance_valid(moving):
 		moving.modulate = Color.WHITE
 	moving = null
+	place_rotation = -1
 	_set_cursor(Store.NO_CELL)
 
 
@@ -383,6 +472,7 @@ func _clear_selection() -> void:
 	cursor = Store.NO_CELL
 	cursor_error = ""
 	preview_line.clear()
+	place_rotation = -1
 	_expand_armed = false
 
 
@@ -392,7 +482,7 @@ func _set_selected(obj: Interactable) -> void:
 	if is_instance_valid(selected):
 		selected.modulate = Color.WHITE
 	selected = obj
-	if selected:
+	if selected and not selected is DeliveryZone:
 		selected.modulate = SELL_TINT if tool == Tool.SELL else PICK_TINT
 	_refresh()
 
@@ -403,20 +493,22 @@ func _set_cursor(cell: Vector2i) -> void:
 	preview_line.clear()
 	if cell != Store.NO_CELL:
 		if tool == Tool.PLACE:
-			cursor_error = store.placement_error(cell, place_id)
+			cursor_error = store.placement_error(cell, place_id, null, place_rotation)
 			if cursor_error == "" and Game.money < Game.FURNITURE[place_id].cost:
 				cursor_error = "Not enough money"
 			if _placing_register():
-				preview_line = store.preview_line(cell)
+				preview_line = store.preview_line(cell, null, place_rotation)
 		elif moving is DeliveryZone:
 			var anchor := cell - zone_grab
-			if anchor != store.delivery_anchor():
-				cursor_error = store.delivery_zone_error(anchor)
+			if anchor != store.delivery_anchor() or zone_size != store.delivery_size:
+				cursor_error = store.delivery_zone_error(anchor, zone_size)
 		elif moving:
 			if cell != moving.cell:
-				cursor_error = store.placement_error(cell, moving.furniture_id, moving)
+				cursor_error = store.placement_error(cell, moving.furniture_id, moving, place_rotation)
+			elif place_rotation >= 0 and place_rotation != moving.rotation_step:
+				cursor_error = store.rotate_error(moving, place_rotation)
 			if moving is Register:
-				preview_line = store.preview_line(cell, moving)
+				preview_line = store.preview_line(cell, moving, place_rotation)
 	_refresh()
 
 
@@ -426,9 +518,10 @@ func _placing_register() -> bool:
 
 func _refresh() -> void:
 	var click := "tap again" if Game.touch_ui else "click"
+	var turn_how := "Rotate turns it" if Game.touch_ui else "R turns it"
 	match tool:
 		Tool.NONE:
-			status = "Buy furniture, or pick Move / Sell. Drag to look around."
+			status = "Buy furniture, or pick Move / Rotate / Sell. Drag to look around."
 		Tool.PLACE:
 			var f: Dictionary = Game.FURNITURE[place_id]
 			if cursor == Store.NO_CELL:
@@ -436,26 +529,31 @@ func _refresh() -> void:
 			elif cursor_error != "":
 				status = "%s: %s" % [f.name, cursor_error]
 			elif _placing_register():
-				status = "%s ($%d): %s to buy. Its line (yellow) needs to stay clear." % [f.name, int(f.cost), click]
+				status = "%s ($%d): %s to buy. Its line (yellow) needs to stay clear. %s." % [f.name, int(f.cost), click, turn_how]
 			else:
-				status = "%s ($%d): %s to buy." % [f.name, int(f.cost), click]
+				status = "%s ($%d): %s to buy. %s." % [f.name, int(f.cost), click, turn_how]
 		Tool.MOVE:
 			if moving == null:
 				status = "Pick up anything to move it: furniture, registers, the computer, the sign, the delivery zone..."
 			elif cursor_error != "":
 				status = "Can't move the %s here: %s" % [moving.display_name(), cursor_error]
 			elif moving is Register:
-				status = "Pick a spot and %s to put the register down. The line (yellow) comes with it." % click
+				status = "Pick a spot and %s to put the register down. The line (yellow) comes with it. %s." % [click, turn_how]
 			elif moving is DeliveryZone:
-				status = "Pick a spot and %s to put the delivery zone down. Boxes on it come along." % click
+				status = "Pick a spot and %s to put the delivery zone down. Boxes on it come along. %s." % [click, turn_how]
 			else:
-				status = "Pick a new spot and %s to put the %s down." % [click, moving.display_name()]
+				status = "Pick a new spot and %s to put the %s down. %s." % [click, moving.display_name(), turn_how]
 		Tool.SELL:
 			if selected:
 				var refund: float = Game.FURNITURE[selected.furniture_id].cost * Game.SELL_REFUND
 				status = "Sell this %s for $%d? %s to sell." % [Game.FURNITURE[selected.furniture_id].name.to_lower(), int(refund), click.capitalize()]
 			else:
 				status = "Pick something to sell (you get half back). The first register can't be sold."
+		Tool.ROTATE:
+			if selected and not Game.touch_ui:
+				status = "Click to turn the %s a quarter turn.%s" % [selected.display_name(), " Its line turns with it." if selected is Register else ""]
+			else:
+				status = "%s anything to turn it a quarter turn. A register's line turns with it." % ("Tap" if Game.touch_ui else "Click")
 		Tool.EXPAND:
 			var e := Game.next_expansion()
 			var problem := Game.expansion_problem()
@@ -485,8 +583,7 @@ func _draw() -> void:
 		ghost = moving.ghost_texture()
 	if ghost and cursor != Store.NO_CELL:
 		var ok := cursor_error == ""
-		var pos := Iso.cell_to_world(cursor) + Vector2(-32, -(ghost.get_height() - 16))
-		draw_texture(ghost, pos, Color(1, 1, 1, 0.65) if ok else Color(1, 0.5, 0.5, 0.5))
+		Interactable.draw_view(self, ghost, held_step(), Iso.cell_to_world(cursor), Color(1, 1, 1, 0.65) if ok else Color(1, 0.5, 0.5, 0.5))
 
 
 ## The floor markings: the grid, no-build tiles, checkout lines and the cursor.
@@ -517,7 +614,7 @@ func _draw_grid() -> void:
 			_diamond(c, Color(OK_COLOR if ok else BAD_COLOR, 0.6), false)
 	if moving is DeliveryZone and cursor != Store.NO_CELL:
 		var color := OK_COLOR if cursor_error == "" else BAD_COLOR
-		for c in store.delivery_cells_at(cursor - zone_grab):
+		for c in store.delivery_cells_at(cursor - zone_grab, zone_size):
 			var at := Iso.cell_to_world(c) - Vector2(32, 16)
 			_grid.draw_texture(Store.TILE_DELIVERY, at, Color(1, 1, 1, 0.6))
 			_diamond(c, color, false)

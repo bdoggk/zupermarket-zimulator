@@ -3,7 +3,8 @@ extends PanelContainer
 ##   Stock     order boxes and set your prices (market prices change!), and
 ##             see the rival's prices you've checked
 ##   Products  buy licenses to sell new products as your store levels up
-##   Staff     hire stockers, cashiers and janitors (paid every evening)
+##   Staff     hire stockers, cashiers, janitors and a general manager
+##             (paid every evening)
 ##   Upgrades  one-time purchases like the handheld scanner and faster
 ##             deliveries
 
@@ -300,7 +301,10 @@ func _build_staff() -> void:
 	if Game.staff.is_empty():
 		body.add_child(UI.label("Nobody works here yet.", UI.DIM))
 		return
-	body.add_child(UI.label("Staff level up as they work. Every level makes them %d%% faster." % roundi(Game.STAFF_SPEED_PER_LEVEL * 100.0), UI.DIM))
+	var boost := "" if not Game.STAFF.has("manager") else " A %s makes everyone else %d%% faster too." % [Game.STAFF.manager.name.to_lower(), roundi((Staff.MANAGED_BOOST - 1.0) * 100.0)]
+	var note := UI.label("Staff level up as they work. Every level makes them %d%% faster.%s" % [roundi(Game.STAFF_SPEED_PER_LEVEL * 100.0), boost], UI.DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(note)
 	var team := _grid(4)
 	for entry: Dictionary in Game.staff:
 		var who := _staff_node(entry.id)
@@ -316,7 +320,7 @@ func _build_staff() -> void:
 			var lv: int = entry.level
 			var next := Game.staff_next_xp(lv)
 			var progress := "max level" if next < 0 else "%d/%d XP" % [int(entry.xp), int(next)]
-			var faster := roundi((Game.staff_speed(lv) - 1.0) * 100.0)
+			var faster := roundi(((who.speed if is_instance_valid(who) else Game.staff_speed(lv)) - 1.0) * 100.0)
 			label.text = "%s  -  %s\nLevel %d (%s)%s" % [entry.name, Game.STAFF[entry.role].name, lv, progress,
 				", %d%% faster" % faster if faster > 0 else ""]
 		)

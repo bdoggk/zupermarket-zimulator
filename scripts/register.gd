@@ -7,19 +7,56 @@ extends Interactable
 ##
 ## The first register comes with the store. You can buy more in build mode;
 ## the extra ones can be sold again, the first one can only be moved.
+##
+## You can take a register over from its cashier: they go to another free
+## register, or take a break and come back once you've walked away.
 
 const TEXTURE := preload("res://assets/sprites/register.png")
 const SCAN_SECONDS_PER_ITEM := 0.35
+const TAKE_OVER_SECONDS := 0.3
+const GIVE_BACK_AFTER := 4.0  # seconds you're away from a register you took over before the cashier comes back
 
 var line_cells: Array[Vector2i] = []  # the marked spots; [0] is the front
 var facing := Vector2i(1, 0)  # which side of the register the line starts on
 var extra_cells: Array[Vector2i] = []  # overflow spots after them (Store sets these)
 var line: Array[Customer] = []
 var cashier: Staff = null  # the cashier assigned to this register, if any
+var taken_over := false  # you're running it instead of the cashier
+var _away := 0.0
 
 
 func _draw() -> void:
 	draw_object_sprite(TEXTURE)
+
+
+func _process(delta: float) -> void:
+	super._process(delta)
+	if not taken_over:
+		return
+	var p: Player = Game.player
+	if p == null or Iso.chebyshev(p.current_cell(), cell) > 2:
+		_away += delta
+	else:
+		_away = 0.0
+	if _away > GIVE_BACK_AFTER:  # you walked off: the cashiers can have it back
+		taken_over = false
+		_away = 0.0
+
+
+## A cashier is assigned here and you haven't taken over.
+func has_cashier() -> bool:
+	return is_instance_valid(cashier) and not cashier.is_queued_for_deletion()
+
+
+## You take over from the cashier (they find another register or take a break).
+func take_over() -> void:
+	taken_over = true
+	_away = 0.0
+	if has_cashier():
+		var who := cashier
+		cashier = null
+		who.relieve(self)
+		Game.show_popup(position + Vector2(0, -56), "I've got this, %s!" % who.staff_name, Color(0.8, 0.95, 1.0))
 
 
 func is_movable() -> bool:
@@ -126,8 +163,8 @@ func checkout() -> void:
 
 
 func get_prompt(_p: Player) -> String:
-	if is_staffed():
-		return "%s is running this register" % cashier.staff_name
+	if has_cashier():
+		return "Take over the register from %s" % cashier.staff_name
 	var c := front_customer()
 	if c:
 		var n := c.item_count()
@@ -138,19 +175,24 @@ func get_prompt(_p: Player) -> String:
 
 
 func can_interact(_p: Player) -> bool:
-	return front_customer() != null and not is_staffed() and not (is_instance_valid(cashier) and cashier.is_scanning())
+	return has_cashier() or front_customer() != null
 
 
 func get_action_time(_p: Player) -> float:
+	if has_cashier():
+		return TAKE_OVER_SECONDS
 	var c := front_customer()
 	return scan_time(c) if c else 0.0
 
 
 func get_action_label(_p: Player) -> String:
-	return "Scanning items..."
+	return "Taking over..." if has_cashier() else "Scanning items..."
 
 
 func interact(_p: Player) -> void:
+	if has_cashier():
+		take_over()
+		return
 	if front_customer() == null:
 		return
 	Settings.vibrate(0.4, 0.06)

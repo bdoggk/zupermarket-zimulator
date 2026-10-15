@@ -19,4 +19,5 @@ func kind_name() -> String:
 
 
 func _draw_front() -> void:
-	draw_object_sprite(GLASS)
+	if shows_front():
+		draw_object_sprite(GLASS)

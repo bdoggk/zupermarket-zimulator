@@ -17,12 +17,13 @@ const STOCK_SECONDS_PER_ITEM := 0.15
 const TAKE_SECONDS_PER_ITEM := 0.1
 const LABEL_SECONDS := 0.35
 
-## Where items are drawn: (x of the item's left edge, height of the board it
-## sits on). Ordered so the eye-level shelf fills first.
+## Where items are drawn on the shelf's open front (the left face of the
+## sprite): (x of the item's left edge, height of the board it sits on).
+## Ordered so the eye-level board fills first.
 const SLOTS := [
-	Vector2i(-24, 15), Vector2i(4, 15), Vector2i(-14, 15), Vector2i(14, 15),
-	Vector2i(-24, 2), Vector2i(4, 2), Vector2i(-14, 2), Vector2i(14, 2),
-	Vector2i(-24, 28), Vector2i(4, 28), Vector2i(-14, 28), Vector2i(14, 28),
+	Vector2i(-20, 15), Vector2i(-8, 15), Vector2i(-26, 15), Vector2i(-14, 15),
+	Vector2i(-20, 2), Vector2i(-8, 2), Vector2i(-26, 2), Vector2i(-14, 2),
+	Vector2i(-20, 28), Vector2i(-8, 28), Vector2i(-26, 28), Vector2i(-14, 28),
 ]
 
 ## What the shelf is labeled for ("" = no label). Stays set when the shelf
@@ -47,18 +48,22 @@ func kind_name() -> String:
 
 func _draw() -> void:
 	draw_object_sprite(Game.FURNITURE[furniture_id].texture)
-	if stock > 0:
+	if stock > 0 and shows_front():  # turned away, you only see its back
 		var tex := Game.icon(product_id)
-		for i in mini(stock, SLOTS.size()):
-			var slot: Vector2i = SLOTS[i]
-			var y := _floor_edge(slot.x + 4) - slot.y - tex.get_height()
-			draw_texture(tex, Vector2(slot.x, y))
+		var filled: Array = SLOTS.slice(0, mini(stock, SLOTS.size()))
+		filled.sort_custom(func(a: Vector2i, b: Vector2i): return a.x < b.x)  # back to front
+		for slot: Vector2i in filled:
+			var x := mirror_x(slot.x, tex.get_width())
+			var y := _floor_edge(int(x) + 4) - slot.y - tex.get_height()
+			draw_texture(tex, Vector2(x, y))
 	_draw_front()
 	if is_labeled():
 		_draw_label()
 
 
-## The label: a little sign standing on top of the shelf with the product on it.
+## The label: a little sign standing on top of the shelf with the product on
+## it. When the shelf is turned away from you, a bar under it shows how full
+## it is.
 func _draw_label() -> void:
 	var top := -float(Game.FURNITURE[furniture_id].texture.get_height() - 32)
 	var card := Rect2(-7, top - 15, 14, 13)
@@ -66,6 +71,9 @@ func _draw_label() -> void:
 	draw_rect(card, Color(0.94, 0.92, 0.84) if stock > 0 else Color(0.98, 0.86, 0.52))
 	draw_rect(card, Color(0.16, 0.15, 0.17), false, 1.0)
 	draw_texture(Game.icon(product_id), Vector2(-4, top - 14))
+	if not shows_front():
+		draw_rect(Rect2(-7, top - 2, 14, 3), Color(0.16, 0.15, 0.17))
+		draw_rect(Rect2(-6, top - 1, 12.0 * stock / CAPACITY, 1), Color(0.55, 0.85, 0.45))
 
 
 func is_labeled() -> bool:

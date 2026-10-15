@@ -116,10 +116,7 @@ func _ready() -> void:
 		for j in 60:
 			await get_tree().physics_frame
 	check(Game.stats.customers > served_before + 3, "cashiers check customers out on their own (%d served)" % (Game.stats.customers - served_before))
-	var front := store.register.front_customer()
-	if front:
-		check(not store.register.can_interact(p), "you can't use a register a cashier is running")
-	check(store.register.get_prompt(p).contains("running this register"), "the register says who's running it")
+	check(store.register.get_prompt(p).begins_with("Take over the register from "), "the register says who's running it (you can take over): " + store.register.get_prompt(p))
 
 	# ---- stocker
 	Game.hire("stocker")

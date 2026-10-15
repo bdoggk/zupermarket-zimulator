@@ -66,8 +66,10 @@ var registers: Array[Register] = []  # [0] is the one that came with the store
 var staff: Array[Staff] = []
 var floor_cells := {}  # cell -> its character in LAYOUT
 var wall_cells := {}  # cell -> [Sprite2D, is_tall]
-var delivery_cells: Array[Vector2i] = []
+var delivery_cells: Array[Vector2i] = []  # row by row from its top corner
 var delivery_zone: DeliveryZone  # so build mode can pick the zone up and move it
+var delivery_size := Vector2i.ONE  # cells along x and y (bigger zones are upgrades)
+var delivery_turned := false  # turned a quarter turn in build mode (bigger zones grow that way too)
 var line_length := 4  # how many numbered line spots the map has
 var door_cell := NO_CELL
 var player_start := Vector2i(1, 1)
@@ -199,8 +201,15 @@ func _build(with_furniture := true) -> void:
 						line[int(ch)] = cell
 
 	assert(not delivery_cells.is_empty(), "The map needs a delivery zone (D)")
+	var lo := delivery_cells[0]
+	var hi := delivery_cells[0]
+	for c in delivery_cells:
+		lo = Vector2i(mini(lo.x, c.x), mini(lo.y, c.y))
+		hi = Vector2i(maxi(hi.x, c.x), maxi(hi.y, c.y))
+	delivery_size = hi - lo + Vector2i.ONE  # the zone is the rectangle around the D's
+	delivery_cells = _rect_cells(lo, delivery_size)
 	delivery_zone = DeliveryZone.new()
-	delivery_zone.cell = delivery_anchor()
+	delivery_zone.cell = lo
 	decals.add_child(delivery_zone)
 	assert(register != null, "The map needs a register (R)")
 	assert(door_cell != NO_CELL, "The map needs a door (E)")
@@ -361,6 +370,8 @@ func to_dict() -> Dictionary:
 		if obj.furniture_id == "" or obj is Register:
 			continue
 		var f := {"id": obj.furniture_id, "cell": [obj.cell.x, obj.cell.y]}
+		if obj.rotation_step != 0:
+			f.rot = obj.rotation_step
 		if obj is Shelf:
 			f.product = obj.product_id
 			f.stock = obj.stock
@@ -392,11 +403,12 @@ func to_dict() -> Dictionary:
 			line.append([c.x, c.y])
 		regs.append({"id": r.furniture_id if r.furniture_id != "" else "register", "cell": [r.cell.x, r.cell.y], "line": line})
 	var anchor := delivery_anchor()
-	var fixtures := {"registers": regs, "delivery": {"cell": [anchor.x, anchor.y]}}
+	var zone := {"cell": [anchor.x, anchor.y], "size": [delivery_size.x, delivery_size.y], "turned": delivery_turned}
+	var fixtures := {"registers": regs, "delivery": zone}
 	for key in ["computer", "sign", "mop_bucket"]:
 		var obj: Interactable = get(key)
 		if obj:
-			fixtures[key] = {"cell": [obj.cell.x, obj.cell.y]}
+			fixtures[key] = {"cell": [obj.cell.x, obj.cell.y], "rot": obj.rotation_step}
 	var pc := player.current_cell()
 	return {
 		"fixtures": fixtures,
@@ -420,7 +432,7 @@ func _load_saved(d: Dictionary) -> void:
 			continue
 		if not _free_spot(c) or c in lines:
 			continue
-		var obj := add_furniture(id, c)
+		var obj := add_furniture(id, c, posmod(int(f.get("rot", 0)), 4))
 		var product := str(f.get("product", ""))
 		if obj is Shelf and Game.PRODUCTS.has(product) and Game.is_cold(product) == obj.holds_cold():
 			obj.product_id = product
@@ -471,9 +483,14 @@ func _load_fixtures(fx: Dictionary) -> void:
 			home[key] = obj.cell
 			_lift(obj)
 	# The delivery zone goes first: the rest were saved around it.
-	var zone := _to_cell(fx.get("delivery", {}).get("cell"))
-	if zone != NO_CELL and delivery_cells_at(zone).all(func(c): return floor_cells.has(c) and c != door_cell):
-		_shift_delivery_zone(zone)
+	var zd: Dictionary = fx.get("delivery", {})
+	var zone := _to_cell(zd.get("cell"))
+	var size := _to_cell(zd.get("size"))
+	if size.x < 1 or size.y < 1 or size.x > 8 or size.y > 8:
+		size = delivery_size
+	if zone != NO_CELL and _rect_cells(zone, size).all(func(c): return floor_cells.has(c) and c != door_cell):
+		delivery_turned = bool(zd.get("turned", false))
+		_set_delivery_zone(zone, size)
 		_apply_decor()
 	for key: String in items:
 		var obj: Interactable = items[key]
@@ -483,6 +500,8 @@ func _load_fixtures(fx: Dictionary) -> void:
 		if not _free_spot(c):
 			c = home[key] if _free_spot(home[key]) else _nearest_free_spot(home[key])
 		_put(obj, c)
+		if key != "register":
+			obj.rotation_step = posmod(int(entries[key].get("rot", 0)), 4)
 	_restore_line(register, regs[0] if not regs.is_empty() else {})
 	for i in range(1, regs.size()):
 		var c := _to_cell(regs[i].get("cell"))
@@ -530,9 +549,11 @@ static func _to_cell(v: Variant) -> Vector2i:
 
 # ---------------------------------------------------------------- furniture
 
-## Creates a piece of furniture (a key of Game.FURNITURE). Doesn't charge
-## money or check the spot; build mode does that first.
-func add_furniture(furniture_id: String, cell: Vector2i) -> Interactable:
+## Creates a piece of furniture (a key of Game.FURNITURE), facing `step`
+## (see Interactable.FACINGS; -1 = the usual way). Doesn't charge money or
+## check the spot; build mode does that first. A register's line starts on
+## the side it faces (or another side, if it doesn't fit there).
+func add_furniture(furniture_id: String, cell: Vector2i, step := -1) -> Interactable:
 	var obj: Interactable
 	match Game.FURNITURE[furniture_id].kind:
 		"shelf":
@@ -548,6 +569,8 @@ func add_furniture(furniture_id: String, cell: Vector2i) -> Interactable:
 		_:
 			obj = Decoration.new()
 	obj.furniture_id = furniture_id
+	if step >= 0:
+		obj.rotation_step = step
 	_add_object(obj, cell)
 	if obj is Shelf:
 		shelves.append(obj)
@@ -555,20 +578,62 @@ func add_furniture(furniture_id: String, cell: Vector2i) -> Interactable:
 		racks.append(obj)
 	if obj is Register:
 		registers.append(obj)
-		_set_line(obj, _compute_line(cell, register.facing, NO_CELL, obj))
+		var prefer: Vector2i = Interactable.FACINGS[step] if step >= 0 else register.facing
+		_set_line(obj, _compute_line(cell, prefer, NO_CELL, obj))
 	return obj
 
 
-## Moves furniture, a register, the computer, the sign or the mop bucket.
-## Moving a register brings its checkout line along.
-func move_object(obj: Interactable, cell: Vector2i) -> void:
+## Moves furniture, a register, the computer, the sign or the mop bucket,
+## and turns it to face `step` (-1 = keep its facing). Moving a register
+## brings its checkout line along.
+func move_object(obj: Interactable, cell: Vector2i, step := -1) -> void:
 	var new_line: Array[Vector2i] = []
 	if obj is Register:
-		new_line = preview_line(cell, obj)
+		new_line = preview_line(cell, obj, step)
 	_lift(obj)
 	_put(obj, cell)
+	if step >= 0:
+		obj.rotation_step = step
 	if obj is Register and new_line.size() == line_length:
 		_set_line(obj, new_line)
+	obj.queue_redraw()
+	layout_changed()
+
+
+## Why `obj` can't be turned to face `step` where it stands ("" = it can).
+## Turning a register turns its line, which needs room.
+func rotate_error(obj: Interactable, step: int) -> String:
+	if obj is DeliveryZone:
+		if delivery_size.x == delivery_size.y:
+			return ""
+		return delivery_zone_error(delivery_anchor(), Vector2i(delivery_size.y, delivery_size.x))
+	if obj is Register and step != obj.rotation_step:
+		var line := _compute_line(obj.cell, Interactable.FACINGS[step], NO_CELL, obj, true)
+		if line.size() < line_length:
+			return "No room for the checkout line that way"
+		var lines := all_line_cells(obj)
+		lines.append_array(line)
+		if not _layout_ok(obj.cell, true, obj, lines):
+			return "The line would block a path that way"
+	return ""
+
+
+## Turns `obj` where it stands (check rotate_error first). The delivery zone
+## turns a quarter turn around its top corner.
+func rotate_object(obj: Interactable, step: int) -> void:
+	step = posmod(step, 4)
+	if obj is DeliveryZone:
+		delivery_turned = not delivery_turned
+		_set_delivery_zone(delivery_anchor(), Vector2i(delivery_size.y, delivery_size.x))
+		_apply_decor()
+		obj.rotation_step = step
+	elif obj is Register:
+		var line := _compute_line(obj.cell, Interactable.FACINGS[step], NO_CELL, obj, true)
+		if line.size() == line_length:
+			_set_line(obj, line)  # (turns the register too)
+	else:
+		obj.rotation_step = step
+	obj.queue_redraw()
 	layout_changed()
 
 
@@ -628,6 +693,8 @@ func _set_line(r: Register, cells: Array[Vector2i]) -> void:
 	r.line_cells = cells
 	var d: Vector2i = cells[0] - r.cell
 	r.facing = d if absi(d.x) + absi(d.y) == 1 else Vector2i(1, 0)
+	r.rotation_step = maxi(0, Interactable.FACINGS.find(r.facing))  # the register turns to face its line
+	r.queue_redraw()
 
 
 ## Every marked line spot, except `except`'s.
@@ -644,13 +711,15 @@ func all_line_cells(except: Register = null) -> Array[Vector2i]:
 ## runs straight, turning only when something is in the way. `freed` is a
 ## cell that should count as empty (the register's old spot while moving it).
 ## `owner` is the register the line is for (its own old line doesn't count
-## as in the way). Returns fewer cells than needed if the line doesn't fit.
-func _compute_line(origin: Vector2i, prefer: Vector2i, freed := NO_CELL, owner: Register = null) -> Array[Vector2i]:
+## as in the way). With `fixed`, the line has to start on the `prefer` side.
+## Returns fewer cells than needed if the line doesn't fit.
+func _compute_line(origin: Vector2i, prefer: Vector2i, freed := NO_CELL, owner: Register = null, fixed := false) -> Array[Vector2i]:
 	var blocked := {}
 	for c in all_line_cells(owner):
 		blocked[c] = true
 	var best: Array[Vector2i] = []
-	for dir: Vector2i in [prefer, Vector2i(-prefer.y, prefer.x), Vector2i(prefer.y, -prefer.x), -prefer]:
+	var dirs: Array = [prefer] if fixed else [prefer, Vector2i(-prefer.y, prefer.x), Vector2i(prefer.y, -prefer.x), -prefer]
+	for dir: Vector2i in dirs:
 		var cells: Array[Vector2i] = []
 		var used := {origin: true}
 		var tail := origin
@@ -678,13 +747,15 @@ func _compute_line(origin: Vector2i, prefer: Vector2i, freed := NO_CELL, owner: 
 
 
 ## The checkout line a register would get on `cell`: `r` when moving an
-## existing register, null when buying a new one.
-func preview_line(cell: Vector2i, r: Register = null) -> Array[Vector2i]:
+## existing register, null when buying a new one. With `step` (you turned
+## it), the line has to start on the side it faces.
+func preview_line(cell: Vector2i, r: Register = null, step := -1) -> Array[Vector2i]:
+	var fixed := step >= 0
 	if r == null:
-		return _compute_line(cell, register.facing, NO_CELL, null)
-	if cell == r.cell:
+		return _compute_line(cell, Interactable.FACINGS[step] if fixed else register.facing, NO_CELL, null, fixed)
+	if cell == r.cell and (not fixed or step == r.rotation_step):
 		return r.line_cells.duplicate()
-	return _compute_line(cell, r.facing, r.cell, r)
+	return _compute_line(cell, Interactable.FACINGS[step] if fixed else r.facing, r.cell, r, fixed)
 
 
 ## Where a cashier stands to work register `r`: next to it, not in anyone's
@@ -714,7 +785,7 @@ func assign_register(who: Staff) -> Register:
 		if r.cashier == who:
 			return r
 	for r in registers:
-		if not is_instance_valid(r.cashier) and not r is SelfCheckout:
+		if not is_instance_valid(r.cashier) and not r is SelfCheckout and not r.taken_over:
 			r.cashier = who
 			return r
 	return null
@@ -738,7 +809,7 @@ func register_limit(furniture_id: String) -> int:
 ## Why something can't go on `cell` ("" means it can). `furniture_id` is
 ## what you're buying; when moving something, pass it as `moving` instead
 ## (its old spot counts as free).
-func placement_error(cell: Vector2i, furniture_id: String, moving: Interactable = null) -> String:
+func placement_error(cell: Vector2i, furniture_id: String, moving: Interactable = null, step := -1) -> String:
 	if not floor_cells.has(cell):
 		return "That's not floor"
 	if objects.has(cell) and objects[cell] != moving:
@@ -757,9 +828,9 @@ func placement_error(cell: Vector2i, furniture_id: String, moving: Interactable 
 		return "Keep the checkout line clear"
 	var new_line: Array[Vector2i] = []
 	if placing_register:
-		new_line = preview_line(cell, moving as Register if moving is Register else null)
+		new_line = preview_line(cell, moving as Register if moving is Register else null, step)
 		if new_line.size() < line_length:
-			return "No room for the checkout line here"
+			return "No room for the checkout line facing this way" if step >= 0 else "No room for the checkout line here"
 	if boxes.has(cell):
 		return "There's a box in the way"
 	if player and player.current_cell() == cell:
@@ -1022,6 +1093,47 @@ func best_shelf_for(product_id: String, from: Vector2, who: Staff) -> Shelf:
 	return best
 
 
+## Products that are down to `at` or fewer on the shelves (counting every
+## shelf labeled for them) with no more on the way: no box waiting anywhere,
+## none being carried, none ordered. The general manager reorders these.
+func products_running_low(at: int) -> Array[String]:
+	var on_shelves := {}
+	for s in shelves:
+		if s.product_id != "":
+			on_shelves[s.product_id] = int(on_shelves.get(s.product_id, 0)) + s.stock
+	var coming := {}
+	for b: StockBox in boxes.values():
+		coming[b.product_id] = true
+	for r in racks:
+		for b: StorageRack.Box in r.boxes:
+			coming[b.product_id] = true
+	for s in staff:
+		if s.carry_count > 0:
+			coming[s.carry_product] = true
+	if player and player.is_carrying():
+		coming[player.carry_product] = true
+	for d in pending_deliveries:
+		coming[d.id] = true
+	var low: Array[String] = []
+	for id: String in on_shelves:
+		if on_shelves[id] <= at and not coming.has(id) and Game.is_licensed(id):
+			low.append(id)
+	return low
+
+
+## The closest empty spot on the delivery zone (where spare boxes go back).
+func free_delivery_cell(from: Vector2i) -> Vector2i:
+	var best := NO_CELL
+	var best_d := INF
+	for c in delivery_cells:
+		if can_drop_at(c) and reachable.has(c):
+			var d := Vector2(c - from).length()
+			if d < best_d:
+				best_d = d
+				best = c
+	return best
+
+
 ## The closest free floor cell to put a box down on (not in a line, not on
 ## another box). `taken` lists extra cells to avoid.
 func nearest_drop_cell(from: Vector2i, taken := {}) -> Vector2i:
@@ -1057,62 +1169,146 @@ func rack_with_room(from: Vector2, who: Staff) -> StorageRack:
 
 ## The delivery zone's top corner (smallest x and y).
 func delivery_anchor() -> Vector2i:
-	var a := delivery_cells[0]
-	for c in delivery_cells:
-		a = Vector2i(mini(a.x, c.x), mini(a.y, c.y))
-	return a
+	return delivery_cells[0]
 
 
-## The delivery zone's cells if its top corner was on `anchor`.
-func delivery_cells_at(anchor: Vector2i) -> Array[Vector2i]:
-	var offset := anchor - delivery_anchor()
+## The cells of a `size` rectangle with its top corner on `anchor`, row by row.
+static func _rect_cells(anchor: Vector2i, size: Vector2i) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
-	for c in delivery_cells:
-		cells.append(c + offset)
+	for y in size.y:
+		for x in size.x:
+			cells.append(anchor + Vector2i(x, y))
 	return cells
 
 
+## The delivery zone's cells if its top corner was on `anchor` (and it was
+## `size` big; by default the size it is).
+func delivery_cells_at(anchor: Vector2i, size := Vector2i.ZERO) -> Array[Vector2i]:
+	return _rect_cells(anchor, size if size != Vector2i.ZERO else delivery_size)
+
+
 ## Why the delivery zone can't go with its top corner on `anchor` ("" means
-## it can). Boxes already on the zone move with it.
-func delivery_zone_error(anchor: Vector2i) -> String:
+## it can). Boxes already on the zone move with it; other boxes it lands on
+## just become part of it.
+func delivery_zone_error(anchor: Vector2i, size := Vector2i.ZERO) -> String:
 	var lines := all_line_cells()
-	for c in delivery_cells_at(anchor):
+	for c in delivery_cells_at(anchor, size):
 		if not floor_cells.has(c):
 			return "It has to fit on the floor"
 		if objects.has(c):
-			return "Something is in the way"
+			return "%s is in the way" % (objects[c] as Interactable).display_name().capitalize()
 		if c == door_cell:
 			return "Don't block the door"
 		if c in lines:
 			return "Keep the checkout line clear"
-		if boxes.has(c) and not c in delivery_cells:
-			return "There's a box in the way"
 		if not reachable.has(c):
 			return "Nobody could get there"
 	return ""
 
 
-## Moves the delivery zone, along with any boxes waiting on it.
-func move_delivery_zone(anchor: Vector2i) -> void:
-	_shift_delivery_zone(anchor)
+## Moves the delivery zone, along with any boxes waiting on it. `size` with
+## its sides swapped turns it too.
+func move_delivery_zone(anchor: Vector2i, size := Vector2i.ZERO) -> void:
+	if size == Vector2i.ZERO:
+		size = delivery_size
+	if size != delivery_size:
+		delivery_turned = not delivery_turned
+	_set_delivery_zone(anchor, size)
 	_apply_decor()
 	layout_changed()
 
 
-func _shift_delivery_zone(anchor: Vector2i) -> void:
-	var offset := anchor - delivery_anchor()
+## The zone as big as a delivery zone upgrade makes it (`size` as listed in
+## Brand.UPGRADES, before turning).
+func zone_size_for(size: Vector2i) -> Vector2i:
+	return Vector2i(size.y, size.x) if delivery_turned else size
+
+
+## Where the zone's top corner would go to grow it to `size`: it keeps
+## covering the spot it's on now, as close to where it is as fits.
+## NO_CELL if there's no room around it.
+func grow_anchor(size: Vector2i) -> Vector2i:
+	var a := delivery_anchor()
+	var best := NO_CELL
+	var best_d := 999
+	for dy in range(-maxi(0, size.y - delivery_size.y), 1):
+		for dx in range(-maxi(0, size.x - delivery_size.x), 1):
+			var c := a + Vector2i(dx, dy)
+			if absi(dx) + absi(dy) < best_d and delivery_zone_error(c, size) == "":
+				best = c
+				best_d = absi(dx) + absi(dy)
+	return best
+
+
+## Why the zone can't grow to `size` ("" = it can).
+func grow_error(size: Vector2i) -> String:
+	if size.x * size.y <= delivery_size.x * delivery_size.y:
+		return ""
+	if grow_anchor(size) != NO_CELL:
+		return ""
+	# Name what's in the way of growing where it is now.
+	return "No room to grow the delivery zone where it is (%s). Clear some space or move it in Build mode" % \
+		delivery_zone_error(delivery_anchor(), size).trim_suffix("!").to_lower()
+
+
+## Makes the zone `size` big (a delivery zone upgrade). False if it can't fit.
+func grow_delivery_zone(size: Vector2i) -> bool:
+	if size.x * size.y <= delivery_size.x * delivery_size.y:
+		return true
+	var anchor := grow_anchor(size)
+	if anchor == NO_CELL:
+		return false
+	_set_delivery_zone(anchor, size)
+	_apply_decor()
+	layout_changed()
+	return true
+
+
+## Puts the zone on `anchor` at `size`. Boxes on it come along: moving
+## keeps them where they were on the zone; growing or turning leaves them
+## where they are if they're still on it, otherwise they go to a free spot.
+func _set_delivery_zone(anchor: Vector2i, size: Vector2i) -> void:
+	var old_anchor := delivery_anchor()
+	var resized := size != delivery_size
+	var new_cells := _rect_cells(anchor, size)
 	var moving: Array[StockBox] = []
 	for c in delivery_cells:
 		if boxes.has(c):
 			moving.append(boxes[c])
 			boxes.erase(c)
+	var free := {}
+	for c in new_cells:
+		if not boxes.has(c):
+			free[c] = true
+	var left: Array[StockBox] = []
 	for box in moving:
-		box.cell += offset
-		box.position = Iso.cell_to_world(box.cell)
-		boxes[box.cell] = box
-	for i in delivery_cells.size():
-		delivery_cells[i] += offset
+		var want := box.cell if resized else box.cell - old_anchor + anchor
+		if free.has(want):
+			free.erase(want)
+			_place_box_node(box, want)
+		else:
+			left.append(box)
+	delivery_cells = new_cells
+	delivery_size = size
 	delivery_zone.cell = anchor
+	for box in left:
+		var spot := NO_CELL
+		for c in new_cells:
+			if free.has(c):
+				spot = c
+				break
+		if spot == NO_CELL:
+			spot = nearest_drop_cell(anchor)
+		if spot == NO_CELL:
+			spot = box.cell
+		free.erase(spot)
+		_place_box_node(box, spot)
+
+
+func _place_box_node(box: StockBox, cell: Vector2i) -> void:
+	box.cell = cell
+	box.position = Iso.cell_to_world(cell)
+	boxes[cell] = box
 
 
 # ---------------------------------------------------------------- staff
@@ -1137,6 +1333,10 @@ func _sync_staff() -> void:
 			s.setup(self, wanted[id], start)
 			world.add_child(s)
 			staff.append(s)
+	# A general manager keeps everyone else working faster.
+	var managed := Game.staff_count("manager") > 0
+	for s in staff:
+		s.set_managed(managed and s.role != "manager")
 
 
 func _staff_start(role: String) -> Vector2i:
@@ -1145,6 +1345,8 @@ func _staff_start(role: String) -> Vector2i:
 		spot = delivery_cells[-1]
 	elif role == "janitor" and mop_bucket:
 		spot = mop_bucket.cell
+	elif role == "manager" and computer:
+		spot = computer.cell
 	if spot != NO_CELL:
 		var c := stand_cell_for(spot, spot)
 		if c != NO_CELL:

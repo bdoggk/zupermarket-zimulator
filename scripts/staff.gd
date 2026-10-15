@@ -5,13 +5,19 @@ extends Node2D
 ##
 ##   Stocker  picks up delivery boxes and stocks the shelves with them. Tops
 ##            up shelves that already hold that product first, then fills
-##            empty ones. Puts a box down if there's nowhere for it to go.
+##            empty ones. Whatever doesn't fit goes on a storage rack, or
+##            back on the delivery zone.
 ##   Cashier  walks to a register (one each) and checks out the customers
 ##            in its line. While a cashier is at a register, you can't use
 ##            it yourself, so you're free to do other things.
 ##   Janitor  (zombie game) mops up the blood shoppers leave behind.
+##   General manager  walks around checking the shelves and the staff.
+##            Orders a box of anything that's down to REORDER_AT on the
+##            shelves (at the computer), gets anyone who's stuck or slacking
+##            back to work, and while they're on the payroll everyone else
+##            works MANAGED_BOOST faster.
 
-enum Job { IDLE, TO_BOX, PICKING_UP, TO_SHELF, STOCKING, TO_DROP, TO_RACK, STORING, TO_POST, AT_POST, SCANNING, NO_POST, TO_SPILL, MOPPING }
+enum Job { IDLE, TO_BOX, PICKING_UP, TO_SHELF, STOCKING, TO_DROP, TO_RACK, STORING, TO_POST, AT_POST, SCANNING, NO_POST, TO_SPILL, MOPPING, TO_CHECK, CHECKING, TO_COMPUTER, ORDERING }
 
 const SPEED := 2.8  # cells per second
 const PICKUP_SECONDS := 0.4
@@ -20,6 +26,15 @@ const SCAN_SLOWDOWN := 1.15  # cashiers scan a little slower than you
 const MOP_SECONDS := 1.4  # a little slower than you
 const LOOK_FOR_WORK := 0.6  # seconds between looking for something to do
 const XP_PER_SPILL := 4.0
+const REORDER_AT := 2  # the manager orders more of anything down to this many on the shelves
+const MANAGED_BOOST := 1.15  # everyone works this much faster with a manager around
+const CHECK_SECONDS := 1.5  # the manager looking over a shelf or a worker
+const ORDER_SECONDS := 1.5  # the manager placing orders at the computer
+const SLACK_SECONDS := 20.0  # on the same job this long = stuck or slacking
+const SHOUT_EVERY := 12.0  # the manager checks on everyone from afar this often
+## Jobs that mean you're getting something done (waiting for work isn't slacking).
+const BUSY_JOBS := [Job.TO_BOX, Job.PICKING_UP, Job.TO_SHELF, Job.STOCKING, Job.TO_DROP, Job.TO_RACK,
+	Job.STORING, Job.TO_POST, Job.NO_POST, Job.TO_SPILL, Job.MOPPING]
 const BOX_SMALL := preload("res://assets/sprites/box_small.png")
 const MOP := preload("res://assets/sprites/mop_held.png")
 
@@ -32,7 +47,8 @@ var path: Array[Vector2i] = []
 var timer := 0.0
 var duration := 0.0  # length of the current timed task (for the progress bar)
 var level := 1
-var speed := 1.0  # how much faster than a new hire (goes up with their level)
+var speed := 1.0  # how much faster than a new hire (level, and the manager's boost)
+var managed := false  # a general manager is keeping them on their toes
 
 # Stocker
 var carry_product := ""
@@ -46,9 +62,19 @@ var put_rack: StorageRack = null  # where they're putting a box away
 # Cashier
 var register: Register = null
 var post := Store.NO_CELL  # where they stand to work the register
+var on_break_from: Register = null  # you took over this register from them
 
 # Janitor
 var target_spill: Spill = null
+
+# Manager
+var watching: Staff = null  # who they're checking on
+var fixing: SelfCheckout = null  # a jammed self-checkout they're going to fix
+var _shout_timer := SHOUT_EVERY
+var _broke_timer := 0.0  # don't keep saying we can't afford something
+
+var _job_time := 0.0  # how long they've been on the current job
+var _last_job := Job.IDLE
 
 var sprite: Sprite2D
 var _walk_anim := 0.0
@@ -65,7 +91,16 @@ func setup(s: Store, entry: Dictionary, cell: Vector2i) -> void:
 
 func set_level(lv: int) -> void:
 	level = lv
-	speed = Game.staff_speed(lv)
+	_update_speed()
+
+
+func set_managed(on: bool) -> void:
+	managed = on
+	_update_speed()
+
+
+func _update_speed() -> void:
+	speed = Game.staff_speed(level) * (MANAGED_BOOST if managed else 1.0)
 
 
 func _ready() -> void:
@@ -90,10 +125,53 @@ func _process(delta: float) -> void:
 			_stocker(delta)
 		"janitor":
 			_janitor(delta)
+		"manager":
+			_manager(delta)
 		_:
 			_cashier(delta)
+	if job != _last_job:
+		_last_job = job
+		_job_time = 0.0
+	else:
+		_job_time += delta
 	_animate(delta)
 	queue_redraw()
+
+
+## Stuck on the same job for `longer_than` seconds (waiting for work doesn't
+## count). The manager notices.
+func is_slacking(longer_than := SLACK_SECONDS) -> bool:
+	return job in BUSY_JOBS and _job_time > longer_than and not on_break()
+
+
+## A cashier whose register you took over.
+func on_break() -> bool:
+	return is_instance_valid(on_break_from) and on_break_from.taken_over and job == Job.NO_POST
+
+
+## You took over their register: go work another free one, or take a break
+## until you walk away from it.
+func relieve(r: Register) -> void:
+	on_break_from = r
+	register = null
+	post = Store.NO_CELL
+	path.clear()
+	job = Job.IDLE
+	timer = 0.0
+
+
+## The manager told them to get back to work: drop whatever they were stuck
+## on and find something to do.
+func nudge() -> void:
+	_job_time = 0.0
+	if role == "cashier":
+		register = null
+		post = Store.NO_CELL
+		job = Job.IDLE
+		timer = 0.0
+	else:
+		_give_up()
+		timer = 0.0
 
 
 func _draw() -> void:
@@ -102,11 +180,11 @@ func _draw() -> void:
 	if carry_count > 0:
 		draw_texture(BOX_SMALL, Vector2(-10, -24 + sprite.position.y))
 		draw_texture(Game.icon(carry_product), Vector2(-4, -56))
-	if job in [Job.PICKING_UP, Job.STOCKING, Job.STORING, Job.SCANNING, Job.MOPPING] and duration > 0.0:
+	if job in [Job.PICKING_UP, Job.STOCKING, Job.STORING, Job.SCANNING, Job.MOPPING, Job.CHECKING, Job.ORDERING] and duration > 0.0:
 		var f := clampf(1.0 - timer / duration, 0.0, 1.0)
 		draw_rect(Rect2(-11, -44, 22, 5), Color(0.08, 0.08, 0.1, 0.9))
 		draw_rect(Rect2(-10, -43, 20 * f, 3), Color(0.45, 0.75, 0.95))
-	if job == Job.NO_POST:
+	if job == Job.NO_POST and not on_break():
 		draw_string(ThemeDB.fallback_font, Vector2(-3, -40), "?", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 0.85, 0.3))
 
 
@@ -118,7 +196,7 @@ func status_text() -> String:
 		Job.TO_SHELF, Job.STOCKING:
 			return "Stocking %s" % Game.product_name(carry_product)
 		Job.TO_DROP:
-			return "No room for %s, putting the box down" % Game.product_name(carry_product)
+			return "Shelves are full: taking %s back to the delivery zone" % Game.product_name(carry_product)
 		Job.TO_RACK, Job.STORING:
 			return "Putting %s in storage" % Game.product_name(carry_product)
 		Job.TO_POST:
@@ -128,15 +206,27 @@ func status_text() -> String:
 		Job.SCANNING:
 			return "Checking out a %s" % Brand.SAY.shopper
 		Job.NO_POST:
+			if on_break():
+				return "On a break (you took over register %d)" % (store.registers.find(on_break_from) + 1)
 			return "Can't get to a free register" if store.registers.size() > 0 else "No register"
 		Job.TO_SPILL:
 			return "Heading to a mess"
 		Job.MOPPING:
 			return "Mopping"
+		Job.TO_CHECK, Job.CHECKING:
+			if is_instance_valid(fixing):
+				return "Fixing a self-checkout"
+			return "Checking on %s" % watching.staff_name if is_instance_valid(watching) else "Checking the shelves"
+		Job.TO_COMPUTER:
+			return "Going to order more stock"
+		Job.ORDERING:
+			return "Ordering stock"
 	if role == "stocker":
 		return "Waiting for deliveries"
 	if role == "janitor":
 		return "Waiting for a mess"
+	if role == "manager":
+		return "Walking the floor"
 	return "Idle"
 
 
@@ -337,8 +427,9 @@ func _tidy_up() -> void:
 	job = Job.TO_BOX
 
 
-## Has a box in hand: take it to a shelf, or put it on a storage rack, or
-## put it down if there's no room anywhere.
+## Has a box in hand: take it to a shelf. If every shelf for it is full,
+## put it away on a storage rack, or back on the delivery zone (only on the
+## floor somewhere if both are full).
 func _deliver() -> void:
 	target_shelf = store.best_shelf_for(carry_product, position, self)
 	if target_shelf:
@@ -358,7 +449,9 @@ func _deliver() -> void:
 			return
 		store.release(put_rack)
 		put_rack = null
-	var c := store.nearest_drop_cell(current_cell())
+	var c := store.free_delivery_cell(current_cell())
+	if c == Store.NO_CELL:
+		c = store.nearest_drop_cell(current_cell())
 	if c != Store.NO_CELL and _go_to(c):
 		job = Job.TO_DROP
 
@@ -416,6 +509,8 @@ func _give_up() -> void:
 	target_shelf = null
 	put_rack = null
 	target_spill = null
+	watching = null
+	fixing = null
 	path.clear()
 	job = Job.IDLE
 	timer = 0.3
@@ -438,12 +533,20 @@ func _go_home() -> void:
 
 func _cashier(delta: float) -> void:
 	if not is_instance_valid(register) or not register in store.registers:
+		if job == Job.NO_POST:
+			timer -= delta  # don't look for a free register every frame
+			if timer > 0.0:
+				if not path.is_empty():
+					_walk(delta)
+				return
 		register = store.assign_register(self)
 		if register == null:
 			job = Job.NO_POST
+			timer = 1.0
 			if not path.is_empty():
 				_walk(delta)
 			return
+		on_break_from = null
 		_go_to_post()
 	match job:
 		Job.TO_POST:
@@ -551,6 +654,134 @@ func _spill_ok() -> bool:
 		and store.spills.get(target_spill.cell) == target_spill
 
 
+# ---------------------------------------------------------------- manager
+
+func _manager(delta: float) -> void:
+	_broke_timer -= delta
+	_shout_timer -= delta
+	if _shout_timer <= 0.0:
+		_shout_timer = SHOUT_EVERY
+		for s in store.staff:  # anyone stuck for a long time gets told off from across the store
+			if s != self and s.is_slacking(SLACK_SECONDS * 2.0):
+				_nudge(s)
+	match job:
+		Job.IDLE:
+			if not path.is_empty():
+				_walk(delta)
+			timer -= delta
+			if timer > 0.0:
+				return
+			timer = 1.0
+			if not _plan_fix() and not _plan_order():
+				_patrol()
+		Job.TO_CHECK:
+			if _walk(delta):
+				_start(Job.CHECKING, CHECK_SECONDS / speed)
+				if is_instance_valid(watching):
+					_face(watching.position)
+		Job.CHECKING:
+			timer -= delta
+			if timer <= 0.0:
+				if is_instance_valid(fixing):
+					store.release(fixing)
+					if fixing.jammed:
+						fixing.fix()
+						Game.add_staff_xp(id, 2.0)
+				fixing = null
+				if is_instance_valid(watching) and watching.is_slacking():
+					_nudge(watching)
+				Game.add_staff_xp(id, 1.0)
+				watching = null
+				job = Job.IDLE
+				timer = 0.3
+		Job.TO_COMPUTER:
+			if not is_instance_valid(store.computer):
+				_give_up()
+			elif _walk(delta):
+				if Iso.chebyshev(current_cell(), store.computer.cell) <= 1:
+					_start(Job.ORDERING, ORDER_SECONDS / speed)
+					_face(store.computer.position)
+				else:
+					_give_up()
+		Job.ORDERING:
+			timer -= delta
+			if timer <= 0.0:
+				_place_orders()
+				job = Job.IDLE
+				timer = 1.0
+
+
+## A self-checkout is jammed: go fix it (before anything else).
+func _plan_fix() -> bool:
+	for r in store.registers:
+		if r is SelfCheckout and r.jammed and not store.is_claimed(r, self):
+			var stand := store.stand_cell_for(r.cell, current_cell())
+			if stand != Store.NO_CELL and _go_to(stand):
+				fixing = r
+				watching = null
+				store.claim(r, self)
+				job = Job.TO_CHECK
+				return true
+	return false
+
+
+## Something's running low: head to the computer to order more.
+func _plan_order() -> bool:
+	if store.computer == null or _broke_timer > 0.0 or store.products_running_low(REORDER_AT).is_empty():
+		return false
+	var stand := store.stand_cell_for(store.computer.cell, current_cell())
+	if stand == Store.NO_CELL or not _go_to(stand):
+		return false
+	job = Job.TO_COMPUTER
+	return true
+
+
+func _place_orders() -> void:
+	var ordered: Array[String] = []
+	var broke: Array[String] = []
+	for pid in store.products_running_low(REORDER_AT):
+		if Game.order_box(pid, true):
+			ordered.append(Game.product_name(pid))
+			Game.add_staff_xp(id, 3.0)
+		else:
+			broke.append(Game.product_name(pid))
+	if not ordered.is_empty():
+		Game.message.emit("%s ordered more %s." % [staff_name, _list(ordered)])
+		Game.show_popup(position + Vector2(0, -50), "Ordered!", Color(0.7, 0.9, 1.0))
+	if not broke.is_empty():
+		_broke_timer = 60.0
+		Game.message.emit("%s can't afford more %s right now." % [staff_name, _list(broke)])
+
+
+static func _list(names: Array[String]) -> String:
+	if names.size() == 1:
+		return names[0]
+	return ", ".join(names.slice(0, -1)) + " and " + names[-1]
+
+
+## Walks over to look at a shelf, or at one of the other staff.
+func _patrol() -> void:
+	var others := store.staff.filter(func(s): return s != self and not s.is_queued_for_deletion())
+	var target_cell := Store.NO_CELL
+	watching = null
+	if not others.is_empty() and randf() < 0.5:
+		watching = others.pick_random()
+		target_cell = store.stand_cell_for(watching.current_cell(), current_cell(), 1.0)
+	elif not store.shelves.is_empty():
+		var shelf: Shelf = store.shelves.pick_random()
+		target_cell = store.stand_cell_for(shelf.cell, current_cell(), 1.0)
+	if target_cell != Store.NO_CELL and _go_to(target_cell):
+		job = Job.TO_CHECK
+	else:
+		watching = null
+
+
+func _nudge(s: Staff) -> void:
+	s.nudge()
+	Game.show_popup(s.position + Vector2(0, -52), "Back to work, %s!" % s.staff_name, Color(1.0, 0.75, 0.4))
+	Game.add_staff_xp(id, 2.0)
+
+
 # ---------------------------------------------------------------- both
 
 ## Shelves or registers moved in build mode: find new routes.
@@ -564,7 +795,7 @@ func on_layout_changed() -> void:
 		Job.TO_DROP:
 			path.clear()
 			job = Job.IDLE
-		Job.TO_SPILL, Job.MOPPING, Job.TO_RACK, Job.STORING:
+		Job.TO_SPILL, Job.MOPPING, Job.TO_RACK, Job.STORING, Job.TO_CHECK, Job.CHECKING, Job.TO_COMPUTER:
 			_give_up()
 		Job.TO_POST, Job.AT_POST, Job.SCANNING, Job.NO_POST:
 			if is_instance_valid(register) and register in store.registers:

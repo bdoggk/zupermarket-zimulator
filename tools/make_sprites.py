@@ -327,10 +327,35 @@ def shelf_face(x, y, h, side, c):
     return SHELF_BACK if side == "left" else shade(SHELF_BACK, 0.85)
 
 
-def shelf():
+def shelf_panel(x, h, side, back):
+    """A closed panel: the shelf's end (right face), or its back (left face,
+    when it's turned away from you)."""
+    dark = 1.0 if side == "left" else 0.85
+    if h >= SHELF_HEIGHT - 2 or x in POSTS or h < 2:
+        return shade(SHELF_FRAME, dark)
+    if back and h in (15, 29):
+        return shade(SHELF_FRAME, dark * 0.68)  # seams between the back panels
+    return shade(SHELF_FRAME, dark * 0.82)
+
+
+def shelf(view="front"):
+    """Open on its front (the left face); `view` "back" is the shelf turned
+    away from you. The game mirrors these for the other two directions."""
     img = new(64, 32 + SHELF_HEIGHT)
+
+    def face(x, y, h, side, c):
+        if side == "left" and view == "front":
+            return shelf_face(x, y, h, side, c)
+        return shelf_panel(x, h, side, side == "left")
+
     prism(img, 32, img.height - 16, 28, SHELF_HEIGHT, shade(SHELF_FRAME, 1.1),
-          SHELF_BACK, SHELF_BACK, shelf_face)
+          SHELF_BACK, SHELF_BACK, face)
+    if ZOMBIE:  # rust streaks on the panels
+        px = img.load()
+        for x, y0 in ([(40, 30), (52, 36), (46, 48)] + ([(12, 30), (22, 44)] if view == "back" else [])):
+            for d in range(4):
+                if px[x, y0 + d][3]:
+                    px[x, y0 + d] = solid((118, 74, 50) if d < 3 else (98, 62, 44))
     outline_object(img)
     return img
 
@@ -363,10 +388,23 @@ def fridge_face(x, y, h, side, c):
     return shade(FRIDGE_INSIDE, dark)
 
 
-def fridge():
+def fridge(view="front"):
     img = new(64, 32 + FRIDGE_HEIGHT)
+
+    def face(x, y, h, side, c):
+        if side == "left" and view == "front":
+            return fridge_face(x, y, h, side, c)
+        dark = 0.84 if side == "right" else 1.0
+        if h < 2:
+            return shade((96, 100, 106), dark)  # kick plate
+        if x in POSTS or h >= FRIDGE_HEIGHT - 6:
+            return shade(FRIDGE_BODY, dark)
+        if view == "back" and side == "left" and 4 <= h <= 13 and 10 <= x <= 27:
+            return shade((60, 64, 66), dark) if h % 2 == 0 else shade(FRIDGE_BODY, dark * 0.8)  # the motor's vent
+        return shade(FRIDGE_BODY, dark * 0.92)
+
     prism(img, 32, img.height - 16, 28, FRIDGE_HEIGHT, shade(FRIDGE_BODY, 1.06),
-          FRIDGE_BODY, shade(FRIDGE_BODY, 0.84), fridge_face)
+          FRIDGE_BODY, shade(FRIDGE_BODY, 0.84), face)
     outline_object(img)
     return img
 
@@ -376,7 +414,7 @@ def fridge_glass():
     img = new(64, 32 + FRIDGE_HEIGHT)
 
     def glass(x, y, h, side, c):
-        if h < 2 or h >= FRIDGE_HEIGHT - 6 or x in POSTS:
+        if side != "left" or h < 2 or h >= FRIDGE_HEIGHT - 6 or x in POSTS:
             return None
         if (x + h) % 13 in (0, 1):
             return (236, 248, 255, 90)  # glare streak
@@ -409,7 +447,7 @@ def plant():
     return img
 
 
-def gravestone():
+def gravestone(view="front"):
     """The zombie game's decoration (it uses the 'plant' slot): a headstone."""
     img = new(64, 64)
     cy = img.height - 16
@@ -426,14 +464,19 @@ def gravestone():
             if dy < 0 and ((x - 31.5) / 9.0) ** 2 + ((dy - 1) / 8.0) ** 2 > 1 and x < right - 2:
                 c = rim
             px[x, y] = solid(c)
-    for y in range(top + 7, top + 17):  # a cross carved in the front
-        dot(img, 30, y, (88, 90, 86))
-    for x in range(27, 34):
-        dot(img, x, top + 10, (88, 90, 86))
-    for x, y in [(26, top + 22), (27, top + 23), (35, top + 20), (34, top + 21)]:
-        dot(img, x, y, (96, 98, 94))  # cracks
-    random.seed(23)
-    for _ in range(30):  # moss
+    if view == "front":
+        for y in range(top + 7, top + 17):  # a cross carved in the front
+            dot(img, 30, y, (88, 90, 86))
+        for x in range(27, 34):
+            dot(img, x, top + 10, (88, 90, 86))
+        for x, y in [(26, top + 22), (27, top + 23), (35, top + 20), (34, top + 21)]:
+            dot(img, x, y, (96, 98, 94))  # cracks
+    else:  # the plain back, with a long crack
+        for i, (x, y) in enumerate([(33, top + 4), (32, top + 5), (32, top + 6), (31, top + 7), (31, top + 8),
+                                    (30, top + 9), (31, top + 10), (31, top + 11)]):
+            dot(img, x, y, (98, 100, 96))
+    random.seed(23 if view == "front" else 29)
+    for _ in range(30 if view == "front" else 55):  # moss
         x, y = random.randint(left, right), random.randint(top + 14, bottom)
         if px[x, y][3] and random.random() < 0.7:
             px[x, y] = solid(random.choice([(86, 112, 70), (104, 128, 80)]))
@@ -455,27 +498,55 @@ if ZOMBIE:
     SCREEN = ((70, 150, 80), (120, 210, 120))
 
 
-def register():
+def register(view="front"):
+    """The front faces the shoppers' side (the left face, where the line
+    starts); the till sits toward the cashier behind it. "back" is the
+    register turned around: you see the cashier's side and the cash drawer."""
     img = new(64, 70)
     cy = img.height - 16
-    prism(img, 32, cy, 30, 18, LAMINATE, WOOD_L, WOOD_R)
-    prism(img, 34, cy - 18, 10, 9, (84, 86, 92), (62, 64, 70), (50, 52, 58))
-    prism(img, 38, cy - 27, 4, 8, (96, 168, 108), (70, 72, 78), (56, 58, 64))
-    if ZOMBIE:  # a bloody handprint on the counter
-        for x, y in [(20, cy - 14), (21, cy - 14), (22, cy - 13), (20, cy - 12), (21, cy - 11), (24, cy - 15)]:
-            dot(img, x, y, BLOOD)
+
+    def counter(x, y, h, side, c):
+        if view == "back" and side == "left" and 5 <= h <= 12 and 10 <= x <= 27:
+            if h in (5, 12) or x in (10, 27):
+                return shade(WOOD_L, 0.62)
+            if h == 9 and 17 <= x <= 20:
+                return (190, 186, 170)  # drawer handle
+            return shade(WOOD_L, 0.86)
+        return c
+
+    prism(img, 32, cy, 30, 18, LAMINATE, WOOD_L, WOOD_R, counter)
+    if view == "front":
+        prism(img, 36, cy - 20, 10, 9, (84, 86, 92), (62, 64, 70), (50, 52, 58))
+        prism(img, 40, cy - 29, 4, 8, (96, 168, 108), (70, 72, 78), (56, 58, 64))
+        if ZOMBIE:  # a bloody handprint on the counter
+            for x, y in [(20, cy - 14), (21, cy - 14), (22, cy - 13), (20, cy - 12), (21, cy - 11), (24, cy - 15)]:
+                dot(img, x, y, BLOOD)
+    else:
+        prism(img, 28, cy - 16, 10, 9, (84, 86, 92), (62, 64, 70), (50, 52, 58))
+
+        def screen(x, y, h, side, c):
+            if side == "left" and 2 <= h <= 6:
+                return SCREEN[0] if h != 4 else SCREEN[1]
+            return c
+
+        prism(img, 32, cy - 25, 4, 8, (96, 168, 108), (70, 72, 78), (56, 58, 64), screen)
+        if ZOMBIE:
+            for x, y in [(44, cy - 20), (45, cy - 20), (46, cy - 19), (45, cy - 18)]:
+                dot(img, x, y, BLOOD)
     outline_object(img)
     return img
 
 
-def computer():
+def computer(view="front"):
     img = new(64, 72)
     cy = img.height - 16
     prism(img, 32, cy, 26, 16, LAMINATE, WOOD_L, WOOD_R)
 
     def screen(x, y, h, side, c):
-        if side == "left" and 3 <= h <= 11 and x >= 25:
+        if view == "front" and side == "left" and 3 <= h <= 11 and x >= 25:
             return SCREEN[0] if h != 7 else SCREEN[1]
+        if view == "back" and side == "left" and h in (8, 10) and 26 <= x <= 32 and x % 2 == 0:
+            return shade(c, 0.7)  # vents on the back
         return c
 
     prism(img, 34, cy - 16, 8, 14, (196, 190, 172), (186, 180, 162), (160, 154, 138), screen)
@@ -980,7 +1051,35 @@ SIGN_GLYPHS = {  # 4x5 letters
 }
 
 
-def sign(word, color):
+def sign(word, color, slope=0, lettering=True):
+    """The A-frame sign. slope 1 faces the bottom left of the screen, -1 the
+    bottom right (0 is the old flat one, facing you). Both sides of an
+    A-frame look the same, so that covers all four ways it can face."""
+    if slope:
+        # Lean the bare board over to the iso slant, then letter it: each
+        # letter moves down (or up) with the board but stays upright, so it
+        # stays readable.
+        flat = sign(word, color, 0, lettering=False)
+        img = new(64, 64)
+        src, dst = flat.load(), img.load()
+        drop = lambda x: 8 + math.floor((x - 32) * 0.5 * slope)
+        for y in range(flat.height):
+            for x in range(flat.width):
+                if src[x, y][3]:
+                    ny = y + drop(x)
+                    if 0 <= ny < img.height:
+                        dst[x, ny] = src[x, y]
+        width = len(word) * 5 - 1
+        x0 = 32 - width // 2
+        for i, ch in enumerate(word):
+            dy = drop(x0 + i * 5 + 2)
+            for y, line in enumerate(SIGN_GLYPHS[ch]):
+                for x, bit in enumerate(line):
+                    if bit == "#":
+                        dot(img, x0 + i * 5 + x, 19 + y + dy, color)
+        for x in range(16, 48, 2):
+            dot(img, x + 1, 15 + drop(x + 1), shade(color, 0.7))
+        return img
     img = new(64, 56)
     px = img.load()
     for y in range(37, 44):  # soft shadow on the floor
@@ -993,17 +1092,18 @@ def sign(word, color):
         rect(img, 45 + i // 5, 28 + i, 46 + i // 5, 28 + i, wood_dark)
     rect(img, 14, 12, 49, 29, wood)  # frame
     rect(img, 14, 29, 49, 29, wood_dark)
-    rect(img, 16, 14, 47, 27, (34, 36, 42))  # chalkboard
+    rect(img, 16, 14, 47, 27 if lettering else 28, (34, 36, 42))  # chalkboard
     rect(img, 29, 9, 34, 11, wood_dark)  # handle
-    width = len(word) * 5 - 1
-    x0 = 32 - width // 2
-    for i, ch in enumerate(word):
-        for y, line in enumerate(SIGN_GLYPHS[ch]):
-            for x, bit in enumerate(line):
-                if bit == "#":
-                    dot(img, x0 + i * 5 + x, 18 + y, color)
-    for x in range(16, 48, 2):  # little light bulbs along the top
-        dot(img, x + 1, 15, shade(color, 0.7))
+    if lettering:
+        width = len(word) * 5 - 1
+        x0 = 32 - width // 2
+        for i, ch in enumerate(word):
+            for y, line in enumerate(SIGN_GLYPHS[ch]):
+                for x, bit in enumerate(line):
+                    if bit == "#":
+                        dot(img, x0 + i * 5 + x, 18 + y, color)
+        for x in range(16, 48, 2):  # little light bulbs along the top
+            dot(img, x + 1, 15, shade(color, 0.7))
     outline_object(img, 0.6)
     return img
 
@@ -1040,23 +1140,27 @@ POLE = (150, 112, 70)
 MOP_HEAD = (196, 192, 176)
 
 
-def mop_bucket(with_mop):
+def mop_bucket(with_mop, view="front"):
     img = new(64, 72)
     cy = img.height - 16
+    back = view == "back"
     prism(img, 32, cy, 12, 13, (70, 74, 80), BUCKET, shade(BUCKET, 0.8))
-    prism(img, 38, cy - 13, 4, 5, (150, 154, 160), (120, 124, 130), (100, 104, 110))  # wringer
+    if not back:
+        prism(img, 38, cy - 13, 4, 5, (150, 154, 160), (120, 124, 130), (100, 104, 110))  # wringer
     px = img.load()
-    for x, y in diamond(30, cy - 13, 8):  # dirty water
+    for x, y in diamond(30 if not back else 32, cy - 13 if not back else cy - 12, 8):  # dirty water
         if px[x, y][3]:
             px[x, y] = solid((92, 52, 48) if ZOMBIE else (104, 116, 104))
+    if back:  # the wringer is on the far side now
+        prism(img, 33, cy - 15, 4, 5, (150, 154, 160), (120, 124, 130), (100, 104, 110))
     outline_object(img)
     if with_mop:
-        for x in range(22, 33):  # the mop head poking out of the water
+        for x in range(22, 33) if not back else range(28, 39):  # the mop head poking out of the water
             for y in range(cy - 17, cy - 12):
                 if (x + y) % 2 == 0 or y == cy - 17:
-                    px[x, y] = solid(MOP_HEAD if x < 28 else shade(MOP_HEAD, 0.85))
+                    px[x, y] = solid(MOP_HEAD if x < (28 if not back else 34) else shade(MOP_HEAD, 0.85))
         for i in range(38):  # the handle, leaning back
-            x = 27 + i // 7
+            x = 27 + i // 7 if not back else 34 - i // 9
             y = cy - 17 - i
             px[x - 1, y] = solid(OUTLINE)
             px[x, y] = solid(shade(POLE, 1.15))
@@ -1100,8 +1204,10 @@ def storage_rack():
     def face(x, y, h, side, c):
         dark = 1.0 if side == "left" else 0.8
         for lv in RACK_LEVELS:
-            if lv - 2 <= h <= lv:
+            if side == "left" and lv - 2 <= h <= lv:
                 return shade(RACK_BEAM, dark * (1.0 if h == lv else 0.78))
+            if side == "right" and lv - 1 <= h <= lv:  # the boards, seen end-on
+                return shade(RACK_POST, dark * 0.7)
         if x in POSTS or h >= RACK_HEIGHT - 2:
             return shade(RACK_POST, dark)
         if (x + h) % 9 == 0 or (x - h) % 9 == 0:  # cross bracing on the back
@@ -1119,7 +1225,7 @@ def storage_rack():
     return img
 
 
-def self_checkout():
+def self_checkout(view="front"):
     img = new(64, 72)
     cy = img.height - 16
     body = (196, 200, 204) if not ZOMBIE else (150, 156, 150)
@@ -1134,6 +1240,8 @@ def self_checkout():
     dot(img, 45, cy - 9, (150, 40, 40) if ZOMBIE else (180, 180, 172))
 
     def screen(x, y, h, side, c):
+        if view == "back":
+            return c if side == "right" or h not in (5, 9) else shade(c, 0.75)
         if side == "left" and 3 <= h <= 13 and x <= 23:
             if ZOMBIE and (x, h) in ((19, 6), (20, 7), (21, 6), (20, 5)):
                 return BLOOD  # a bloody fingerprint
@@ -1188,6 +1296,22 @@ def van_icon():
         dot(img, 8, 7, (120, 110, 90))  # rust
     _wheel(img, 4, 9)
     _wheel(img, 12, 9)
+    outline_outside(img)
+    return img
+
+
+def zone_icon(boxes):
+    """A delivery pad with boxes on it (16x12), for the bigger delivery zones."""
+    img = new(16, 12)
+    for y in range(8, 12):
+        for x in range(16):
+            dot(img, x, y, (196, 160, 52) if ((x + 2 * y) // 3) % 2 == 0 else (44, 42, 40))
+    spots = [(1, 3), (6, 4), (11, 3)]
+    for i in range(boxes):
+        bx, by = spots[i]
+        rect(img, bx, by, bx + 4, by + 4, CARD_L)
+        rect(img, bx, by, bx + 4, by, CARD_TOP)
+        dot(img, bx + 2, by + 2, BLOOD if ZOMBIE else shade(CARD_L, 0.8))
     outline_outside(img)
     return img
 
@@ -1768,6 +1892,20 @@ def skeleton(seed, hat=None, bowtie=None, vest=None, bag=False, cap=None, apron=
     return _with_shadow(body)
 
 
+def manager():
+    """The general manager: a zombie in a suit and tie with a clipboard."""
+    img = zombie((150, 166, 136), (36, 30, 28), (52, 54, 66), (44, 46, 56), seed=63, reaching=False)
+    rect(img, 7, 13, 8, 13, (232, 230, 220))  # shirt collar
+    rect(img, 7, 14, 8, 21, (170, 36, 44))  # tie
+    rect(img, 10, 16, 14, 23, (126, 92, 56))  # clipboard
+    rect(img, 11, 17, 13, 22, (236, 234, 224))
+    for y in (18, 20):
+        rect(img, 11, y, 13, y, (120, 120, 130))
+    rect(img, 11, 15, 13, 15, (170, 170, 176))  # the clip
+    dot(img, 5, 15, (220, 210, 120))  # name badge
+    return img
+
+
 def runner():
     """A fast zombie in a torn tracksuit, leaning into the run."""
     img = zombie((150, 168, 128), (40, 34, 30), (176, 52, 48), (60, 60, 70), seed=60,
@@ -1882,21 +2020,34 @@ def main():
         tall = wall(56, color, brick=name == "brick")
         save(tall.crop((2, 34, 30, 58)), f"wall_{name}_swatch")  # for the paint menu
 
+    # Furniture: the front view, plus *_back.png (turned away from you). The
+    # game mirrors them for the other two directions.
     save(shelf(), "shelf")
+    save(shelf("back"), "shelf_back")
     save(fridge(), "fridge")
+    save(fridge("back"), "fridge_back")
     save(fridge_glass(), "fridge_glass")
     save(gravestone() if ZOMBIE else plant(), "plant")
+    if ZOMBIE:
+        save(gravestone("back"), "plant_back")
     save(register(), "register")
+    save(register("back"), "register_back")
     save(computer(), "computer")
+    save(computer("back"), "computer_back")
     save(stock_box(), "box")
     save(small_box(), "box_small")
     for i in range(3):
         save(spill(40 + i), f"spill_{i}")
     save(mop_bucket(True), "mop_bucket")
     save(mop_bucket(False), "mop_bucket_empty")
+    save(mop_bucket(True, "back"), "mop_bucket_back")
+    save(mop_bucket(False, "back"), "mop_bucket_empty_back")
     save(mop_held(), "mop_held")
     save(storage_rack(), "storage")
     save(self_checkout(), "selfcheckout")
+    save(self_checkout("back"), "selfcheckout_back")
+    for n in (1, 2, 3):
+        save(zone_icon(n), f"upgrade_zone_{n}")
     save(bike_icon(), "upgrade_bike")
     save(van_icon(), "upgrade_van")
     save(hearse_icon(), "upgrade_hearse")
@@ -1920,6 +2071,7 @@ def main():
                     reaching=False, vest=(124, 30, 40), long_hair=True), "staff_cashier")
         save(zombie((144, 160, 128), (90, 86, 80), (86, 108, 120), (78, 98, 110), seed=33,
                     reaching=False, cap=(64, 82, 96), bald=False), "staff_janitor")
+        save(manager(), "staff_manager")
         icons = [("guts", None), ("blood", blood_bottle), ("fingers", finger_chips),
                  ("eyeballs", eyeball_jar), ("lungs", lungs), ("hearts", heart),
                  ("kidneys", kidneys), ("toes", toe_jerky), ("liver", liver),
@@ -1969,6 +2121,8 @@ def main():
         save(skeleton(71, cap=(60, 62, 70), apron=(150, 140, 120)), "skeleton_stocker")
         save(skeleton(72, bag=True), "shopper_skeleton_0")
         save(skeleton(73, cap=(150, 60, 50)), "shopper_skeleton_1")
+        save(skeleton(74, vest=(112, 64, 140), bag=True), "shopper_skeleton_2")
+        save(skeleton(75, bowtie=(60, 100, 180), cap=(70, 120, 80)), "shopper_skeleton_3")
         save(crawler(), "shopper_crawler")
         save(runner(), "shopper_runner")
         save(brute(), "shopper_brute")
@@ -2001,8 +2155,12 @@ def main():
         sign_open = (120, 230, 120)
     save(scanner(), "scanner")
     save(title(), "title")
-    save(sign("OPEN", sign_open), "sign_open")
-    save(sign("CLOSED", (230, 86, 74)), "sign_closed")
+    # The sign stands at an angle: *_r1 is it turned to face the other way
+    # (drawn separately so the letters don't come out backwards).
+    save(sign("OPEN", sign_open, 1), "sign_open")
+    save(sign("OPEN", sign_open, -1), "sign_open_r1")
+    save(sign("CLOSED", (230, 86, 74), 1), "sign_closed")
+    save(sign("CLOSED", (230, 86, 74), -1), "sign_closed_r1")
 
     app_icon(hero).save(ROOT / "icon.png")
     print(f"Sprites for '{BRAND}' written to", OUT)

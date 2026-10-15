@@ -1,10 +1,11 @@
 extends PanelContainer
 ## The bar along the bottom of the screen in build mode: buy furniture,
-## move or sell it, repaint the floor and walls, and buy the lot next door.
+## move, turn or sell it, repaint the floor and walls, and buy the lot next
+## door.
 
 var build: BuildMode
 var status_label: Label
-var tool_buttons := {}  # furniture id / "move" / "sell" / "expand" -> Button
+var tool_buttons := {}  # furniture id / "move" / "rotate" / "sell" / "expand" -> Button
 var paint_button: Button
 var expand_button: Button
 var paint_box: VBoxContainer
@@ -56,7 +57,7 @@ func _ready() -> void:
 	for id: String in Game.FURNITURE:
 		var f: Dictionary = Game.FURNITURE[id]
 		var b := _tool_button("$%d" % int(f.cost), func(): _toggle_place(id))
-		b.custom_minimum_size = Vector2(80, 78)
+		b.custom_minimum_size = Vector2(76, 78)
 		b.icon = _cropped(f.texture)
 		b.expand_icon = true
 		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -67,6 +68,11 @@ func _ready() -> void:
 	row.add_child(VSeparator.new())
 	tool_buttons["move"] = _tool_button("Move", func(): _toggle_tool(BuildMode.Tool.MOVE))
 	row.add_child(tool_buttons["move"])
+	# While placing or moving something, Rotate turns it; otherwise it picks
+	# the Rotate tool (tap things to turn them).
+	tool_buttons["rotate"] = _tool_button("Rotate", func(): build.rotate_pressed(true))
+	tool_buttons["rotate"].tooltip_text = "Turn things a quarter turn (R)"
+	row.add_child(tool_buttons["rotate"])
 	tool_buttons["sell"] = _tool_button("Sell", func(): _toggle_tool(BuildMode.Tool.SELL))
 	row.add_child(tool_buttons["sell"])
 	paint_button = _tool_button("Paint", _toggle_paint)
@@ -78,7 +84,7 @@ func _ready() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
-	row.add_child(UI.button("Done", build.exit, Vector2(120, 70)))
+	row.add_child(UI.button("Done", build.exit, Vector2(104, 70)))
 
 	build.changed.connect(_refresh)
 	Game.decor_changed.connect(_refresh)
@@ -97,7 +103,7 @@ static func _cropped(tex: Texture2D) -> Texture2D:
 
 
 func _tool_button(text: String, on_press: Callable) -> Button:
-	var b := UI.button(text, on_press, Vector2(110, 70))
+	var b := UI.button(text, on_press, Vector2(94, 70))
 	b.toggle_mode = true
 	return b
 
@@ -129,6 +135,8 @@ func _refresh() -> void:
 		match key:
 			"move":
 				on = build.tool == BuildMode.Tool.MOVE
+			"rotate":
+				on = build.tool == BuildMode.Tool.ROTATE
 			"sell":
 				on = build.tool == BuildMode.Tool.SELL
 			"expand":

@@ -18,6 +18,7 @@ var staff_watch := {}  # Staff -> {pos, still, reported}
 var problems := 0
 var spawned := 0
 var shuffle_timer := 3.0
+var turns := 0  # furniture turned by the shuffle
 var serve_timer := 0.0
 var longest_line := 0
 var browsing := 0.0
@@ -44,7 +45,8 @@ func _ready() -> void:
 			if store.placement_error(c, "register") == "":
 				store.add_furniture("register", c)
 				store.layout_changed()
-		for role in ["stocker", "stocker", "cashier", "cashier", "cashier"]:
+		Game.money += 2000.0
+		for role in ["stocker", "stocker", "cashier", "cashier", "cashier", "janitor", "manager"]:
 			Game.hire(role)
 		print("registers: %d, staff: %d" % [store.registers.size(), Game.staff.size()])
 	_restock()
@@ -56,7 +58,7 @@ func _process(delta: float) -> void:
 		return
 	elapsed += delta
 	if elapsed > minutes * 60.0:
-		print("RESULT: %d problem(s), %d customers spawned, %d still in store, longest line %d, walkouts %d, customer-seconds spent browsing %.0f" % [problems, spawned, store.customers.size(), longest_line, Game.stats.walkouts, browsing])
+		print("RESULT: %d problem(s), %d customers spawned, %d still in store, longest line %d, walkouts %d, customer-seconds spent browsing %.0f, turned %d times" % [problems, spawned, store.customers.size(), longest_line, Game.stats.walkouts, browsing, turns])
 		get_tree().quit(1 if problems > 0 else 0)
 		return
 	# endless day
@@ -100,6 +102,12 @@ func _shuffle_one() -> void:
 	if furniture.is_empty():
 		return
 	var obj: Interactable = furniture.pick_random()
+	if randf() < 0.4:  # turn it instead (a register's line turns with it)
+		var step := (obj.rotation_step + randi_range(1, 3)) % 4
+		if store.rotate_error(obj, step) == "":
+			store.rotate_object(obj, step)
+			turns += 1
+		return
 	var cells: Array = store.floor_cells.keys()
 	cells.shuffle()
 	for c: Vector2i in cells.slice(0, 40):

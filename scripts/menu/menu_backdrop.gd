@@ -56,7 +56,10 @@ func _ready() -> void:
 				delivery.append(Vector2i(x, y))
 	var zone_offset := Vector2i.ZERO
 	var zone := Store._to_cell(saved_fixtures.get("delivery", {}).get("cell"))
-	if zone != Store.NO_CELL and not delivery.is_empty():
+	var zone_size := Store._to_cell(saved_fixtures.get("delivery", {}).get("size"))
+	if zone != Store.NO_CELL and zone_size.x > 0 and zone_size.y > 0:  # it may have been turned or made bigger
+		delivery = Store._rect_cells(zone, zone_size)
+	elif zone != Store.NO_CELL and not delivery.is_empty():
 		var top := delivery[0]
 		for c in delivery:
 			top = Vector2i(mini(top.x, c.x), mini(top.y, c.y))
@@ -103,19 +106,30 @@ func _ready() -> void:
 		saved_fixtures["register"] = saved_regs[0]
 	for i in range(1, saved_regs.size()):
 		var reg: Register = SelfCheckout.new() if str(saved_regs[i].get("id", "")) == "selfcheckout" else Register.new()
-		_place(world, reg, Store._to_cell(saved_regs[i].get("cell")))
+		var c := Store._to_cell(saved_regs[i].get("cell"))
+		reg.rotation_step = _register_step(c, saved_regs[i])
+		_place(world, reg, c)
 	for key: String in fixtures:
-		var c := Store._to_cell(saved_fixtures.get(key, {}).get("cell"))
+		var entry: Dictionary = saved_fixtures.get(key, {})
+		var c := Store._to_cell(entry.get("cell"))
 		var cell: Vector2i = c if c != Store.NO_CELL else fixtures[key]
+		var step := posmod(int(entry.get("rot", 0)), 4)
 		match key:
 			"register":
-				_place(world, Register.new(), cell)
+				var reg := Register.new()
+				reg.rotation_step = _register_step(cell, entry)
+				_place(world, reg, cell)
 			"computer":
-				_place(world, Computer.new(), cell)
+				var pc := Computer.new()
+				pc.rotation_step = step
+				_place(world, pc, cell)
 			"mop_bucket":
-				_place(world, MopBucket.new(), cell)
+				var mb := MopBucket.new()
+				mb.rotation_step = step
+				_place(world, mb, cell)
 			"sign":
-				_sprite(world, OpenSign.CLOSED_TEX, cell)
+				var view := Interactable.view_of(OpenSign.CLOSED_TEX, step)
+				_sprite(world, view[0], cell).flip_h = view[1]
 
 	for v in store_data.get("spills", []):
 		if v is Array and v.size() >= 2:
@@ -129,6 +143,7 @@ func _ready() -> void:
 		if not Game.FURNITURE.has(fid) or Game.FURNITURE[fid].kind in ["register", "selfcheckout"]:
 			continue
 		var obj := _furniture(fid)
+		obj.rotation_step = posmod(int(f.get("rot", 0)), 4)
 		var product := str(f.get("product", ""))
 		if obj is Shelf and Game.PRODUCTS.has(product):
 			obj.product_id = product
@@ -232,6 +247,17 @@ func _sprite(world: Node2D, tex: Texture2D, cell: Vector2i, person := false) -> 
 	s.position = Iso.cell_to_world(cell)
 	world.add_child(s)
 	return s
+
+
+## Which way a saved register faces: toward the front of its line (the
+## usual way if the save doesn't say).
+static func _register_step(cell: Vector2i, entry: Dictionary) -> int:
+	var line: Array = entry.get("line", [])
+	if not line.is_empty():
+		var i := Interactable.FACINGS.find(Store._to_cell(line[0]) - cell)
+		if i >= 0:
+			return i
+	return 1
 
 
 func _furniture(id: String) -> Interactable:

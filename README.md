@@ -34,6 +34,43 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.8.2
+
+- **Turn things around:** everything you can move in build mode can be turned a
+  quarter turn: shelves, meat coolers, racks, gravestones, registers, self-checkouts,
+  the computer, the sign, the mop bucket and the delivery zone. Use the **Rotate**
+  button and tap things, or press **R** while placing or moving something (or with
+  the mouse over it). Shelves and coolers now have a front: their stock shows on that
+  side, and from behind you see the back panel (the label on top still shows what's
+  in it, with a little bar for how full it is). Turning a register swings its
+  checkout line around to the side it faces.
+- **Bigger delivery zone:** three upgrades at the computer, each needing a store
+  level: **Bigger Delivery Zone** ($200, level 2) holds 9 boxes, **Loading Bay**
+  ($450, level 3) 12, **Body Dump** ($800, level 4) 16. The zone grows into the
+  space around it (clear some room first if something's in the way).
+- **Take over a register:** walk up to a register a cashier is running and press E.
+  The cashier moves to a free register or takes a break, and gets back to work once
+  you walk away.
+- **Skeletons in town:** a few skeleton locals wander around town all day, and
+  skeleton shoppers show up from day one.
+- **General manager** (Staff tab, $100 + $45/day): walks the floor checking the
+  shelves and the staff. Anything that's down to 2 on the shelves (with nothing on
+  the way) gets reordered at the computer, everyone else works 15% faster, and anyone
+  stuck on a job gets told to get back to work.
+- **Stockers put spare boxes away:** when the shelves are full, the rest of the box
+  goes on a storage rack or back on the delivery zone instead of on the floor.
+- **End of the day:** when the last shopper leaves, a bar at the bottom of the screen
+  says the day is over. Press **Space** (A on a controller, or tap it) to see the
+  summary, and **Space** again to start the next day.
+- Self-checkouts that jam reboot themselves after a while, and the general manager
+  fixes them.
+- Fixed: scrolling the mouse wheel over the store computer (or any menu) zoomed the
+  view behind it.
+- Fixed: shoppers still walking over from town at closing time came in after the
+  store closed. Now they turn around ("Closed?!") and go home.
+- Fixed: a shopper could get stuck standing in the middle of the store. Shoppers who
+  stop where they shouldn't now work out a new way to go.
+
 ## What's new in 0.8.1
 
 - **Shelf labels:** the first product you put on a shelf gives it a label (a little
@@ -127,9 +164,10 @@ Boxes you order still get delivered while you're closed.
    without paying (watch the bar over their head).
 5. **Use the computer** in the back to order stock, set prices, unlock products, hire
    staff and buy upgrades.
-6. The store closes at 8 PM. After the last zombie leaves, you get a summary of the
-   day, then **Go to Day N** takes you to the next morning (closed again until you flip
-   the sign).
+6. The store closes at 8 PM. After the last zombie leaves, a bar at the bottom of the
+   screen says the day is over: press **Space** (or tap it) for the day's summary, then
+   **Space** or **Go to Day N** for the next morning (closed again until you flip the
+   sign).
 
 Actions take time with a progress bar, like Project Zomboid. Moving cancels them.
 
@@ -217,7 +255,7 @@ then on.
 | Zombie | The regular shopper |
 | Crawler | Drags itself along slowly but waits patiently. Drips a lot |
 | Runner | Fast, impatient. Shows up from store level 2 |
-| Skeleton | Comes over from Bone Mart's side of town. Fussy about prices |
+| Skeleton | Comes over from Bone Mart's side of town. Fussy about prices. Some just wander around town |
 | Brute | Big and slow, buys a cart full (4-6 different things). Level 3 |
 | Rich zombie | Doesn't mind paying 50% over market. Level 3 |
 
@@ -231,18 +269,27 @@ you in the red).
   puts a box down if there's nowhere for it to go. It leaves cold products alone
   until you have a meat cooler.
 - **Cashier** ($30/day, one per register): walks to a register and rings up the
-  zombies in its line by themselves. While a cashier is at a register, you can't
-  use that one, so you're free to stock and order. Customers will wait a little
-  longer in a line that has a cashier. Your staff are zombies too.
+  zombies in its line by themselves, so you're free to stock and order. Customers
+  will wait a little longer in a line that has a cashier. Your staff are zombies too.
+  Want to run a register yourself? Walk up to it and press E to **take over**: the
+  cashier goes to a free register or takes a break, and comes back once you've
+  walked away.
 - **Janitor** ($20/day, up to 2): brings their own mop and cleans up the blood.
+- **General Manager** ($100 to hire, $45/day, one): walks around checking the shelves
+  and the staff. When a product is down to 2 on the shelves and there's none on the
+  way, they walk to the computer and order a box (if you can afford it; the message
+  says what they ordered). While you have a manager, everyone else works 15% faster,
+  and anyone stuck on a job gets a "Back to work!".
 
 **Staff level up** as they work (stocking items, ringing up items, mopping). There
 are 5 levels and every level makes them 15% faster at everything, walking included.
 The Staff tab shows what everyone is doing right now, their level and XP, and
 **Let go** fires someone.
 
-Stockers also use **storage racks**: boxes that have no shelf to go on get moved off
-the delivery zone onto a rack, and come back out once a shelf has room.
+When a stocker fills a shelf and there's some of the box left, they put the rest away:
+on a **storage rack** if one has room, otherwise back on the delivery zone. Boxes
+that have no shelf to go on get moved off the delivery zone onto a rack, and come
+back out once a shelf has room.
 
 ### More registers and self-checkouts
 Buy extra registers in build mode ($250, up to 4 in total). Each one gets its own
@@ -253,7 +300,8 @@ again; the first one can only be moved.
 **Self-checkouts** ($400, up to 4) work on their own: shoppers with 5 items or fewer
 scan their own stuff (slower than a cashier). Now and then one jams ("Unexpected
 limb in the bagging area!"): its light flashes red and you have to walk over and fix
-it before the shopper loses patience.
+it before the shopper loses patience. Left alone, it reboots itself after a while, and
+a general manager fixes jams for you.
 
 ### Storage racks
 A **storage rack** ($120) holds up to 6 boxes of anything. Use it while carrying a box
@@ -272,10 +320,21 @@ makes the store 4 tiles wider:
 
 The lots are the fenced dirt next to the store with FOR SALE signs.
 
-### Faster deliveries
+### Faster deliveries and a bigger delivery zone
 Deliveries take 8 seconds to start with. Upgrades in the computer:
 **Delivery Bike** ($150, level 2) 5 seconds, **Delivery Van** ($400, level 3)
 3 seconds, **Hearse Express** ($900, level 5) about a second.
+
+The delivery zone starts with room for 6 boxes. Make it bigger in the same tab:
+
+| Upgrade | Cost | Store level | Boxes |
+|---|---|---|---|
+| Bigger Delivery Zone | $200 | 2 | 9 (3 x 3) |
+| Loading Bay | $450 | 3 | 12 (4 x 3) |
+| Body Dump | $800 | 4 | 16 (4 x 4) |
+
+The zone grows into the floor around it, the way it's turned. If furniture is in the
+way, the upgrade says what: move it (or move the zone somewhere roomier) first.
 
 ### Build mode (customize your store)
 Press **B** (or the **Build** button). The game pauses while you build.
@@ -288,6 +347,14 @@ Press **B** (or the **Build** button). The game pauses while you build.
   preview shows where its checkout line will go. The line comes along with the
   register: it starts next to the register and turns around walls and shelves if it
   needs to.
+- **Rotate** turns things a quarter turn: tap (or click) anything you can move. While
+  you're placing or moving something, **R** (or the Rotate button) turns it before you
+  put it down, and with nothing in hand R turns whatever is under the mouse. Shelves
+  and coolers show their stock on the front, so turn them to face the aisle (a row
+  running left-to-right shows its fronts facing down-left; a row running the other
+  way, facing down-right). Turning a register turns its checkout line too (if the line
+  doesn't fit one way, it skips to the next). The delivery zone turns around its top
+  corner, and bigger zones grow the way it's turned.
 - **Sell** for half price. Anything left on a shelf gets boxed up. (The first
   register, the computer, the sign and the mop bucket can be moved but not sold.)
 - **Paint** the floor (5 styles, $40) and walls (5 colors, $30).
@@ -317,12 +384,15 @@ computer. A scanner icon appears next to your money once you own it.
 | Put a box on a rack / take one | E at a storage rack | Tap the rack |
 | Check a Bone Mart price | E at one of its shelves | Tap the shelf |
 | Fix a jammed self-checkout | E next to it | Tap it |
+| Take over a register from a cashier | E at the register | Tap the register |
 | Build mode | B | Build button |
+| Turn something (build mode) | R | Rotate button, then tap it |
 | Zoom | Mouse wheel or the +/- buttons | +/- buttons |
 | Pause menu | Esc or P | II button / back button |
 | Close / cancel | Esc | Back button |
 
-A gamepad works too: left stick to move, A (use), X (scan), Y (build), Start (pause).
+A gamepad works too: left stick to move, A (use), X (scan), Y (build), RB (turn
+things in build mode), Start (pause).
 Menus can be navigated with the d-pad, arrow keys, A/Enter and B/Esc.
 
 **Preview the phone controls on PC:** select the `HUD` node in `scenes/main.tscn` and
@@ -454,6 +524,10 @@ python3 tools/make_sprites.py
 Iso rules the game expects:
 - Floor tiles are 64x32 diamonds.
 - Objects are 64 px wide, with their floor footprint's center 16 px above the bottom.
+- Furniture is drawn with its front on the left face (`shelf.png`). An optional
+  `<name>_back.png` is the same thing turned away from you; the game mirrors both for
+  the other two directions. Something that mustn't be mirrored (the sign's lettering)
+  can have `<name>_r1.png` (and `_r2`, `_r3`) for each direction instead.
 - Characters are 16x36, with their feet at (8, 33).
 
 ## Tests
@@ -464,6 +538,9 @@ godot --headless --path . -s res://tests/flow_test.gd       # menus + saving, 50
 godot --headless --path . --fixed-fps 60 res://tests/staff_test.tscn  # registers, staff, spills
 godot --headless --path . --fixed-fps 60 res://tests/town_test.tscn   # 0.8: town, Bone Mart, lots, racks, self-checkout...
 godot --headless --path . --fixed-fps 60 res://tests/label_test.tscn  # shelf labels, taking items off, first-day tips
+godot --headless --path . --fixed-fps 60 res://tests/manager_test.tscn  # general manager, spare boxes, end of day
+godot --headless --path . --fixed-fps 60 res://tests/takeover_test.tscn  # taking over registers, stuck shoppers, jams, skeletons
+godot --headless --path . --fixed-fps 60 res://tests/rotate_test.tscn   # turning things, bigger delivery zones, closing time
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn  # build mode view
 DAYS=5 godot --headless --path . --fixed-fps 60 res://tests/bot_test.tscn   # a bot plays 5 days
 STAFF=1 SHUFFLE=1 godot --headless --path . --fixed-fps 60 res://tests/stuck_test.tscn  # busy-store stress test

@@ -81,13 +81,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_LEFT:
 				_on_tap(get_canvas_transform().affine_inverse() * event.position)
 			MOUSE_BUTTON_WHEEL_UP:
-				zoom_by(1.1)
+				if not _over_menu():
+					zoom_by(1.1)
 			MOUSE_BUTTON_WHEEL_DOWN:
-				zoom_by(1.0 / 1.1)
+				if not _over_menu():
+					zoom_by(1.0 / 1.1)
 	elif event.is_action_pressed("interact"):
 		try_interact()
 	elif event.is_action_pressed("scan"):
 		try_scan()
+
+
+## The mouse is over a menu or panel (the wheel scrolls that, not the view).
+func _over_menu() -> bool:
+	return get_viewport().gui_get_hovered_control() != null
 
 
 func _draw() -> void:

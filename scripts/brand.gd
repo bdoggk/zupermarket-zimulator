@@ -151,9 +151,12 @@ const SHOPPERS := {
 		"looks": [preload("res://assets/sprites/shopper_runner.png")],
 	},
 	"skeleton": {
-		"name": "Skeleton", "weight": 1.5, "level": 2, "speed": 1.15, "patience": 1.0,
-		"items": [1, 3], "qty": [1, 2], "tolerance": 0.9, "leaky": 0.0, "rival": 0.25,
-		"looks": [preload("res://assets/sprites/shopper_skeleton_0.png"), preload("res://assets/sprites/shopper_skeleton_1.png")],
+		"name": "Skeleton", "weight": 3.0, "level": 1, "speed": 1.15, "patience": 1.0,
+		"items": [1, 3], "qty": [1, 2], "tolerance": 0.9, "leaky": 0.0, "rival": 0.15,
+		"looks": [
+			preload("res://assets/sprites/shopper_skeleton_0.png"), preload("res://assets/sprites/shopper_skeleton_1.png"),
+			preload("res://assets/sprites/shopper_skeleton_2.png"), preload("res://assets/sprites/shopper_skeleton_3.png"),
+		],
 	},
 	"brute": {
 		"name": "Brute", "weight": 1.5, "level": 3, "speed": 0.8, "patience": 1.2,
@@ -245,6 +248,7 @@ const PRODUCTS := {
 ##   level     store level needed (optional)
 ##   requires  another upgrade you need first (optional)
 ##   delivery  seconds a delivery takes once you own it (optional)
+##   zone      how big the delivery zone gets, in tiles (optional)
 const UPGRADES := {
 	"scanner": {
 		"name": "Handheld Scanner",
@@ -269,6 +273,24 @@ const UPGRADES := {
 		"cost": 900.0, "level": 5, "requires": "delivery_van", "delivery": 1.0,
 		"desc": "A souped-up hearse. Boxes show up about a second after you order.",
 		"icon": preload("res://assets/sprites/upgrade_hearse.png"),
+	},
+	"zone_1": {
+		"name": "Bigger Delivery Zone",
+		"cost": 200.0, "level": 2, "zone": Vector2i(3, 3),
+		"desc": "Paint more stripes: room for 9 boxes instead of 6.",
+		"icon": preload("res://assets/sprites/upgrade_zone_1.png"),
+	},
+	"zone_2": {
+		"name": "Loading Bay",
+		"cost": 450.0, "level": 3, "requires": "zone_1", "zone": Vector2i(4, 3),
+		"desc": "Room for 12 boxes in the delivery zone.",
+		"icon": preload("res://assets/sprites/upgrade_zone_2.png"),
+	},
+	"zone_3": {
+		"name": "Body Dump",
+		"cost": 800.0, "level": 4, "requires": "zone_2", "zone": Vector2i(4, 4),
+		"desc": "A huge delivery zone: room for 16 boxes.",
+		"icon": preload("res://assets/sprites/upgrade_zone_3.png"),
 	},
 }
 
@@ -320,6 +342,11 @@ const STAFF := {
 		"name": "Janitor", "hire": 50.0, "wage": 20.0, "max": 2,
 		"desc": "Brings their own mop and cleans up the blood so you don't have to.",
 		"texture": preload("res://assets/sprites/staff_janitor.png"),
+	},
+	"manager": {
+		"name": "General Manager", "hire": 100.0, "wage": 45.0, "max": 1,
+		"desc": "Checks all the stock and orders more of anything down to 2 on the shelves. Keeps the other staff working (15% faster) and gets anyone who's stuck moving again.",
+		"texture": preload("res://assets/sprites/staff_manager.png"),
 	},
 }
 const STAFF_NAMES := [

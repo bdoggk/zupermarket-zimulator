@@ -125,7 +125,37 @@ func _ready() -> void:
 	b._hover(Iso.cell_to_world(Vector2i(12, 6)))
 	await _frames(3)
 	await _shot("build_register")
+	b.turn(store.sign)
+	for obj in store.registers:
+		if obj is SelfCheckout:
+			b.turn(obj)
+	Game.money += 100.0
+	b.select_place("shelf")
+	b.place_rotation = 1
+	b._hover(Iso.cell_to_world(Vector2i(12, 5)))
+	await _frames(3)
+	await _shot("build_rotate")
 	b.exit()
+	p.zoom_by(1.25)
+	if Game.STAFF.has("manager"):
+		Game.money += 500.0
+		Game.hire("manager")
+		hud.open_computer()
+		hud.computer.show_tab(2)
+		await _frames(4)
+		await _shot("computer_staff_manager")
+		hud.computer.close()
+	for c in store.customers.duplicate():
+		if is_instance_valid(c.register):
+			c.register.leave_line(c)
+		store.customer_left(c)
+		c.queue_free()
+	Game.end_day()
+	await _frames(4)
+	await _shot("day_over")
+	hud.show_day_summary()
+	await _frames(4)
+	await _shot("day_summary")
 	get_tree().quit()
 
 
