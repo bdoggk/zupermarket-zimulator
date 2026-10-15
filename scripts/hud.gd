@@ -27,6 +27,7 @@ var level_label: Label
 var clock_label: Label
 var scanner_icon: TextureRect
 var mess_label: Label
+var fps_label: Label  # Options > Show FPS
 var prep_panel: PanelContainer
 var tutorial: PanelContainer  # first-day tips
 var corner_box: VBoxContainer
@@ -36,6 +37,7 @@ var prompt_label: Label
 var scan_label: Label
 var use_button: Button
 var scan_button: Button
+var run_button: Button  # touch screens: sprint on/off
 var message_box: VBoxContainer
 var computer: PanelContainer
 var rival_panel: PanelContainer
@@ -100,9 +102,9 @@ func _ready() -> void:
 	Game.build_mode.changed.connect(_on_build_changed)
 
 	if is_touch:
-		show_message("Tap to walk. Tap boxes, shelves and the register to use them.")
+		show_message("Tap to walk (RUN to sprint). Tap boxes, shelves and the register to use them.")
 	else:
-		show_message("WASD to move, E to use things, B to build. You can also click to walk.")
+		show_message("WASD to move (hold Shift to sprint), E to use things, B to build. Esc > Options > Controls lists every key.")
 
 
 func _process(_delta: float) -> void:
@@ -114,6 +116,9 @@ func _process(_delta: float) -> void:
 	mess_label.text = "Blood: %d" % mess
 	clock_label.text = "Day %d   %s   %s" % [Game.day, Game.clock_text(), "OPEN" if Game.is_open else "CLOSED"]
 	scanner_icon.visible = Game.has_upgrade("scanner")
+	fps_label.visible = Settings.show_fps
+	if fps_label.visible:
+		fps_label.text = "%d FPS" % Engine.get_frames_per_second()
 
 	var building: bool = Game.build_mode.active
 	var paused := pause_menu.visible or options.visible
@@ -128,6 +133,7 @@ func _process(_delta: float) -> void:
 	prompt_panel.visible = not is_touch and not building and not Game.day_over and (_prompt[0] != "" or _prompt[2] != "")
 	use_button.visible = is_touch and not building and not Game.day_over and _prompt[0] != ""
 	scan_button.visible = is_touch and not building and not Game.day_over and _prompt[2] != ""
+	run_button.visible = is_touch and not building and not paused and not Game.day_over and not menu_open
 
 	# Keep things pinned to the screen edges whatever the window size.
 	var s := root.size
@@ -142,6 +148,7 @@ func _process(_delta: float) -> void:
 	_place(prompt_panel, Vector2((s.x - prompt_panel.size.x) / 2.0, s.y - prompt_panel.size.y - MARGIN))
 	_place(use_button, Vector2(s.x - use_button.size.x - MARGIN, s.y - use_button.size.y - MARGIN))
 	_place(scan_button, Vector2(s.x - use_button.size.x - scan_button.size.x - 2 * MARGIN, s.y - scan_button.size.y - MARGIN))
+	_place(run_button, Vector2(MARGIN, s.y - run_button.size.y - MARGIN))
 	_place(computer, (s - computer.size) / 2.0)
 	_place(rival_panel, (s - rival_panel.size) / 2.0)
 	_place(build_bar, Vector2((s.x - build_bar.size.x) / 2.0, s.y - build_bar.size.y - MARGIN))
@@ -256,6 +263,9 @@ func _build_status() -> void:
 	mess_label = UI.label("", UI.BAD)  # how many spills need mopping (zombie game)
 	mess_label.visible = false
 	row.add_child(mess_label)
+	fps_label = UI.label("", UI.DIM)
+	fps_label.visible = false
+	row.add_child(fps_label)
 
 	# Morning hint: the clock doesn't start until you flip the sign.
 	prep_panel = PanelContainer.new()
@@ -305,6 +315,16 @@ func _build_prompt() -> void:
 	scan_button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	scan_button.add_theme_color_override("font_color", UI.INFO)
 	root.add_child(scan_button)
+	# Sprinting on a touch screen: RUN stays on until you tap it again.
+	run_button = UI.button("RUN", func(): pass, Vector2(130, 84))
+	run_button.toggle_mode = true
+	run_button.toggled.connect(func(on: bool):
+		Game.player.run_toggle = on
+		run_button.text = "RUN: ON" if on else "RUN"
+		for state in ["font_color", "font_pressed_color", "font_hover_pressed_color"]:
+			run_button.add_theme_color_override(state, UI.WARN if on else Color.WHITE))
+	run_button.tooltip_text = "Sprint (Shift)"
+	root.add_child(run_button)
 
 
 func _build_summary_panel() -> void:

@@ -22,8 +22,9 @@ tap the download. Android will ask you to allow installs from that browser (**Se
 Install unknown apps**); allow it, go back and tap **Install**. New versions install
 over the old one and keep your saves.
 
-**Controls on a handheld:** left stick / d-pad to move, **A** to use, **X** to scan a
-shelf, **Y** for build mode, **Start** to pause. Menus work with the d-pad and A/B,
+**Controls on a handheld:** left stick / d-pad to move, **LT** to sprint, **A** to use,
+**X** to scan a shelf, **Y** for build mode, **RB** to turn things in build mode,
+**Start** to pause (Options > Controls lists everything). Menus work with the d-pad and A/B,
 and you can tap the touchscreen for anything too (the store computer and build mode
 are easiest by touch).
 
@@ -33,6 +34,24 @@ PC" because the game isn't code-signed: click **More info → Run anyway**.
 It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The two
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
+
+## What's new in 0.8.3
+
+- **Sprint:** hold **Shift** (LT or a click of the left stick on a controller, or the
+  **RUN** button on a touch screen) to move about 60% faster. It works when you click
+  or tap somewhere to walk, too.
+- **Smoother movement:** you now move every frame instead of 60 times a second, so
+  at high frame rates (and on 120/144 Hz screens) you no longer stutter or smear
+  against the background, and the camera keeps up better. The zoom steps now always
+  make each art pixel a whole number of screen pixels, so the pixel art stays sharp
+  while the view moves.
+- **Controls list:** Options > **Controls** shows every key and button.
+- **More FPS options:** a **Frame rate** setting (30 up to 240, or no limit), **Show
+  FPS**, and **Exclusive fullscreen** (usually the most FPS on Windows). Graphics no
+  longer caps the frame rate. VSync says what it's doing (off = more FPS).
+- **The window isn't stuck at one size anymore:** drag its edges or maximize it and
+  the game remembers; **Fill the screen** is a window size option; a size too big for
+  your screen opens maximized instead of hanging off the edge.
 
 ## What's new in 0.8.2
 
@@ -134,11 +153,16 @@ It has Resume, Save Game, Options, Save & Main Menu, and Save & Quit (PC).
 
 | Setting | What it does |
 |---|---|
-| Display | Windowed or Fullscreen (PC only) |
-| Resolution | Window size in windowed mode, from 1280x720 up to what fits your screen. Fullscreen uses your screen's resolution (PC only) |
-| Graphics | **Low**: simple lighting, 30 FPS cap (older phones, battery life). **Medium**: store lights with darker corners, 60 FPS cap. **High**: adds a flickering light tube and floating dust, no FPS cap |
-| VSync | Syncs to your monitor to stop screen tearing |
+| Display | **Windowed**, **Fullscreen** (fills the screen at its own resolution) or **Exclusive fullscreen** (the game takes the screen over: usually the highest frame rate on Windows). PC only |
+| Window size | In a window: 1280x720 up to what fits your screen, or **Fill the screen** (maximized). You can also drag the window's edges or maximize it, and the game remembers the size (PC only) |
+| Frame rate | A cap on the frames per second: 30, 60, 90, 120, 144, 165, 240 or **No limit** (the default on PC; phones default to 60 to save battery) |
+| VSync | On: the frame rate matches your screen's refresh rate and the picture never tears. Turn it off for the most FPS |
+| Show FPS | A frame counter next to the clock |
+| Graphics | **Low**: simple lighting (older phones, battery life). **Medium**: store lights with darker corners. **High**: adds a flickering light tube and floating dust |
 | Vibration | Phone vibration and controller rumble. It turns on when a phone or controller is available, and you feel it when you make a sale, stock a shelf, scan, mop, level up, or when a zombie storms out |
+
+**Controls** (the button at the bottom of Options) lists every key and button, for
+keyboard and mouse, controller and touch screens.
 
 Settings are saved to `user://settings.cfg`.
 
@@ -375,6 +399,7 @@ computer. A scanner icon appears next to your money once you own it.
 | | PC | Android |
 |---|---|---|
 | Move | WASD / arrow keys, or click a spot | Tap a spot |
+| Sprint | Hold Shift | RUN button (tap again to stop) |
 | Use | E or Space (or click the object) | Tap the object, or the big button |
 | Scan a shelf | Q | SCAN button |
 | Drop a box | E with nothing usable nearby | Big button ("Drop box") |
@@ -391,8 +416,10 @@ computer. A scanner icon appears next to your money once you own it.
 | Pause menu | Esc or P | II button / back button |
 | Close / cancel | Esc | Back button |
 
-A gamepad works too: left stick to move, A (use), X (scan), Y (build), RB (turn
-things in build mode), Start (pause).
+A gamepad works too: left stick to move, LT or L3 (sprint), A (use), X (scan), Y
+(build), RB (turn things in build mode), Start (pause).
+
+**Forgot a key?** Pause (Esc) > Options > **Controls** lists them all in the game.
 Menus can be navigated with the d-pad, arrow keys, A/Enter and B/Esc.
 
 **Preview the phone controls on PC:** select the `HUD` node in `scenes/main.tscn` and
@@ -541,6 +568,8 @@ godot --headless --path . --fixed-fps 60 res://tests/label_test.tscn  # shelf la
 godot --headless --path . --fixed-fps 60 res://tests/manager_test.tscn  # general manager, spare boxes, end of day
 godot --headless --path . --fixed-fps 60 res://tests/takeover_test.tscn  # taking over registers, stuck shoppers, jams, skeletons
 godot --headless --path . --fixed-fps 60 res://tests/rotate_test.tscn   # turning things, bigger delivery zones, closing time
+godot --headless --path . --fixed-fps 60 res://tests/controls_test.tscn # sprinting, zoom steps, Controls list, frame rate + window settings
+xvfb-run -s "-screen 0 1920x1080x24" godot --path . --rendering-driver opengl3 res://tests/controls_test.tscn  # + zoom in a real window
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn  # build mode view
 DAYS=5 godot --headless --path . --fixed-fps 60 res://tests/bot_test.tscn   # a bot plays 5 days
 STAFF=1 SHUFFLE=1 godot --headless --path . --fixed-fps 60 res://tests/stuck_test.tscn  # busy-store stress test

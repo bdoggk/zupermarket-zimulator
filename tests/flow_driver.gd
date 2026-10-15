@@ -321,9 +321,11 @@ func _run() -> void:
 	Settings.vibration = true
 	Settings.load_settings()
 	check(Settings.graphics == Settings.Graphics.LOW and not Settings.vsync and not Settings.vibration, "settings saved and loaded back")
-	check(Engine.max_fps == 30, "Low graphics caps the game at 30 FPS")
+	Settings.set_fps_limit(30)
+	check(Engine.max_fps == 30, "the Frame rate setting caps the game at 30 FPS")
+	Settings.set_fps_limit(0)
 	Settings.set_graphics(Settings.Graphics.HIGH)
-	check(Engine.max_fps == 0, "High graphics has no FPS cap")
+	check(Engine.max_fps == 0, "No limit has no FPS cap")
 	check(menu.options.gfx_value.text == "High", "options screen shows the change")
 	menu.options.close()
 	await _frames(2)

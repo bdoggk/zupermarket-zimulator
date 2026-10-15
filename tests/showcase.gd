@@ -156,6 +156,15 @@ func _ready() -> void:
 	hud.show_day_summary()
 	await _frames(4)
 	await _shot("day_summary")
+	hud._on_next_day()
+	await _frames(2)
+	hud.open_pause()
+	hud._open_options()
+	await _frames(4)
+	await _shot("options")
+	hud.options.show_controls()
+	await _frames(4)
+	await _shot("controls")
 	get_tree().quit()
 
 

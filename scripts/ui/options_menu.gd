@@ -1,82 +1,177 @@
 extends PanelContainer
-## The Options screen: display mode and resolution (PC), graphics level,
-## VSync and vibration. Changes apply right away and are saved. Used by the
-## main menu and the in-game pause menu.
+## The Options screen: display mode, window size (PC), frame rate, graphics
+## level, VSync, an FPS counter and vibration. Changes apply right away and
+## are saved. "Controls" shows every key and button (ControlsList). Used by
+## the main menu and the in-game pause menu.
 
 signal closed
 
+const ROW_SEPARATION := 8
+
+var settings_page: VBoxContainer
+var controls_page: VBoxContainer
+var settings_scroll: ScrollContainer
+var controls_scroll: ScrollContainer
 var mode_value: Label
+var mode_info: Label
 var res_value: Label
 var res_left: Button
 var res_right: Button
-var res_note: Label
+var fps_value: Label
 var gfx_value: Label
 var gfx_info: Label
 var vsync_check: CheckButton
+var vsync_info: Label
+var fps_check: CheckButton
 var vib_check: CheckButton
 var vib_note: Label
+var controls_button: Button
 var back_button: Button
+var controls_back: Button
 var _first: Control
 
 
 func _ready() -> void:
 	visible = false
-	custom_minimum_size.x = 640
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 14)
-	add_child(col)
+	custom_minimum_size.x = 680
+	var stack := VBoxContainer.new()
+	add_child(stack)
+	_build_settings(stack)
+	_build_controls(stack)
+	Settings.changed.connect(_refresh)
+
+
+func _build_settings(parent: Control) -> void:
+	settings_page = VBoxContainer.new()
+	settings_page.add_theme_constant_override("separation", 12)
+	parent.add_child(settings_page)
 	var title := UI.label("OPTIONS", UI.WARN)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(title)
-	col.add_child(HSeparator.new())
+	settings_page.add_child(title)
+	settings_page.add_child(HSeparator.new())
+
+	settings_scroll = ScrollContainer.new()
+	settings_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	settings_scroll.follow_focus = true
+	settings_page.add_child(settings_scroll)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", ROW_SEPARATION)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	settings_scroll.add_child(col)
 
 	if Settings.is_desktop():
 		var mode := _selector(col, "Display", _change_mode)
 		mode_value = mode[0]
-		var res := _selector(col, "Resolution", _change_resolution)
+		mode_info = _info(col)
+		var res := _selector(col, "Window size", _change_resolution)
 		res_value = res[0]
 		res_left = res[1]
 		res_right = res[2]
-		res_note = UI.label("Fullscreen uses your screen's resolution.", UI.DIM)
-		col.add_child(res_note)
 
-	var gfx := _selector(col, "Graphics", _change_graphics)
-	gfx_value = gfx[0]
-	gfx_info = UI.label("", UI.DIM)
-	gfx_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	col.add_child(gfx_info)
-
+	fps_value = _selector(col, "Frame rate", _change_fps)[0]
 	vsync_check = _check(col, "VSync", func(on: bool): Settings.set_vsync(on))
-	vib_check = _check(col, "Vibration", func(on: bool): Settings.set_vibration(on))
-	vib_note = UI.label("", UI.DIM)
-	col.add_child(vib_note)
+	vsync_info = _info(col)
+	fps_check = _check(col, "Show FPS", func(on: bool): Settings.set_show_fps(on))
 
-	col.add_child(HSeparator.new())
+	gfx_value = _selector(col, "Graphics", _change_graphics)[0]
+	gfx_info = _info(col)
+
+	vib_check = _check(col, "Vibration", func(on: bool): Settings.set_vibration(on))
+	vib_note = _info(col)
+
+	settings_page.add_child(HSeparator.new())
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 12)
+	settings_page.add_child(buttons)
+	controls_button = UI.menu_button("Controls", show_controls, Vector2(0, 56))
+	controls_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(controls_button)
 	back_button = UI.menu_button("Back", close, Vector2(0, 56))
-	col.add_child(back_button)
-	Settings.changed.connect(_refresh)
+	back_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buttons.add_child(back_button)
+
+
+func _build_controls(parent: Control) -> void:
+	controls_page = VBoxContainer.new()
+	controls_page.add_theme_constant_override("separation", 12)
+	controls_page.visible = false
+	parent.add_child(controls_page)
+	var title := UI.label("CONTROLS", UI.WARN)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	controls_page.add_child(title)
+	controls_page.add_child(HSeparator.new())
+	controls_scroll = ScrollContainer.new()
+	controls_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	controls_page.add_child(controls_scroll)
+	controls_scroll.add_child(ControlsList.build(Game.touch_ui or Settings.is_mobile()))
+	controls_page.add_child(HSeparator.new())
+	controls_back = UI.menu_button("Back", show_settings, Vector2(0, 56))
+	controls_page.add_child(controls_back)
 
 
 func open() -> void:
 	visible = true
-	_refresh()
-	if UI.wants_focus():
-		_first.grab_focus()
+	show_settings()
 
 
 func focus_first() -> void:
-	_first.grab_focus()
+	if controls_page.visible:
+		controls_back.grab_focus()
+	else:
+		_first.grab_focus()
+
+
+## The list of controls (Back returns to the settings).
+func show_controls() -> void:
+	settings_page.visible = false
+	controls_page.visible = true
+	controls_scroll.scroll_vertical = 0
+	_fit()
+	if UI.wants_focus():
+		controls_back.grab_focus()
+
+
+func show_settings() -> void:
+	var from_controls := controls_page.visible
+	controls_page.visible = false
+	settings_page.visible = true
+	_refresh()
+	if UI.wants_focus():
+		(controls_button if from_controls else _first).grab_focus()
+	if not from_controls:
+		settings_scroll.set_deferred("scroll_vertical", 0)  # start at the top
 
 
 func _input(event: InputEvent) -> void:
-	if visible and UI.is_pad_input(event) and get_viewport().gui_get_focus_owner() == null:
-		_first.grab_focus()
+	if not visible:
+		return
+	if controls_page.visible:
+		# The list itself can't be selected, so up/down scroll it.
+		for dir: String in ["ui_up", "ui_down"]:
+			if event.is_action_pressed(dir, true):
+				controls_scroll.scroll_vertical += 60 if dir == "ui_down" else -60
+				get_viewport().set_input_as_handled()
+				return
+	if UI.is_pad_input(event) and get_viewport().gui_get_focus_owner() == null:
+		focus_first()
 		get_viewport().set_input_as_handled()
 
 
+## Esc / Back: from the controls list back to the settings, otherwise close.
 func close() -> void:
+	if controls_page.visible:
+		show_settings()
+		return
 	visible = false
 	closed.emit()
+
+
+## Keeps the panel on the screen: the lists scroll when the window is small.
+func _fit() -> void:
+	var h := get_viewport_rect().size.y
+	var room := clampf(h - 230.0, 240.0, 560.0)
+	settings_scroll.custom_minimum_size = Vector2(640, minf(room, settings_scroll.get_child(0).get_combined_minimum_size().y))
+	controls_scroll.custom_minimum_size = Vector2(800, room)
 
 
 ## A row like:  Graphics   [<]   Medium   [>]
@@ -120,8 +215,16 @@ func _check(parent: Control, text: String, on_toggle: Callable) -> CheckButton:
 	return c
 
 
-func _change_mode(_step: int) -> void:
-	Settings.set_fullscreen(not Settings.fullscreen)  # only two choices
+func _info(parent: Control) -> Label:
+	var l := UI.label("", UI.DIM)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size.x = 600
+	parent.add_child(l)
+	return l
+
+
+func _change_mode(step: int) -> void:
+	Settings.set_display(wrapi(Settings.display + step, 0, Settings.DISPLAY_NAMES.size()) as Settings.Display)
 
 
 func _change_resolution(step: int) -> void:
@@ -130,21 +233,33 @@ func _change_resolution(step: int) -> void:
 	Settings.set_resolution(list[wrapi(i + step, 0, list.size())])
 
 
+func _change_fps(step: int) -> void:
+	var list: Array = Settings.FPS_LIMITS
+	var i := list.find(Settings.fps_limit)
+	if i < 0:
+		i = list.size() - 1
+	Settings.set_fps_limit(list[wrapi(i + step, 0, list.size())])
+
+
 func _change_graphics(step: int) -> void:
 	Settings.set_graphics(wrapi(Settings.graphics + step, 0, 3) as Settings.Graphics)
 
 
 func _refresh() -> void:
 	if Settings.is_desktop():
-		mode_value.text = "Fullscreen" if Settings.fullscreen else "Windowed"
-		res_value.text = "%d x %d" % [Settings.resolution.x, Settings.resolution.y]
-		res_left.disabled = Settings.fullscreen
-		res_right.disabled = Settings.fullscreen
-		res_value.modulate.a = 0.5 if Settings.fullscreen else 1.0
-		res_note.visible = Settings.fullscreen
+		var windowed := not Settings.is_fullscreen()
+		mode_value.text = Settings.DISPLAY_NAMES[Settings.display]
+		mode_info.text = Settings.DISPLAY_INFO[Settings.display]
+		res_value.text = Settings.resolution_name(Settings.resolution) if windowed else "Your screen's"
+		res_left.disabled = not windowed
+		res_right.disabled = not windowed
+		res_value.modulate.a = 1.0 if windowed else 0.5
+	fps_value.text = Settings.fps_name(Settings.fps_limit)
 	gfx_value.text = Settings.GRAPHICS_NAMES[Settings.graphics]
 	gfx_info.text = Settings.GRAPHICS_INFO[Settings.graphics]
 	vsync_check.set_pressed_no_signal(Settings.vsync)
+	vsync_info.text = Settings.vsync_info()
+	fps_check.set_pressed_no_signal(Settings.show_fps)
 	vib_check.set_pressed_no_signal(Settings.vibration)
 	var can := Settings.can_vibrate()
 	vib_check.disabled = not can
@@ -154,3 +269,5 @@ func _refresh() -> void:
 		vib_note.text = "Controller rumble."
 	else:
 		vib_note.text = "Connect a controller to use vibration."
+	if visible:
+		_fit()

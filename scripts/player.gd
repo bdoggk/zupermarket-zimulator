@@ -1,16 +1,25 @@
 class_name Player
 extends CharacterBody2D
 ## The store worker.
-##   PC:      WASD / arrows to move, E or Space to use what's in front of you,
-##            Q to scan a shelf (once you own the scanner), or click a spot to
-##            walk there. Mouse wheel zooms.
+##   PC:      WASD / arrows to move (hold Shift to sprint), E or Space to use
+##            what's in front of you, Q to scan a shelf (once you own the
+##            scanner), or click a spot to walk there. Mouse wheel zooms.
 ##   Android: tap a spot to walk there, tap an object to walk over and use it,
-##            or press the big buttons in the corner.
+##            or press the big buttons in the corner. RUN toggles sprinting.
+##
+## Moving happens every frame (in _process, like everyone else in the
+## store), so the player stays in step with the camera at any frame rate.
+## The zoom always makes each art pixel a whole number of screen pixels, so
+## the pixel art stays sharp while the view scrolls.
 
 enum Action { USE, DROP, SCAN }
 
 const WALK_SPEED := 3.2  # cells per second
+const SPRINT_SPEED := 5.2  # holding Shift (or the RUN button)
 const DROP_SECONDS := 0.25
+const DEFAULT_ZOOM := 2.5  # before rounding to whole screen pixels
+const MIN_ZOOM := 1.0
+const MAX_ZOOM := 5.0
 
 const MOP_TEXTURE := preload("res://assets/sprites/mop_held.png")
 
@@ -24,6 +33,9 @@ var focused: Interactable = null  # what E would use right now
 var scan_focus: Interactable = null  # what Q would scan right now
 var path: Array[Vector2i] = []
 var tap_target: Interactable = null  # object to use when we arrive
+var run_toggle := false  # the RUN button on touch screens
+var sprinting := false  # moving at SPRINT_SPEED right now
+var _zoom_goal := DEFAULT_ZOOM  # the zoom you picked (before rounding to whole pixels)
 
 # Timed action (the Project Zomboid style progress bar)
 var action_target: Interactable = null
@@ -50,22 +62,27 @@ func _ready() -> void:
 	add_child(mop_sprite)
 	# Lets build mode pan the camera while the game is paused.
 	camera.process_mode = Node.PROCESS_MODE_ALWAYS
+	set_zoom(DEFAULT_ZOOM)
+	get_viewport().size_changed.connect(_apply_zoom)
 
 
-func _physics_process(delta: float) -> void:
+func _process(delta: float) -> void:
 	var input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if is_busy() and input != Vector2.ZERO:
 		cancel_action()
 
+	sprinting = (run_toggle or Input.is_action_pressed("sprint")) and not is_busy() \
+		and (input != Vector2.ZERO or not path.is_empty())
+	var speed := SPRINT_SPEED if sprinting else WALK_SPEED
 	if is_busy():
 		velocity = Vector2.ZERO
 		_tick_action(delta)
 	elif input != Vector2.ZERO:
 		path.clear()
 		tap_target = null
-		velocity = Iso.velocity_toward(input, WALK_SPEED) * minf(input.length(), 1.0)
+		velocity = Iso.velocity_toward(input, speed) * minf(input.length(), 1.0)
 	elif not path.is_empty():
-		_follow_path(delta)
+		_follow_path(delta, speed)
 	else:
 		velocity = Vector2.ZERO
 
@@ -247,9 +264,44 @@ func current_cell() -> Vector2i:
 	return Iso.world_to_cell(position)
 
 
+## Zooms in (factor > 1) or out one step: to the next whole number of
+## screen pixels per art pixel, so the art stays crisp.
 func zoom_by(factor: float) -> void:
-	var z := clampf(camera.zoom.x * factor, 1.0, 5.0)
-	camera.zoom = Vector2(z, z)
+	var s := _screen_scale()
+	if s < 0.5:  # a tiny (or no) window: no rounding
+		set_zoom(camera.zoom.x * factor)
+		return
+	var px := camera.zoom.x * s  # screen pixels per art pixel now
+	var target := floorf(px + 0.01) + 1.0 if factor > 1.0 else ceilf(px - 0.01) - 1.0
+	set_zoom(target / s)
+
+
+## Sets the zoom, rounded so each art pixel is a whole number of screen
+## pixels (as close to `z` as that allows).
+func set_zoom(z: float) -> void:
+	_zoom_goal = clampf(z, MIN_ZOOM, MAX_ZOOM)
+	_apply_zoom()
+
+
+## Rounds the zoom you picked for the window's size (again when the window
+## is resized).
+func _apply_zoom() -> void:
+	var s := _screen_scale()
+	var z := _zoom_goal
+	if s >= 0.5:
+		var lo := ceilf(MIN_ZOOM * s - 0.01)
+		var hi := maxf(lo, floorf(MAX_ZOOM * s + 0.01))
+		z = clampf(roundf(z * s), lo, hi) / s
+	camera.zoom = Vector2.ONE * z
+
+
+## How much the window is scaled up from the 1280x720 the game is laid out
+## for (1.5 in a 1920x1080 window).
+func _screen_scale() -> float:
+	if not is_inside_tree():
+		return 1.0
+	var sc := get_viewport().get_final_transform().x.x
+	return sc if sc > 0.01 else 1.0
 
 
 func walk_to(cell: Vector2i) -> bool:
@@ -293,7 +345,7 @@ func _on_tap(world_pos: Vector2) -> void:
 		walk_to(cell)
 
 
-func _follow_path(delta: float) -> void:
+func _follow_path(delta: float, speed := WALK_SPEED) -> void:
 	var to_target := Iso.cell_to_world(path[0]) - position
 	if to_target.length() < 2.0:
 		path.remove_at(0)
@@ -302,7 +354,7 @@ func _follow_path(delta: float) -> void:
 			_arrived()
 			return
 		to_target = Iso.cell_to_world(path[0]) - position
-	var v := Iso.velocity_toward(to_target, WALK_SPEED)
+	var v := Iso.velocity_toward(to_target, speed)
 	if v.length() * delta > to_target.length():
 		v = to_target / delta  # don't overshoot the cell center
 	velocity = v
@@ -327,7 +379,7 @@ func _arrived() -> void:
 func _animate(delta: float) -> void:
 	var moving := velocity.length() > 5.0
 	if moving:
-		_walk_anim += delta * 14.0
+		_walk_anim += delta * (20.0 if sprinting else 14.0)
 		sprite.position.y = -roundf(absf(sin(_walk_anim)) * 2.0)
 		if absf(velocity.x) > 1.0:
 			sprite.flip_h = velocity.x < 0.0
