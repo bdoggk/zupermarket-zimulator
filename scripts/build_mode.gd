@@ -1,8 +1,10 @@
 class_name BuildMode
 extends Node2D
-## Build mode: buy, move and sell furniture (shelves, fridges, plants and
-## extra registers), and move the first register (its checkout line comes
-## along), the computer, the OPEN sign and the mop bucket.
+## Build mode: buy, move and sell furniture (shelves, fridges, plants,
+## storage racks and extra registers), and move the first register (its
+## checkout line comes along), the computer, the OPEN sign, the mop bucket
+## and the delivery zone. With a town outside, you can also buy the lot next
+## door to make the store bigger (the Expand tool).
 ## Repainting is done from the build bar in the HUD. The game is paused
 ## while you build.
 ##
@@ -13,7 +15,7 @@ extends Node2D
 
 signal changed  # tool, selection or status text changed (the HUD listens)
 
-enum Tool { NONE, PLACE, MOVE, SELL }
+enum Tool { NONE, PLACE, MOVE, SELL, EXPAND }
 
 const PAN_SPEED := 600.0
 const DRAG_THRESHOLD := 12.0
@@ -31,6 +33,8 @@ var selected: Interactable = null  # highlighted, waiting for a second tap
 var cursor := Store.NO_CELL
 var cursor_error := ""
 var preview_line: Array[Vector2i] = []  # where a register's checkout line would go
+var zone_grab := Vector2i.ZERO  # which cell of the delivery zone you picked it up by
+var _expand_armed := false  # touch: the lot was tapped once, tap again to buy
 var status := ""
 
 var _grid: Node2D  # draws the floor markings underneath the furniture
@@ -54,6 +58,7 @@ func enter() -> void:
 	if active or Game.day_over or get_tree().paused:  # not on top of the pause menu
 		return
 	active = true
+	_end_drag()
 	get_tree().paused = true
 	select_tool(Tool.NONE)
 
@@ -62,6 +67,7 @@ func exit() -> void:
 	if not active:
 		return
 	_clear_selection()
+	_end_drag()
 	active = false
 	tool = Tool.NONE
 	get_tree().paused = false
@@ -75,6 +81,8 @@ func select_tool(t: Tool) -> void:
 	_clear_selection()
 	tool = t
 	place_id = ""
+	if t == Tool.EXPAND:
+		_look_at_lot()
 	_refresh()
 
 
@@ -104,8 +112,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					_dragging = false
 					_press_pos = event.position
 				elif _pressed:
-					_pressed = false
-					if not _dragging:
+					var was_drag := _dragging
+					_end_drag()
+					if not was_drag:
 						var touch: bool = event.device == InputEvent.DEVICE_ID_EMULATION
 						tap(_to_world(event.position), touch)
 			MOUSE_BUTTON_RIGHT:
@@ -118,6 +127,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				if event.pressed:
 					Game.player.zoom_by(1.0 / 1.1)
 	elif event is InputEventMouseMotion:
+		if not (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
+			_end_drag()  # the button was let go somewhere we didn't hear about
 		if _pressed and (event.position - _press_pos).length() > DRAG_THRESHOLD:
 			_dragging = true
 		if _dragging:
@@ -132,9 +143,25 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if not active:
 		return
+	if (_pressed or _dragging) and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_end_drag()
 	var v := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if v != Vector2.ZERO:
 		_pan(v * PAN_SPEED * delta)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_MOUSE_EXIT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_end_drag()
+
+
+## Forgets a click or drag in progress. Only a held mouse button (or finger)
+## drags the view; once it's let go (even over a menu or outside the
+## window, where build mode never sees it) the view stops following the
+## mouse.
+func _end_drag() -> void:
+	_pressed = false
+	_dragging = false
 
 
 ## Esc / right-click: cancel what you're doing, or leave build mode.
@@ -166,6 +193,9 @@ func _hover(world_pos: Vector2) -> void:
 				_set_selected(movable_at(world_pos))
 		Tool.SELL:
 			_set_selected(furniture_at(world_pos))
+		Tool.EXPAND:
+			var c := Iso.world_to_cell(world_pos)
+			_set_cursor(c if c in next_lot() else Store.NO_CELL)
 
 
 ## A click or tap on the store. With `touch`, the first tap only previews
@@ -185,6 +215,8 @@ func tap(world_pos: Vector2, touch := false) -> void:
 				if obj == null:
 					Game.message.emit("Tap something to move it.")
 					return
+				if obj is DeliveryZone:
+					zone_grab = cell - store.delivery_anchor()
 				_pick_up(obj)
 			else:
 				if touch and cell != cursor:
@@ -204,6 +236,15 @@ func tap(world_pos: Vector2, touch := false) -> void:
 				_set_selected(obj)
 				return
 			_sell(obj)
+		Tool.EXPAND:
+			if not cell in next_lot():
+				Game.message.emit("Tap the lot next door (outlined) to buy it." if not next_lot().is_empty() else "There's no more land to buy.")
+				return
+			if touch and not _expand_armed:
+				_expand_armed = true
+				_set_cursor(cell)
+				return
+			_try_expand()
 	_refresh()
 
 
@@ -213,9 +254,13 @@ func furniture_at(world_pos: Vector2) -> Interactable:
 	return obj
 
 
-## Anything the Move tool can pick up (furniture, register, computer, sign).
+## Anything the Move tool can pick up (furniture, register, computer, sign,
+## the delivery zone).
 func movable_at(world_pos: Vector2) -> Interactable:
-	return _object_at(world_pos, func(o: Interactable): return o.is_movable())
+	var obj := _object_at(world_pos, func(o: Interactable): return o.is_movable())
+	if obj == null and Iso.world_to_cell(world_pos) in store.delivery_cells:
+		obj = store.delivery_zone
+	return obj
 
 
 func _object_at(world_pos: Vector2, ok: Callable) -> Interactable:
@@ -228,6 +273,41 @@ func _object_at(world_pos: Vector2, ok: Callable) -> Interactable:
 
 
 # ---------------------------------------------------------------- actions
+
+## The cells of the next lot you can buy ([] if none are left).
+func next_lot() -> Array:
+	if store.town == null or Game.expansions + 1 >= store.town.lots.size():
+		return []
+	return store.town.lots[Game.expansions + 1]
+
+
+func _try_expand() -> void:
+	var problem := Game.expansion_problem()
+	if problem != "":
+		Game.message.emit(problem)
+		Settings.vibrate(0.6, 0.1)
+		return
+	var cost: float = Game.next_expansion().cost
+	var center := _lot_center()
+	if Game.buy_expansion():
+		Game.show_popup(center + Vector2(0, -40), "-$%d" % int(cost), BAD_COLOR)
+	select_tool(Tool.NONE)
+
+
+func _lot_center() -> Vector2:
+	var lot := next_lot()
+	var sum := Vector2.ZERO
+	for c: Vector2i in lot:
+		sum += Iso.cell_to_world(c)
+	return sum / maxf(1.0, lot.size())
+
+
+## Moves the view over to the lot for sale.
+func _look_at_lot() -> void:
+	if next_lot().is_empty():
+		return
+	var cam: Camera2D = Game.player.camera
+	cam.offset = _lot_center() - cam.global_position
 
 func _try_place(cell: Vector2i) -> void:
 	if cursor_error != "":
@@ -248,10 +328,21 @@ func _pick_up(obj: Interactable) -> void:
 	_set_selected(null)
 	moving = obj
 	moving.modulate = Color(1, 1, 1, 0.35)
-	_set_cursor(obj.cell)
+	_set_cursor(obj.cell + zone_grab if obj is DeliveryZone else obj.cell)
 
 
 func _try_move(cell: Vector2i) -> void:
+	if moving is DeliveryZone:
+		var anchor := cell - zone_grab
+		if anchor == store.delivery_anchor():
+			_put_down()
+		elif cursor_error != "":
+			Game.message.emit(cursor_error)
+		else:
+			store.move_delivery_zone(anchor)
+			Settings.vibrate(0.3, 0.05)
+			_put_down()
+		return
 	if cell == moving.cell:
 		_put_down()  # dropped it back where it was
 		return
@@ -291,6 +382,7 @@ func _clear_selection() -> void:
 	cursor = Store.NO_CELL
 	cursor_error = ""
 	preview_line.clear()
+	_expand_armed = false
 
 
 func _set_selected(obj: Interactable) -> void:
@@ -315,6 +407,10 @@ func _set_cursor(cell: Vector2i) -> void:
 				cursor_error = "Not enough money"
 			if _placing_register():
 				preview_line = store.preview_line(cell)
+		elif moving is DeliveryZone:
+			var anchor := cell - zone_grab
+			if anchor != store.delivery_anchor():
+				cursor_error = store.delivery_zone_error(anchor)
 		elif moving:
 			if cell != moving.cell:
 				cursor_error = store.placement_error(cell, moving.furniture_id, moving)
@@ -324,7 +420,7 @@ func _set_cursor(cell: Vector2i) -> void:
 
 
 func _placing_register() -> bool:
-	return tool == Tool.PLACE and Game.FURNITURE[place_id].kind == "register"
+	return tool == Tool.PLACE and Game.FURNITURE[place_id].kind in ["register", "selfcheckout"]
 
 
 func _refresh() -> void:
@@ -344,11 +440,13 @@ func _refresh() -> void:
 				status = "%s ($%d): %s to buy." % [f.name, int(f.cost), click]
 		Tool.MOVE:
 			if moving == null:
-				status = "Pick up anything to move it: furniture, registers, the computer, the sign..."
+				status = "Pick up anything to move it: furniture, registers, the computer, the sign, the delivery zone..."
 			elif cursor_error != "":
 				status = "Can't move the %s here: %s" % [moving.display_name(), cursor_error]
 			elif moving is Register:
 				status = "Pick a spot and %s to put the register down. The line (yellow) comes with it." % click
+			elif moving is DeliveryZone:
+				status = "Pick a spot and %s to put the delivery zone down. Boxes on it come along." % click
 			else:
 				status = "Pick a new spot and %s to put the %s down." % [click, moving.display_name()]
 		Tool.SELL:
@@ -357,6 +455,17 @@ func _refresh() -> void:
 				status = "Sell this %s for $%d? %s to sell." % [Game.FURNITURE[selected.furniture_id].name.to_lower(), int(refund), click.capitalize()]
 			else:
 				status = "Pick something to sell (you get half back). The first register can't be sold."
+		Tool.EXPAND:
+			var e := Game.next_expansion()
+			var problem := Game.expansion_problem()
+			if e.is_empty():
+				status = "You've bought all the land there is."
+			elif problem != "":
+				status = "Lot next door ($%d): %s." % [int(e.cost), problem]
+			elif _expand_armed:
+				status = "Buy the lot next door for $%d? Tap it again to buy." % int(e.cost)
+			else:
+				status = "Lot next door: $%d. It makes the store %d tiles wider. %s the lot to buy it." % [int(e.cost), Store.LOT_WIDTH, "Tap" if Game.touch_ui else "Click"]
 	queue_redraw()
 	_grid.queue_redraw()
 	changed.emit()
@@ -400,7 +509,18 @@ func _draw_grid() -> void:
 		for c in preview_line:
 			_diamond(c, Color(LINE_COLOR if ok_line else BAD_COLOR, 0.25), true)
 			_diamond(c, LINE_COLOR if ok_line else BAD_COLOR, false)
-	if (tool == Tool.PLACE or is_instance_valid(moving)) and cursor != Store.NO_CELL:
+	if tool == Tool.EXPAND:
+		var ok := Game.expansion_problem() == ""
+		for c: Vector2i in next_lot():
+			_diamond(c, Color(OK_COLOR if ok else BAD_COLOR, 0.22 if c != cursor else 0.4), true)
+			_diamond(c, Color(OK_COLOR if ok else BAD_COLOR, 0.6), false)
+	if moving is DeliveryZone and cursor != Store.NO_CELL:
+		var color := OK_COLOR if cursor_error == "" else BAD_COLOR
+		for c in store.delivery_cells_at(cursor - zone_grab):
+			var at := Iso.cell_to_world(c) - Vector2(32, 16)
+			_grid.draw_texture(Store.TILE_DELIVERY, at, Color(1, 1, 1, 0.6))
+			_diamond(c, color, false)
+	elif (tool == Tool.PLACE or is_instance_valid(moving)) and cursor != Store.NO_CELL:
 		var color := OK_COLOR if cursor_error == "" else BAD_COLOR
 		_diamond(cursor, Color(color, 0.3), true)
 		_diamond(cursor, color, false)

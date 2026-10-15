@@ -27,6 +27,18 @@ func _ready() -> void:
 	_build.call_deferred()  # after the store has built its floor
 
 
+## The store got bigger: put up lights over the new floor.
+func rebuild() -> void:
+	for l in lights:
+		l.queue_free()
+	lights.clear()
+	flicker_light = null
+	if dust:
+		dust.queue_free()
+		dust = null
+	_build()
+
+
 func _build() -> void:
 	var tex := _light_texture()
 	for cell: Vector2i in store.floor_cells:
@@ -70,8 +82,21 @@ func _build() -> void:
 	_apply_settings()
 
 
-## A soft round glow.
+static var _glow: Texture2D
+
+
+## A soft round glow (shared with the town's lamps).
+static func glow_texture() -> Texture2D:
+	if _glow == null:
+		_glow = _make_glow()
+	return _glow
+
+
 func _light_texture() -> Texture2D:
+	return glow_texture()
+
+
+static func _make_glow() -> Texture2D:
 	var g := Gradient.new()
 	g.set_color(0, Color(1, 1, 1, 1))
 	g.set_color(1, Color(1, 1, 1, 0))

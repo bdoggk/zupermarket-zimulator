@@ -6,6 +6,7 @@ extends CanvasLayer
 
 const ComputerMenu := preload("res://scripts/ui/computer_menu.gd")
 const BuildBar := preload("res://scripts/ui/build_bar.gd")
+const RivalPanel := preload("res://scripts/ui/rival_panel.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
 const MARGIN := 14.0
@@ -34,6 +35,7 @@ var use_button: Button
 var scan_button: Button
 var message_box: VBoxContainer
 var computer: PanelContainer
+var rival_panel: PanelContainer
 var build_bar: PanelContainer
 var pause_menu: PanelContainer
 var options: PanelContainer
@@ -63,6 +65,8 @@ func _ready() -> void:
 	root.add_child(message_box)
 	computer = ComputerMenu.new()
 	root.add_child(computer)
+	rival_panel = RivalPanel.new()
+	root.add_child(rival_panel)
 	build_bar = BuildBar.new()
 	root.add_child(build_bar)
 	_build_summary_panel()
@@ -115,6 +119,7 @@ func _process(_delta: float) -> void:
 	# Keep things pinned to the screen edges whatever the window size.
 	var s := root.size
 	computer.custom_minimum_size = Vector2(minf(1100.0, s.x - 2 * MARGIN), minf(660.0, s.y - 2 * MARGIN))
+	rival_panel.custom_minimum_size = Vector2(minf(860.0, s.x - 2 * MARGIN), minf(600.0, s.y - 2 * MARGIN))
 	build_bar.custom_minimum_size.x = minf(1180.0, s.x - 2 * MARGIN)
 	_place(status_panel, Vector2(MARGIN, MARGIN))
 	_place(prep_panel, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
@@ -124,6 +129,7 @@ func _process(_delta: float) -> void:
 	_place(use_button, Vector2(s.x - use_button.size.x - MARGIN, s.y - use_button.size.y - MARGIN))
 	_place(scan_button, Vector2(s.x - use_button.size.x - scan_button.size.x - 2 * MARGIN, s.y - scan_button.size.y - MARGIN))
 	_place(computer, (s - computer.size) / 2.0)
+	_place(rival_panel, (s - rival_panel.size) / 2.0)
 	_place(build_bar, Vector2((s.x - build_bar.size.x) / 2.0, s.y - build_bar.size.y - MARGIN))
 	_place(summary_panel, (s - summary_panel.size) / 2.0)
 	_place(pause_menu, (s - pause_menu.size) / 2.0)
@@ -159,12 +165,15 @@ func _back() -> void:
 		pause_menu.close()
 	elif computer.visible:
 		computer.close()
+	elif rival_panel.visible:
+		rival_panel.close()
 	else:
 		open_pause()
 
 
 func open_pause() -> void:
 	computer.close()
+	rival_panel.close()
 	pause_menu.open()
 
 
@@ -196,6 +205,7 @@ func show_message(text: String) -> void:
 
 
 func open_computer() -> void:
+	rival_panel.close()
 	computer.open()
 
 
@@ -305,6 +315,7 @@ func _on_prompt_changed(text: String, can_act: bool, scan_text: String) -> void:
 func _on_build_changed() -> void:
 	if Game.build_mode.active:
 		computer.close()
+		rival_panel.close()
 
 
 func _show_popup(world_pos: Vector2, text: String, color: Color) -> void:
@@ -338,10 +349,12 @@ func _show_summary(s: Dictionary) -> void:
 		"Items sold: %d" % s.items_sold,
 		"Missed sales: %d" % s.missed,
 		"Walked out: %d" % s.walkouts,
+		"Went to %s instead: %d" % [Brand.RIVAL.name, s.get("lost", 0)],
 		"Blood mopped up: %d" % s.cleaned,
 		"",
 		"Store level %d" % Game.level,
-	].filter(func(line: String): return Brand.SPILLS or not line.begins_with("Blood")))
+	].filter(func(line: String): return (Brand.SPILLS or not line.begins_with("Blood")) \
+		and (not line.begins_with("Went to") or s.get("lost", 0) > 0)))
 	next_day_button.text = "Go to Day %d" % (s.day + 1)
 	summary_panel.visible = true
 

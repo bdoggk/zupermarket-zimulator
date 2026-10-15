@@ -2,6 +2,7 @@ extends Node
 # Sets up a later-game store (two registers, staff, coolers, decorations,
 # and in the zombie game some blood and the mop) and saves screenshots.
 #   SHOT_DIR=/some/dir godot --path . res://tests/showcase.tscn
+# TOUCH=1 shows the phone / handheld layout.
 
 var shot_dir := OS.get_environment("SHOT_DIR")
 
@@ -10,6 +11,7 @@ func _ready() -> void:
 	seed(99)
 	var main: Node = preload("res://scenes/main.tscn").instantiate()
 	var hud: Node = main.get_node("HUD")
+	hud.force_touch_ui = OS.get_environment("TOUCH") == "1"
 	add_child(main)
 	await _frames(2)
 	var store: Store = Game.store
@@ -35,6 +37,14 @@ func _ready() -> void:
 	b.tap(Iso.cell_to_world(Vector2i(13, 3)))
 	b.select_place("register")
 	b.tap(Iso.cell_to_world(Vector2i(2, 6)))
+	if store.town:
+		b.select_place("storage")
+		for c in [Vector2i(13, 3), Vector2i(12, 3), Vector2i(8, 3)]:
+			if store.placement_error(c, "storage") == "":
+				b.tap(Iso.cell_to_world(c))
+				break
+		b.select_place("selfcheckout")
+		b.tap(Iso.cell_to_world(Vector2i(13, 7)))
 	Game.buy_floor_style(2)
 	Game.buy_wall_color(2)
 	b.exit()
@@ -58,6 +68,14 @@ func _ready() -> void:
 	Game.hire("cashier")
 	Game.hire("cashier")
 	Game.hire("stocker")
+	if store.town:
+		Game.hire("janitor")
+		Game.add_staff_xp(Game.staff[0].id, 95.0)
+		for r in store.racks:
+			r.store_box(dry[0], 6)
+			r.store_box(dry[1 % dry.size()], 8)
+			r.store_box(cold[0] if not cold.is_empty() else dry[0], 4)
+		Game.scout_rival([dry[0], dry[1 % dry.size()]])
 	store.place_box(dry[0])
 	if Brand.SPILLS:
 		for c in [Vector2i(8, 6), Vector2i(12, 9), Vector2i(4, 9)]:
@@ -81,10 +99,28 @@ func _ready() -> void:
 	hud.computer.show_tab(2)  # Staff
 	await _frames(4)
 	await _shot("computer_staff")
+	hud.computer.show_tab(0)  # Stock
+	await _frames(4)
+	await _shot("computer_stock")
+	hud.computer.show_tab(3)  # Upgrades
+	await _frames(4)
+	await _shot("computer_upgrades")
 	hud.computer.close()
+	if store.town:
+		Game.rival_requested.emit()
+		await _frames(4)
+		await _shot("rival_prices")
+		hud.rival_panel.close()
+		b.enter()
+		b.select_tool(BuildMode.Tool.EXPAND)
+		b._hover(Iso.cell_to_world(b.next_lot()[18]))
+		await _frames(4)
+		await _shot("build_expand")
+		b.exit()
 
 	b.enter()
 	p.zoom_by(0.8)
+	p.camera.offset = Vector2.ZERO
 	b.select_place("register")
 	b._hover(Iso.cell_to_world(Vector2i(12, 6)))
 	await _frames(3)

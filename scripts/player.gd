@@ -206,6 +206,13 @@ func take_from_carry(n: int) -> void:
 	_update_carry()
 
 
+## Lets go of the box without a fuss (it went somewhere, e.g. on a rack).
+func drop_carry() -> void:
+	carry_product = ""
+	carry_count = 0
+	_update_carry()
+
+
 func can_drop() -> bool:
 	return is_carrying() and store.can_drop_at(current_cell())
 

@@ -185,6 +185,8 @@ func _ready() -> void:
 			if store.is_walkable(c) and not store.boxes.has(c) and not store.is_line_spot(c) and c != store.door_cell:
 				spill_cell = c
 				break
+		for old: Spill in store.spills.values():
+			store.remove_spill(old)  # start clean (shoppers drip during the test)
 		var traffic := store.traffic_multiplier()
 		store.add_spill(spill_cell)
 		check(store.spills.has(spill_cell), "a spill appears on the floor")

@@ -114,6 +114,41 @@ func _run() -> void:
 		for c in [Vector2i(8, 3), Vector2i(9, 6), Vector2i(3, 8)]:
 			store.add_spill(c)
 		spill_cells.assign(store.spills.keys())
+	# v0.8: a bought lot, a storage rack, a self-checkout, the delivery zone
+	# moved, rival prices checked, a staff member with a level
+	var town := store.town != null
+	var rack_cell := Store.NO_CELL
+	var self_cell := Store.NO_CELL
+	var zone_anchor := Store.NO_CELL
+	if town:
+		Game.money += 3000.0
+		Game.buy_expansion()
+		check(Game.expansions == 1 and store.width == 20, "bought the first lot")
+		for y in range(2, store.height - 1):
+			for x in range(store.width - 5, store.width - 1):
+				var c := Vector2i(x, y)
+				if rack_cell == Store.NO_CELL and store.placement_error(c, "storage") == "":
+					rack_cell = c
+		var rack: StorageRack = store.add_furniture("storage", rack_cell)
+		rack.store_box(S0, 6)
+		rack.store_box(S1, 3)
+		store.layout_changed()
+		for y in range(store.height - 2, 1, -1):
+			for x in range(store.width - 5, store.width - 1):
+				var c := Vector2i(x, y)
+				if self_cell == Store.NO_CELL and store.placement_error(c, "selfcheckout") == "":
+					self_cell = c
+		store.add_furniture("selfcheckout", self_cell)
+		store.layout_changed()
+		for y in range(2, store.height - 2):
+			for x in range(1, store.width - 3):
+				var c := Vector2i(x, y)
+				if zone_anchor == Store.NO_CELL and c != store.delivery_anchor() and store.delivery_zone_error(c) == "":
+					zone_anchor = c
+		store.move_delivery_zone(zone_anchor)
+		Game.rival_seen[S0] = [1.23, 2]
+		Game.add_staff_xp(Game.staff[0].id, 40.0)
+		Game.money -= 3000.0
 	var spent_money := Game.money
 
 	var hud: Node = get_tree().current_scene.get_node("HUD")
@@ -176,7 +211,7 @@ func _run() -> void:
 	check(store.register.cell == moved_reg and store.objects.get(moved_reg) == store.register, "register position restored")
 	check(store.line_cells == moved_line, "checkout line restored with the register: %s" % [store.line_cells])
 	check(store.computer.cell == moved_pc and store.objects.get(moved_pc) == store.computer, "computer position restored")
-	check(store.registers.size() == 2 and store.registers[1].cell == reg2_cell, "second register restored")
+	check(store.registers.filter(func(r): return not r is SelfCheckout).size() == 2 and store.registers[1].cell == reg2_cell, "second register restored")
 	check(store.registers[1].line_cells == reg2_line, "second register's line restored")
 	check(Game.staff.map(func(e): return e.name) == staff_names, "staff restored: %s" % [staff_names])
 	check(store.staff.size() == 2, "staff came back to work")
@@ -200,6 +235,14 @@ func _run() -> void:
 	check(is_equal_approx(Game.market.factor[S1], 1.37) and is_equal_approx(Game.prices[S1], 4.5), "market and prices restored")
 	check(store.pending_deliveries.size() == 1 and store.pending_deliveries[0].id == S0, "delivery on the way restored")
 	check(store.boxes.size() == 4, "boxes on the floor restored (%d)" % store.boxes.size())
+	if town:
+		check(Game.expansions == 1 and store.width == 20 and store.is_walkable(Vector2i(17, 5)), "the bought lot is still part of the store")
+		var rack: Variant = store.objects.get(rack_cell)
+		check(rack is StorageRack and rack.boxes.size() == 2 and rack.boxes[1].product_id == S1 and rack.boxes[1].count == 3, "storage rack and its boxes restored")
+		check(store.objects.get(self_cell) is SelfCheckout, "self-checkout restored")
+		check(store.delivery_anchor() == zone_anchor, "delivery zone restored at %s" % zone_anchor)
+		check(Game.rival_seen.get(S0, []) == [1.23, 2], "checked rival prices restored")
+		check(int(Game.staff[0].level) == 2 and store.staff[0].level == 2, "staff level restored")
 	await _frames(30)
 	await _shot("loaded_game")
 

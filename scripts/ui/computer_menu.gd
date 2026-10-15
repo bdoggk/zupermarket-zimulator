@@ -1,9 +1,11 @@
 extends PanelContainer
 ## The store computer, with four tabs:
-##   Stock     order boxes and set your prices (market prices change!)
+##   Stock     order boxes and set your prices (market prices change!), and
+##             see the rival's prices you've checked
 ##   Products  buy licenses to sell new products as your store levels up
-##   Staff     hire stockers and cashiers (they're paid every evening)
-##   Upgrades  one-time purchases like the handheld scanner
+##   Staff     hire stockers, cashiers and janitors (paid every evening)
+##   Upgrades  one-time purchases like the handheld scanner and faster
+##             deliveries
 
 enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES }
 
@@ -165,9 +167,15 @@ func _row_button(text: String, on_press: Callable, min_size := Vector2(52, 52)) 
 # ---------------------------------------------------------------- stock tab
 
 func _build_stock() -> void:
+	var rival := Game.store.town != null and not Game.rival_owned
 	footer_label.text = "Prices change every few hours. Price above market and %s may skip it." % Brand.SAY.shoppers
-	var g := _grid(8)
-	for h in ["", "Product", "Market", "", "Your price", "", "", ""]:
+	if rival:
+		footer_label.text += " Walk down the street to check %s's prices." % Brand.RIVAL.name
+	var g := _grid(9 if rival else 8)
+	var heads := ["", "Product", "Market", "", "Your price", "", "", ""]
+	if rival:
+		heads.insert(3, Brand.RIVAL.name)
+	for h in heads:
 		g.add_child(UI.label(h, UI.DIM))
 	for id: String in Game.unlocked_ids():
 		g.add_child(UI.icon(Game.icon(id), Vector2(32, 40)))
@@ -179,6 +187,11 @@ func _build_stock() -> void:
 		var market := UI.label()
 		market.custom_minimum_size.x = 96
 		g.add_child(market)
+		var theirs: Label = null
+		if rival:
+			theirs = UI.label("", UI.DIM)
+			theirs.custom_minimum_size.x = 104
+			g.add_child(theirs)
 
 		g.add_child(_row_button("-", func(): Game.change_price(id, -Game.PRICE_STEP)))
 		var price := UI.label()
@@ -201,6 +214,15 @@ func _build_stock() -> void:
 			price.text = "$%.2f" % p
 			UI.set_color(price, UI.BAD if p > m * 1.25 else (UI.WARN if p > m + 0.001 else UI.GOOD))
 			order.disabled = Game.money < Game.box_cost(id)
+			if theirs:
+				var seen: Array = Game.rival_seen.get(id, [])
+				if seen.is_empty():
+					theirs.text = "?\nnot checked"
+					UI.set_color(theirs, UI.DIM)
+				else:
+					var when := "today" if int(seen[1]) == Game.day else "day %d" % int(seen[1])
+					theirs.text = "$%.2f\n%s" % [float(seen[0]), when]
+					UI.set_color(theirs, UI.GOOD if p <= float(seen[0]) + 0.001 else UI.BAD)
 		)
 	var waiting := UI.label("", UI.DIM)
 	body.add_child(waiting)
@@ -278,18 +300,25 @@ func _build_staff() -> void:
 	if Game.staff.is_empty():
 		body.add_child(UI.label("Nobody works here yet.", UI.DIM))
 		return
+	body.add_child(UI.label("Staff level up as they work. Every level makes them %d%% faster." % roundi(Game.STAFF_SPEED_PER_LEVEL * 100.0), UI.DIM))
 	var team := _grid(4)
 	for entry: Dictionary in Game.staff:
 		var who := _staff_node(entry.id)
 		team.add_child(UI.icon(Game.STAFF[entry.role].texture, Vector2(20, 44)))
-		var label := UI.label("%s  -  %s" % [entry.name, Game.STAFF[entry.role].name])
+		var label := UI.label()
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		team.add_child(label)
 		var status := UI.label("", UI.INFO)
-		status.custom_minimum_size.x = 330
+		status.custom_minimum_size.x = 300
 		team.add_child(status)
 		_updaters.append(func():
 			status.text = who.status_text() if is_instance_valid(who) else ""
+			var lv: int = entry.level
+			var next := Game.staff_next_xp(lv)
+			var progress := "max level" if next < 0 else "%d/%d XP" % [int(entry.xp), int(next)]
+			var faster := roundi((Game.staff_speed(lv) - 1.0) * 100.0)
+			label.text = "%s  -  %s\nLevel %d (%s)%s" % [entry.name, Game.STAFF[entry.role].name, lv, progress,
+				", %d%% faster" % faster if faster > 0 else ""]
 		)
 		var id: int = entry.id
 		var fire := _row_button("Let go", func(): Game.fire(id), Vector2(120, 52))
@@ -308,7 +337,7 @@ func _staff_node(id: int) -> Staff:
 # ---------------------------------------------------------------- upgrades tab
 
 func _build_upgrades() -> void:
-	footer_label.text = "Want more shelves, registers or a new look? Press Build (B)."
+	footer_label.text = "Want more shelves, registers, a new look or a bigger store? Press Build%s." % ("" if Game.touch_ui else " (B)")
 	var g := _grid(3)
 	for id: String in Game.UPGRADES:
 		var u: Dictionary = Game.UPGRADES[id]
@@ -317,16 +346,25 @@ func _build_upgrades() -> void:
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		g.add_child(info)
+		var problem := Game.upgrade_problem(id)
 		if Game.has_upgrade(id):
 			var l := UI.label("Owned", UI.GOOD)
-			l.custom_minimum_size = Vector2(160, 52)
+			l.custom_minimum_size = Vector2(220, 52)
+			l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			g.add_child(l)
+		elif problem != "":
+			var l := UI.label("%s  ($%d)" % [problem, int(u.cost)], UI.DIM)
+			l.custom_minimum_size = Vector2(220, 52)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			g.add_child(l)
 		else:
-			var b := _row_button("Buy $%d" % int(u.cost), func(): Game.buy_upgrade(id), Vector2(160, 52))
+			var b := _row_button("Buy $%d" % int(u.cost), func(): Game.buy_upgrade(id), Vector2(220, 52))
 			g.add_child(b)
 			_updaters.append(func(): b.disabled = Game.money < u.cost)
 
 	if Game.has_upgrade("scanner"):
 		var how := "Press Q next to a shelf to scan it." if not Game.touch_ui else "Stand next to a shelf and press SCAN."
 		body.add_child(UI.label(how + " A box of that product is ordered right away.", UI.INFO))
+	var t := Game.delivery_seconds()
+	body.add_child(UI.label("Deliveries take %s right now." % ("%d seconds" % roundi(t) if t >= 1.5 else "about a second"), UI.DIM))

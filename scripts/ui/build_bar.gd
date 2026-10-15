@@ -1,11 +1,12 @@
 extends PanelContainer
 ## The bar along the bottom of the screen in build mode: buy furniture,
-## move or sell it, and repaint the floor and walls.
+## move or sell it, repaint the floor and walls, and buy the lot next door.
 
 var build: BuildMode
 var status_label: Label
-var tool_buttons := {}  # furniture id / "move" / "sell" -> Button
+var tool_buttons := {}  # furniture id / "move" / "sell" / "expand" -> Button
 var paint_button: Button
+var expand_button: Button
 var paint_box: VBoxContainer
 var floor_buttons: Array[Button] = []
 var wall_buttons: Array[Button] = []
@@ -54,7 +55,13 @@ func _ready() -> void:
 	col.add_child(row)
 	for id: String in Game.FURNITURE:
 		var f: Dictionary = Game.FURNITURE[id]
-		var b := _tool_button("%s\n$%d" % [f.name, int(f.cost)], func(): _toggle_place(id))
+		var b := _tool_button("$%d" % int(f.cost), func(): _toggle_place(id))
+		b.custom_minimum_size = Vector2(80, 78)
+		b.icon = _cropped(f.texture)
+		b.expand_icon = true
+		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		b.tooltip_text = f.name
 		row.add_child(b)
 		tool_buttons[id] = b
 	row.add_child(VSeparator.new())
@@ -64,6 +71,10 @@ func _ready() -> void:
 	row.add_child(tool_buttons["sell"])
 	paint_button = _tool_button("Paint", _toggle_paint)
 	row.add_child(paint_button)
+	if not Brand.EXPANSIONS.is_empty() and Game.store.town:
+		expand_button = _tool_button("Expand", func(): _toggle_tool(BuildMode.Tool.EXPAND))
+		row.add_child(expand_button)
+		tool_buttons["expand"] = expand_button
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
@@ -71,6 +82,18 @@ func _ready() -> void:
 
 	build.changed.connect(_refresh)
 	Game.decor_changed.connect(_refresh)
+
+
+## The furniture sprite without the empty space around it, so it shows up
+## bigger on the button.
+static func _cropped(tex: Texture2D) -> Texture2D:
+	var used := tex.get_image().get_used_rect()
+	if used.size.x <= 0:
+		return tex
+	var a := AtlasTexture.new()
+	a.atlas = tex
+	a.region = Rect2(used)
+	return a
 
 
 func _tool_button(text: String, on_press: Callable) -> Button:
@@ -108,10 +131,15 @@ func _refresh() -> void:
 				on = build.tool == BuildMode.Tool.MOVE
 			"sell":
 				on = build.tool == BuildMode.Tool.SELL
+			"expand":
+				on = build.tool == BuildMode.Tool.EXPAND
 			_:
 				on = build.tool == BuildMode.Tool.PLACE and build.place_id == key
 		tool_buttons[key].set_pressed_no_signal(on)
 	paint_button.set_pressed_no_signal(paint_box.visible)
+	if expand_button:
+		var e := Game.next_expansion()
+		expand_button.text = "Expand\n$%d" % int(e.cost) if not e.is_empty() else "Expand\n(done)"
 	for i in floor_buttons.size():
 		var current := i == Game.floor_style
 		floor_buttons[i].disabled = current

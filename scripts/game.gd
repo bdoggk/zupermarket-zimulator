@@ -1,6 +1,7 @@
 extends Node
 ## Global game state: money, products, the market, store level, product
-## licenses, upgrades, staff, store decor, the clock and daily stats.
+## licenses, upgrades, staff, store decor, the lots you've bought, the rival
+## store down the street, the clock and daily stats.
 ## Registered as the "Game" autoload, so any script can use Game.money etc.
 ##
 ## The catalogs (products, furniture, paint, staff) come from brand.gd, the
@@ -20,12 +21,16 @@ signal market_changed
 signal unlocks_changed  # a license, upgrade or store level changed
 signal decor_changed  # floor style or wall color changed
 signal staff_changed  # someone was hired or fired
+signal staff_leveled(id: int, level: int)
+signal store_expanded  # bought the next lot
+signal rival_requested  # open the rival's price list
+signal rival_bought
 
 const OPEN_MINUTE := 8 * 60
 const CLOSE_MINUTE := 20 * 60
 ## Real seconds per in-game minute. 0.5 means a 12 hour day lasts 6 minutes.
 const SECONDS_PER_GAME_MINUTE := 0.5
-const DELIVERY_SECONDS := 8.0
+const DELIVERY_SECONDS := 8.0  # without delivery upgrades
 const PRICE_STEP := 0.25
 const STARTING_MONEY := 100.0
 
@@ -41,6 +46,11 @@ const FLOOR_STYLES := Brand.FLOOR_STYLES
 const WALL_COLORS := Brand.WALL_COLORS
 const STAFF := Brand.STAFF
 const SELL_REFUND := 0.5  # selling furniture gives back half what it cost
+## Staff level up as they work: 1 XP per item stocked or scanned, more per
+## spill mopped. Each number is the XP needed for that level (level 2 at
+## 30 XP...). Every level makes them this much faster at everything.
+const STAFF_LEVEL_XP := [0, 30, 80, 160, 280]
+const STAFF_SPEED_PER_LEVEL := 0.15
 const FLOOR_COST := 40.0
 const WALL_COST := 30.0
 
@@ -64,8 +74,13 @@ var auto_price := false  # your prices follow the market automatically
 var play_time := 0.0  # seconds played in this save
 var slot := -1  # save slot being played (0-2), -1 = not saving (e.g. tests)
 var touch_ui := false  # set by the HUD
-var staff: Array[Dictionary] = []  # everyone you've hired: [{id, role, name}]
+var staff: Array[Dictionary] = []  # everyone you've hired: [{id, role, name, xp, level}]
 var _next_staff_id := 1
+var expansions := 0  # lots next door you've bought (Brand.EXPANSIONS)
+var rival_owned := false  # bought out the rival store
+var rival_factor := {}  # product id -> the rival's price today / market price
+var rival_deal := ""  # the rival's deal of the day
+var rival_seen := {}  # product id -> [price, day] when you last checked the rival
 
 # Set by these nodes when they load.
 var player: Node2D
@@ -101,6 +116,9 @@ func reset() -> void:
 	slot = -1
 	staff = []
 	_next_staff_id = 1
+	expansions = 0
+	rival_owned = false
+	rival_seen = {}
 	player = null
 	store = null
 	build_mode = null
@@ -108,6 +126,7 @@ func reset() -> void:
 		prices[id] = PRODUCTS[id].base_price
 		if PRODUCTS[id].license <= 0.0:
 			licensed[id] = true
+	roll_rival_prices()
 	_reset_stats()
 
 
@@ -164,8 +183,18 @@ func order_box(id: String) -> bool:
 	if not spend(box_cost(id), true):
 		return false
 	box_ordered.emit(id)
-	message.emit("Ordered %s. It arrives in %d seconds." % [product_name(id), int(DELIVERY_SECONDS)])
+	var t := delivery_seconds()
+	message.emit("Ordered %s. It arrives in %s." % [product_name(id), "%d seconds" % roundi(t) if t >= 1.5 else "a moment"])
 	return true
+
+
+## How long a box takes to arrive: the fastest delivery upgrade you own.
+func delivery_seconds() -> float:
+	var t := DELIVERY_SECONDS
+	for id in upgrades:
+		if UPGRADES.has(id) and UPGRADES[id].has("delivery"):
+			t = minf(t, UPGRADES[id].delivery)
+	return t
 
 
 func change_price(id: String, amount: float) -> void:
@@ -181,12 +210,126 @@ func match_all_prices() -> void:
 		match_market(id)
 
 
-## Chance (0-1) that a customer still buys at your price.
-func buy_chance(id: String) -> float:
+## Chance (0-1) that a customer still buys at your price. `tolerance` is
+## how far over the market price they'll go without blinking (1 = not at
+## all, 1.5 = half again; see Brand.SHOPPERS).
+func buy_chance(id: String, tolerance := 1.0) -> float:
 	var markup: float = prices[id] / market_price(id)
-	if markup <= 1.0:
+	if markup <= tolerance:
 		return 1.0
-	return clampf(1.0 - (markup - 1.0) * 1.6, 0.0, 1.0)
+	return clampf(1.0 - (markup - tolerance) * 1.6, 0.0, 1.0)
+
+
+# ---------------------------------------------------------------- shoppers
+
+## A random kind of shopper (Brand.SHOPPERS), from the ones that come to a
+## store of your level.
+func pick_shopper_kind() -> Dictionary:
+	var pool := []
+	var total := 0.0
+	for id in Brand.SHOPPERS:
+		var k: Dictionary = Brand.SHOPPERS[id]
+		if level >= int(k.level):
+			pool.append(k)
+			total += k.weight
+	var roll := randf() * total
+	for k: Dictionary in pool:
+		roll -= k.weight
+		if roll <= 0.0:
+			return k
+	return pool[-1]
+
+
+# ---------------------------------------------------------------- the rival store
+
+## New prices at the rival for the day, plus its deal of the day.
+func roll_rival_prices() -> void:
+	rival_factor = {}
+	for id in PRODUCTS:
+		rival_factor[id] = randf_range(Brand.RIVAL.price_low, Brand.RIVAL.price_high)
+	var ids := unlocked_ids()
+	rival_deal = ids.pick_random() if not ids.is_empty() else ""
+	if rival_deal != "":
+		rival_factor[rival_deal] = Brand.RIVAL.deal
+
+
+func rival_price(id: String) -> float:
+	return maxf(PRICE_STEP, snappedf(market_price(id) * float(rival_factor.get(id, 1.0)), 0.05))
+
+
+## Notes down what the rival charges for these products right now.
+func scout_rival(ids: Array) -> void:
+	for id in ids:
+		rival_seen[id] = [rival_price(id), day]
+
+
+## Chance (0-1) that a shopper who wants `list` goes to the rival instead
+## of you. It's cheaper for most things, so match or beat its prices. A
+## messy store drives shoppers away; decorations bring them in.
+func rival_pull(list: Array, kind: Dictionary) -> float:
+	if rival_owned:
+		return 0.0
+	var pull: float = Brand.RIVAL.share + float(kind.get("rival", 0.0))
+	if not list.is_empty():
+		var diff := 0.0
+		for item: Dictionary in list:
+			var m := market_price(item.id)
+			diff += clampf((prices[item.id] - rival_price(item.id)) / m, -0.6, 0.6)
+		pull += diff / list.size() * 1.2
+	if in_game():
+		pull += 0.025 * store.spills.size()
+		pull -= 0.02 * mini(store.plant_count(), 6)
+	return clampf(pull, 0.05, 0.85)
+
+
+## Why you can't buy out the rival yet ("" means you can).
+func rival_buyout_problem() -> String:
+	if rival_owned:
+		return "It's yours"
+	if level < int(Brand.RIVAL.buyout_level):
+		return "Reach store level %d" % int(Brand.RIVAL.buyout_level)
+	if money + 0.001 < Brand.RIVAL.buyout:
+		return "Not enough money"
+	return ""
+
+
+func buy_out_rival() -> bool:
+	if rival_buyout_problem() != "" or not spend(Brand.RIVAL.buyout):
+		return false
+	rival_owned = true
+	Settings.vibrate(0.8, 0.4)
+	message.emit(Brand.RIVAL.bought)
+	rival_bought.emit()
+	return true
+
+
+# ---------------------------------------------------------------- the lots next door
+
+## The next lot you can buy, or {} if you've bought them all.
+func next_expansion() -> Dictionary:
+	return Brand.EXPANSIONS[expansions] if expansions < Brand.EXPANSIONS.size() else {}
+
+
+## Why you can't buy the next lot ("" means you can).
+func expansion_problem() -> String:
+	var e := next_expansion()
+	if e.is_empty():
+		return "You've bought all the land there is"
+	if level < int(e.level):
+		return "Reach store level %d first" % int(e.level)
+	if money + 0.001 < e.cost:
+		return "Not enough money"
+	return ""
+
+
+func buy_expansion() -> bool:
+	if expansion_problem() != "" or not spend(next_expansion().cost):
+		return false
+	expansions += 1
+	Settings.vibrate(0.6, 0.2)
+	message.emit("You bought the lot next door! The store is bigger now.")
+	store_expanded.emit()
+	return true
 
 
 # ---------------------------------------------------------------- market
@@ -248,8 +391,21 @@ func has_upgrade(id: String) -> bool:
 	return upgrades.has(id)
 
 
+## Why you can't buy upgrade `id` yet ("" means you can, money aside).
+func upgrade_problem(id: String) -> String:
+	var u: Dictionary = UPGRADES[id]
+	if has_upgrade(id):
+		return "Owned"
+	var needs: String = u.get("requires", "")
+	if needs != "" and not has_upgrade(needs):
+		return "Needs the %s" % UPGRADES[needs].name
+	if level < int(u.get("level", 1)):
+		return "Store level %d" % int(u.level)
+	return ""
+
+
 func buy_upgrade(id: String) -> bool:
-	if has_upgrade(id) or not spend(UPGRADES[id].cost):
+	if upgrade_problem(id) != "" or not spend(UPGRADES[id].cost):
 		return false
 	upgrades[id] = true
 	message.emit("Bought the %s!" % UPGRADES[id].name)
@@ -299,7 +455,7 @@ func staff_count(role: String) -> int:
 func staff_limit(role: String) -> int:
 	var limit: int = STAFF[role].max
 	if role == "cashier" and in_game():
-		limit = mini(limit, store.registers.size())
+		limit = mini(limit, store.registers.filter(func(r): return not r is SelfCheckout).size())
 	return limit
 
 
@@ -318,7 +474,7 @@ func hire_problem(role: String) -> String:
 func hire(role: String) -> Dictionary:
 	if hire_problem(role) != "" or not spend(STAFF[role].hire):
 		return {}
-	var entry := {"id": _next_staff_id, "role": role, "name": _pick_staff_name()}
+	var entry := {"id": _next_staff_id, "role": role, "name": _pick_staff_name(), "xp": 0.0, "level": 1}
 	_next_staff_id += 1
 	staff.append(entry)
 	message.emit("Hired %s the %s! Wages are $%d a day." % [entry.name, STAFF[role].name.to_lower(), int(STAFF[role].wage)])
@@ -334,6 +490,46 @@ func fire(id: int) -> void:
 			message.emit("%s has left the store." % entry.name)
 			staff_changed.emit()
 			return
+
+
+func staff_entry(id: int) -> Dictionary:
+	for s in staff:
+		if s.id == id:
+			return s
+	return {}
+
+
+static func staff_level_for(amount: float) -> int:
+	var lv := 0
+	for need in STAFF_LEVEL_XP:
+		if amount >= need:
+			lv += 1
+	return maxi(lv, 1)
+
+
+## How much faster than a new hire someone at `lv` works (1.0 = normal).
+static func staff_speed(lv: int) -> float:
+	return 1.0 + STAFF_SPEED_PER_LEVEL * (lv - 1)
+
+
+## XP needed for their next level, or -1 at max level.
+static func staff_next_xp(lv: int) -> float:
+	return STAFF_LEVEL_XP[lv] if lv < STAFF_LEVEL_XP.size() else -1.0
+
+
+## Staff member `id` did some work.
+func add_staff_xp(id: int, amount: float) -> void:
+	var entry := staff_entry(id)
+	if entry.is_empty():
+		return
+	entry.xp += amount
+	var lv := staff_level_for(entry.xp)
+	if lv <= entry.level:
+		return
+	entry.level = lv
+	message.emit("%s is now level %d and works %d%% faster!" % [entry.name, lv, roundi((staff_speed(lv) - 1.0) * 100.0)])
+	Settings.vibrate(0.3, 0.08)
+	staff_leveled.emit(id, lv)
 
 
 func daily_wages() -> float:
@@ -392,6 +588,11 @@ func record_spill_cleaned() -> void:
 	stats.cleaned += 1
 
 
+## A shopper went to the rival store instead.
+func record_lost() -> void:
+	stats.lost += 1
+
+
 # ---------------------------------------------------------------- decor
 
 func buy_floor_style(i: int) -> bool:
@@ -421,7 +622,8 @@ func to_dict() -> Dictionary:
 		"upgrades": upgrades.keys(), "auto_price": auto_price,
 		"floor_style": floor_style, "wall_color": wall_color, "stats": stats,
 		"play_time": play_time,
-		"staff": staff, "next_staff_id": _next_staff_id,
+		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
+		"rival": {"owned": rival_owned, "factor": rival_factor, "deal": rival_deal, "seen": rival_seen},
 		"market": {"factor": market.factor, "previous": market.previous, "demand": market.demand, "news": market.news},
 	}
 
@@ -465,8 +667,23 @@ func from_dict(d: Dictionary) -> void:
 	market.news = str(m.get("news", ""))
 	for entry: Variant in d.get("staff", []):
 		if entry is Dictionary and STAFF.has(str(entry.get("role", ""))):
-			staff.append({"id": int(entry.get("id", 0)), "role": str(entry.role), "name": str(entry.get("name", "?"))})
+			var xp_have := maxf(0.0, float(entry.get("xp", 0.0)))
+			staff.append({"id": int(entry.get("id", 0)), "role": str(entry.role), "name": str(entry.get("name", "?")),
+				"xp": xp_have, "level": staff_level_for(xp_have)})
 	_next_staff_id = int(d.get("next_staff_id", staff.size() + 1))
+	expansions = clampi(int(d.get("expansions", 0)), 0, Brand.EXPANSIONS.size())
+	var r: Dictionary = d.get("rival", {})
+	rival_owned = bool(r.get("owned", false))
+	var factors: Dictionary = r.get("factor", {})
+	for id: String in factors:
+		if PRODUCTS.has(id):
+			rival_factor[id] = clampf(float(factors[id]), 0.3, 2.0)
+	if PRODUCTS.has(str(r.get("deal", ""))):
+		rival_deal = str(r.deal)
+	var seen: Dictionary = r.get("seen", {})
+	for id: String in seen:
+		if PRODUCTS.has(id) and seen[id] is Array and seen[id].size() >= 2:
+			rival_seen[id] = [float(seen[id][0]), int(seen[id][1])]
 	for entry in staff:
 		_next_staff_id = maxi(_next_staff_id, entry.id + 1)
 
@@ -500,9 +717,12 @@ func start_next_day() -> void:
 	opened = false
 	is_open = false
 	day_over = false
+	roll_rival_prices()
 	day_started.emit(day)
 	message.emit(Brand.SAY.morning % day)
 	update_market(true)
+	if not rival_owned and rival_deal != "":
+		message.emit(Brand.RIVAL.deal_news % product_name(rival_deal))
 
 
 ## Flips the sign: the clock starts and customers start coming in.
@@ -527,4 +747,4 @@ func clock_text() -> String:
 
 
 func _reset_stats() -> void:
-	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0}
+	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0}

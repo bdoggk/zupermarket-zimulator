@@ -1,20 +1,21 @@
 class_name Customer
 extends Node2D
-## A shopper. Walks in, visits shelves for each item on their list, lines up
-## at the register with the shortest line, waits to be scanned, pays and
-## leaves. If every line is full they browse around until there's room. If
-## they wait too long they give up and walk out.
+## A shopper. Walks in (from the edge of town, if there is one), visits
+## shelves for each item on their list, lines up at the register with the
+## shortest line, waits to be scanned, pays and leaves. If every line is
+## full they browse around until there's room. If they wait too long they
+## give up and walk out.
 ##
-## In the zombie game (Brand.SPILLS) some of them drip blood on the floor
-## as they shamble around.
+## There are different kinds of shoppers (Brand.SHOPPERS): slow, fast,
+## patient, picky about prices, buying lots... In the zombie game some of
+## them drip blood on the floor as they shamble around.
 
-enum State { ENTERING, SHOPPING, PICKING, WAIT_FOR_LINE, TO_LINE, IN_LINE, LEAVING, EXITING }
+enum State { ENTERING, ARRIVING, SHOPPING, PICKING, WAIT_FOR_LINE, TO_LINE, IN_LINE, LEAVING, WALKING_AWAY, EXITING }
 
-const SPEED := 2.2  # cells per second
+const SPEED := 2.2  # cells per second for a regular shopper
 const PICK_SECONDS := 0.9
-const PATIENCE := 60.0  # seconds they'll wait for checkout
+const PATIENCE := 60.0  # seconds a regular shopper waits for checkout
 const BROWSE_RADIUS := 3  # how far they wander while waiting for room in line
-const LEAKY_CHANCE := 0.35  # how many shoppers drip (when Brand.SPILLS is on)
 const DRIP_MIN := 10.0  # seconds between drips
 const DRIP_MAX := 22.0
 const LOOKS := [
@@ -34,27 +35,46 @@ var path: Array[Vector2i] = []
 var target_shelf: Shelf = null
 var register: Register = null  # the register whose line they're in
 var line_index := -1
+var kind := {}  # what kind of shopper (an entry of Brand.SHOPPERS)
+var speed := SPEED
+var max_patience := PATIENCE
+var tolerance := 1.0  # see Game.buy_chance
 var leaky := false
 var drip_timer := 0.0
 var patience := PATIENCE
 var timer := 0.0
+var _top := -34.0  # top of their sprite (for the thought bubble)
 var _wanted := ""  # product shown in the thought bubble
 var _walk_anim := 0.0
 
 @onready var sprite: Sprite2D = $Sprite
 
 
-func setup(s: Store, door: Vector2i, list: Array[Dictionary]) -> void:
+## `start` is where they appear: the door, or the edge of town (then they
+## walk to the door first).
+func setup(s: Store, start: Vector2i, list: Array[Dictionary], shopper_kind := {}) -> void:
 	store = s
 	shopping_list = list
-	position = Iso.cell_to_world(door)
+	kind = shopper_kind if not shopper_kind.is_empty() else Brand.SHOPPERS.values()[0]
+	position = Iso.cell_to_world(start)
+	speed = SPEED * float(kind.get("speed", 1.0))
+	max_patience = PATIENCE * float(kind.get("patience", 1.0))
+	patience = max_patience
+	tolerance = float(kind.get("tolerance", 1.0))
+	if start != s.door_cell:
+		state = State.ARRIVING
 
 
 func _ready() -> void:
-	sprite.texture = LOOKS.pick_random()
+	var looks: Array = kind.get("looks", LOOKS)
+	sprite.texture = looks.pick_random()
+	sprite.offset = Vector2(-floorf(sprite.texture.get_width() / 2.0), -(sprite.texture.get_height() - 2))
+	_top = sprite.offset.y
 	modulate.a = 0.0
-	leaky = Brand.SPILLS and randf() < LEAKY_CHANCE
+	leaky = Brand.SPILLS and randf() < float(kind.get("leaky", 0.35))
 	drip_timer = randf_range(DRIP_MIN * 0.3, DRIP_MAX)
+	if state == State.ARRIVING and not _go_to(store.door_cell):
+		state = State.ENTERING
 
 
 func _process(delta: float) -> void:
@@ -63,7 +83,11 @@ func _process(delta: float) -> void:
 			modulate.a = minf(1.0, modulate.a + delta * 2.5)
 			if modulate.a >= 1.0:
 				_next_item()
-		State.SHOPPING, State.LEAVING:
+		State.ARRIVING:
+			modulate.a = minf(1.0, modulate.a + delta * 2.5)
+			if _walk(delta):
+				_next_item()
+		State.SHOPPING, State.LEAVING, State.WALKING_AWAY:
 			if _walk(delta):
 				_on_arrived()
 		State.TO_LINE:
@@ -100,14 +124,16 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	if _wanted != "" and (state == State.SHOPPING or state == State.PICKING):
 		# thought bubble with the product they're looking for
-		draw_rect(Rect2(-8, -54, 16, 14), Color(0.95, 0.94, 0.9))
-		draw_rect(Rect2(-8, -54, 16, 14), Color(0.15, 0.15, 0.18), false, 1.0)
-		draw_rect(Rect2(-1, -40, 2, 2), Color(0.95, 0.94, 0.9))
-		draw_texture(Game.icon(_wanted), Vector2(-4, -52))
+		var y := _top - 20.0
+		draw_rect(Rect2(-8, y, 16, 14), Color(0.95, 0.94, 0.9))
+		draw_rect(Rect2(-8, y, 16, 14), Color(0.15, 0.15, 0.18), false, 1.0)
+		draw_rect(Rect2(-1, y + 14, 2, 2), Color(0.95, 0.94, 0.9))
+		draw_texture(Game.icon(_wanted), Vector2(-4, y + 2))
 	if state == State.TO_LINE or state == State.IN_LINE or state == State.WAIT_FOR_LINE:
-		var f := clampf(patience / PATIENCE, 0.0, 1.0)
-		draw_rect(Rect2(-9, -42, 18, 4), Color(0.08, 0.08, 0.1, 0.85))
-		draw_rect(Rect2(-8, -41, 16 * f, 2), Color(1.0 - f, 0.4 + 0.5 * f, 0.25))
+		var f := clampf(patience / max_patience, 0.0, 1.0)
+		var y := _top - 8.0
+		draw_rect(Rect2(-9, y, 18, 4), Color(0.08, 0.08, 0.1, 0.85))
+		draw_rect(Rect2(-8, y + 1, 16 * f, 2), Color(1.0 - f, 0.4 + 0.5 * f, 0.25))
 
 
 # ---------------------------------------------------------------- shopping
@@ -152,7 +178,7 @@ func _pick_from_shelf() -> void:
 	var shelf := target_shelf
 	target_shelf = null
 	if is_instance_valid(shelf) and shelf.product_id == want.id and shelf.stock > 0:
-		if randf() <= Game.buy_chance(want.id):
+		if randf() <= Game.buy_chance(want.id, tolerance):
 			for _i in want.qty:
 				if shelf.take_one():
 					basket.append({"id": want.id, "price": Game.prices[want.id]})
@@ -189,9 +215,13 @@ func _pick_register() -> Register:
 	for r in store.registers:
 		if not r.has_room():
 			continue
+		if r is SelfCheckout and not r.accepts(self):
+			continue  # too many items
 		var score := r.line.size() + position.distance_to(r.position) / 2000.0
 		if r.is_staffed():
 			score -= 1.5
+		elif r is SelfCheckout:
+			score -= 1.0
 		if score < best_score:
 			best_score = score
 			best = r
@@ -223,7 +253,7 @@ func _browse() -> void:
 			var c := here + Vector2i(dx, dy)
 			if c == here or not store.reachable.has(c) or not store.is_walkable(c):
 				continue
-			if store.is_line_spot(c) or c == store.door_cell or c in store.delivery_cells:
+			if store.is_line_spot(c) or c == store.door_cell or c in store.delivery_cells or not store.floor_cells.has(c):
 				continue
 			options.append(c)
 	if not options.is_empty():
@@ -276,6 +306,16 @@ func _leave() -> void:
 		state = State.EXITING
 
 
+## Out the door: they don't count as being in the store anymore. With a
+## town outside, they walk off to its edge before they fade away.
+func _left_store() -> void:
+	store.customer_left(self)
+	if store.town and _go_to(store.exit_cell_near(current_cell()) if randf() < 0.5 else store.town.spawns.pick_random()):
+		state = State.WALKING_AWAY
+	else:
+		state = State.EXITING
+
+
 # ---------------------------------------------------------------- movement
 
 func current_cell() -> Vector2i:
@@ -308,6 +348,12 @@ func on_layout_changed() -> void:
 		State.LEAVING:
 			if not _go_to(store.door_cell):
 				state = State.EXITING
+		State.ARRIVING:
+			if not _go_to(store.door_cell):
+				state = State.ENTERING
+		State.WALKING_AWAY:
+			if not path.is_empty() and not _go_to(path[-1]):
+				state = State.EXITING
 
 
 func _go_to(cell: Vector2i) -> bool:
@@ -325,7 +371,7 @@ func _walk(delta: float) -> bool:
 	if path.is_empty():
 		return true
 	var to_target := Iso.cell_to_world(path[0]) - position
-	var step := Iso.velocity_toward(to_target, SPEED) * delta
+	var step := Iso.velocity_toward(to_target, speed) * delta
 	if step.length() >= to_target.length():
 		position = Iso.cell_to_world(path[0])
 		path.remove_at(0)
@@ -344,11 +390,13 @@ func _on_arrived() -> void:
 			if is_instance_valid(target_shelf):
 				sprite.flip_h = target_shelf.position.x < position.x
 		State.LEAVING:
+			_left_store()
+		State.WALKING_AWAY:
 			state = State.EXITING
 
 
 func _animate(delta: float) -> void:
-	if not path.is_empty() and state in [State.SHOPPING, State.TO_LINE, State.LEAVING]:
+	if not path.is_empty() and state in [State.ARRIVING, State.SHOPPING, State.TO_LINE, State.LEAVING, State.WALKING_AWAY]:
 		_walk_anim += delta * 14.0
 		sprite.position.y = -roundf(absf(sin(_walk_anim)) * 1.5)
 	else:
@@ -365,4 +413,4 @@ func _drip(delta: float) -> void:
 
 
 func _think(text: String) -> void:
-	Game.show_popup(position + Vector2(0, -44), text, Color(1.0, 0.88, 0.62))
+	Game.show_popup(position + Vector2(0, _top - 10.0), text, Color(1.0, 0.88, 0.62))

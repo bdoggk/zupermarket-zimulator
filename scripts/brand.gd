@@ -39,6 +39,134 @@ const LAYOUT := [
 	"#########E######",
 ]
 
+## The town around the store. Walk out the front door to explore it. The
+## store sits in the top corner, where LAYOUT goes (@). Legend:
+##   ,  dirt              ;  dead grass        :  dirt path
+##   _  sidewalk          =  road              -  road with a center line
+##   1-3  lots next door you can buy to make the store bigger (in order)
+##   T  dead tree         C c  wrecked car (two tiles, C is the back end)
+##   l  street lamp       x  rubble            w  ruined wall
+##   B  burning barrel    h  fire hydrant      g  gravestone
+##   v  dead bush
+## The rival store (see RIVAL):
+##   #  its walls         b  its floor         e  its door
+##   s  shelf             r  counter           m  where its owner stands
+##   p  price board       k  skull pile        S  its sign out front
+const TOWN := [
+	"@@@@@@@@@@@@@@@@111122223333,,##############;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#kbbbbbbbbbbk#;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#;T;;",
+	"@@@@@@@@@@@@@@@@111122223333x,#bbsssbbsssbb#;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#x;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbsssbbsssbb#;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,B#bbbbbbbbbbbb#;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#;;v;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbmrbbbbbbk#;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbpbbbb#;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,######e#######;;;;",
+	"________________________________________S_______",
+	"___l_________l_________l_______l_____________l__",
+	"================================================",
+	"======Cc=================================Cc=====",
+	"--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=",
+	"=========================Cc=====================",
+	"================================================",
+	"________l_________l_________l_________l_________",
+	"______________h__________________h______________",
+	",,,,,,,,,,,,:,,,,,x,,,;;;;;,,,,,,,,,,,,,:,,,,B,,",
+	",T,www,,www,:,,,,,,,,,;;;;;,www,,wwww,,,:,,;;;;;",
+	",,,w,,,,,,w,:,,g,g,g,g;;v;;,w,,,,,,xw,,,:,,;;;;;",
+	";;;w;x,,,,w,:,,,,,,,,,;;;;;,w,B,,,,,,,,,:,,;T;;;",
+	";;;;;;,T,,w,:,,g,g,T,g;;;;;,w,,,,x,,w,v,:,,;;;;;",
+	";;;w;;,,x,w,:,v,,,,,,,;;;;;,w,,,,,,,w,,,:,,;;;;;",
+	";;;w;;,,,,w,:,,g,g,g,g,,,,,,wwwwww,ww,,,:,,;;;;;",
+	";;;wwwwww,w,:,,,,,,,,,,,,,,,,,,,,,,,,,,,:,v;;;;;",
+	";;v;;;,,,,,,:,,,v,,,,,,,,,T,,,;;;;;;;;;,:,,;;;;;",
+	";;;;;;,,T,,,:,,,,,,,,T,,,,,,,,;;;;;v;;;,:,,;;;T;",
+	";;;;;;,,,,,,:,,,,,,,,,,,,,,,,,;;;;;;;;;,:,,;;;;;",
+]
+
+## Where shoppers walk into town from (and leave by): the ends of the road
+## and the paths at the bottom of the map.
+const TOWN_SPAWNS := [Vector2i(0, 15), Vector2i(0, 17), Vector2i(47, 15), Vector2i(47, 17), Vector2i(12, 31), Vector2i(40, 31)]
+
+## The lots next door (1, 2, 3 in TOWN), bought in Build mode. Each one
+## makes the store 4 tiles wider.
+const EXPANSIONS := [
+	{"cost": 600.0, "level": 2},
+	{"cost": 1200.0, "level": 3},
+	{"cost": 2000.0, "level": 4},
+]
+
+## The competition down the street. Shoppers pick between the two stores:
+## `share` of them go there when your prices match the market. Undercut
+## its prices (walk over and check them) to win them back, or buy it out.
+const RIVAL := {
+	"name": "Bone Mart",
+	"owner": "Mr. Bones",
+	"slogan": "Bare bones prices!",
+	"share": 0.25,
+	"buyout": 3000.0,
+	"buyout_level": 5,
+	"price_low": 0.82,  # its prices are this much of the market price...
+	"price_high": 1.08,  # ...up to this, changing every day
+	"deal": 0.6,  # its deal of the day
+	"hello": "Welcome to Bone Mart! Bare bones prices!",
+	"deal_news": "Bone Mart has a deal on %s today.",
+	"bought": "You bought out Bone Mart! Every zombie in town shops with you now.",
+	"textures": {
+		"owner": preload("res://assets/sprites/skeleton_owner.png"),
+		"stocker": preload("res://assets/sprites/skeleton_stocker.png"),
+		"sign": preload("res://assets/sprites/rival_sign.png"),
+		"sign_sold": preload("res://assets/sprites/rival_sign_sold.png"),
+	},
+}
+
+## Kinds of shoppers.
+##   weight     how common they are       level  store level they start showing up
+##   speed      walking speed (1 = normal)       patience  how long they'll wait in line
+##   items      how many different products they want ([min, max])
+##   qty        how many of each ([min, max])
+##   tolerance  how far over the market price they'll still pay (1 = not at all)
+##   leaky      chance they drip blood   rival  extra chance they shop at the rival
+const SHOPPERS := {
+	"zombie": {
+		"name": "Zombie", "weight": 10.0, "level": 1, "speed": 1.0, "patience": 1.0,
+		"items": [1, 4], "qty": [1, 2], "tolerance": 1.0, "leaky": 0.35, "rival": 0.0,
+		"looks": [
+			preload("res://assets/sprites/customer_0.png"), preload("res://assets/sprites/customer_1.png"),
+			preload("res://assets/sprites/customer_2.png"), preload("res://assets/sprites/customer_3.png"),
+			preload("res://assets/sprites/customer_4.png"), preload("res://assets/sprites/customer_5.png"),
+		],
+	},
+	"crawler": {
+		"name": "Crawler", "weight": 2.0, "level": 1, "speed": 0.5, "patience": 1.6,
+		"items": [1, 2], "qty": [1, 1], "tolerance": 1.0, "leaky": 0.6, "rival": 0.0,
+		"looks": [preload("res://assets/sprites/shopper_crawler.png")],
+	},
+	"runner": {
+		"name": "Runner", "weight": 2.5, "level": 2, "speed": 1.8, "patience": 0.55,
+		"items": [1, 3], "qty": [1, 2], "tolerance": 1.05, "leaky": 0.2, "rival": 0.0,
+		"looks": [preload("res://assets/sprites/shopper_runner.png")],
+	},
+	"skeleton": {
+		"name": "Skeleton", "weight": 1.5, "level": 2, "speed": 1.15, "patience": 1.0,
+		"items": [1, 3], "qty": [1, 2], "tolerance": 0.9, "leaky": 0.0, "rival": 0.25,
+		"looks": [preload("res://assets/sprites/shopper_skeleton_0.png"), preload("res://assets/sprites/shopper_skeleton_1.png")],
+	},
+	"brute": {
+		"name": "Brute", "weight": 1.5, "level": 3, "speed": 0.8, "patience": 1.2,
+		"items": [4, 6], "qty": [1, 3], "tolerance": 1.0, "leaky": 0.5, "rival": 0.0,
+		"looks": [preload("res://assets/sprites/shopper_brute.png")],
+	},
+	"rich": {
+		"name": "Rich Zombie", "weight": 1.2, "level": 3, "speed": 0.9, "patience": 0.8,
+		"items": [2, 4], "qty": [1, 2], "tolerance": 1.5, "leaky": 0.0, "rival": -0.1,
+		"looks": [preload("res://assets/sprites/shopper_rich.png")],
+	},
+}
+
 ## Boxes waiting in the delivery zone when a new game starts.
 const STARTING_BOXES := ["guts", "blood", "fingers", "guts"]
 
@@ -114,6 +242,9 @@ const PRODUCTS := {
 }
 
 ## One-time purchases at the computer.
+##   level     store level needed (optional)
+##   requires  another upgrade you need first (optional)
+##   delivery  seconds a delivery takes once you own it (optional)
 const UPGRADES := {
 	"scanner": {
 		"name": "Handheld Scanner",
@@ -121,15 +252,36 @@ const UPGRADES := {
 		"desc": "Scan any shelf to order a box of what's on it, right there.",
 		"icon": preload("res://assets/sprites/scanner.png"),
 	},
+	"delivery_bike": {
+		"name": "Delivery Bike",
+		"cost": 150.0, "level": 2, "delivery": 5.0,
+		"desc": "A zombie on a rusty bike brings your boxes. Deliveries take 5 seconds.",
+		"icon": preload("res://assets/sprites/upgrade_bike.png"),
+	},
+	"delivery_van": {
+		"name": "Delivery Van",
+		"cost": 400.0, "level": 3, "requires": "delivery_bike", "delivery": 3.0,
+		"desc": "A beat-up van with no brakes. Deliveries take 3 seconds.",
+		"icon": preload("res://assets/sprites/upgrade_van.png"),
+	},
+	"delivery_hearse": {
+		"name": "Hearse Express",
+		"cost": 900.0, "level": 5, "requires": "delivery_van", "delivery": 1.0,
+		"desc": "A souped-up hearse. Boxes show up about a second after you order.",
+		"icon": preload("res://assets/sprites/upgrade_hearse.png"),
+	},
 }
 
-## Furniture you can buy in build mode. kind is shelf, fridge, decor or
-## register. The ids stay the same in both games; only names and art change.
+## Furniture you can buy in build mode. kind is shelf, fridge, storage,
+## decor, register or selfcheckout. The ids stay the same in both games;
+## only names and art change.
 const FURNITURE := {
 	"shelf": {"name": "Rusty Shelf", "cost": 60.0, "kind": "shelf", "texture": preload("res://assets/sprites/shelf.png")},
 	"fridge": {"name": "Meat Cooler", "cost": 150.0, "kind": "fridge", "texture": preload("res://assets/sprites/fridge.png")},
+	"storage": {"name": "Storage Rack", "cost": 120.0, "kind": "storage", "texture": preload("res://assets/sprites/storage.png")},
 	"plant": {"name": "Gravestone", "cost": 25.0, "kind": "decor", "texture": preload("res://assets/sprites/plant.png")},
 	"register": {"name": "Register", "cost": 250.0, "kind": "register", "texture": preload("res://assets/sprites/register.png")},
+	"selfcheckout": {"name": "Self-Checkout", "cost": 400.0, "kind": "selfcheckout", "texture": preload("res://assets/sprites/selfcheckout.png")},
 }
 
 ## Paint jobs in build mode. Each id matches sprites in assets/sprites:
@@ -164,6 +316,11 @@ const STAFF := {
 		"desc": "Runs a register and rings up the zombies. One per register.",
 		"texture": preload("res://assets/sprites/staff_cashier.png"),
 	},
+	"janitor": {
+		"name": "Janitor", "hire": 50.0, "wage": 20.0, "max": 2,
+		"desc": "Brings their own mop and cleans up the blood so you don't have to.",
+		"texture": preload("res://assets/sprites/staff_janitor.png"),
+	},
 }
 const STAFF_NAMES := [
 	"Zed", "Ghoulia", "Rotney", "Brainard", "Moaning Mary", "Stiff Steve",
@@ -183,6 +340,7 @@ const SAY := {
 	"closing": "Closing time! Ring up the last of the horde.",
 	"morning": "Day %d. Get ready, then flip the OPEN sign by the door.",
 	"spill": "Blood on the floor! Grab the mop from the bucket. Even zombies hate a messy store.",
+	"jam": "Unexpected limb in the bagging area! Go fix the self-checkout.",
 }
 
 ## Lighting. day/night: how dark it is away from the ceiling lights.

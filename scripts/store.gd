@@ -3,7 +3,10 @@ extends Node2D
 ## Builds the store from the text map in brand.gd (Brand.LAYOUT), keeps
 ## track of furniture (and where build mode is allowed to put it), the
 ## registers and their checkout lines, deliveries, decor, staff, spills, and
-## sends in customers.
+## sends in customers. In the zombie game the store sits in a town
+## (Brand.TOWN, see town.gd): shoppers walk in from the edge of town, some
+## go to the rival store instead, and the lots next door can be bought to
+## make the store bigger.
 ##
 ## Map legend
 ##   #  wall              .  floor            S  shelf
@@ -16,9 +19,9 @@ extends Node2D
 ##   M  mop bucket (zombie game)
 ##
 ## This is only the starting layout: in build mode you can add, move and
-## sell shelves, fridges, plants and extra registers, and move the first
-## register (its checkout line comes along), the computer, the OPEN sign and
-## the mop bucket. The delivery zone and door stay put. The top row and left
+## sell shelves, fridges, plants, storage racks and extra registers, and
+## move the first register (its checkout line comes along), the computer,
+## the OPEN sign, the mop bucket and the delivery zone. The door stays put. The top row and left
 ## column are the tall back walls; the bottom row and right column are drawn
 ## low so they don't hide the store. Every row must be the same length.
 
@@ -28,7 +31,8 @@ const CORNERS := [Vector2i(1, 1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1
 const BASE_MAX_CUSTOMERS := 4  # plus one per store level, up to MAX_CUSTOMERS
 const MAX_CUSTOMERS := 10
 const EXTRA_CUSTOMERS_PER_REGISTER := 2  # more registers, busier store
-const MAX_REGISTERS := 4
+const MAX_REGISTERS := 4  # staffed registers...
+const MAX_SELF_CHECKOUTS := 4  # ...and self-checkouts
 const EXTRA_LINE_SPOTS := 6  # each line can grow this far past its marked spots
 const FIRST_CUSTOMER_DELAY := 4.0
 const SPAWN_MIN := 7.0
@@ -39,24 +43,31 @@ const LEVEL_TRAFFIC := 0.1  # each store level brings 10% more customers
 const MAX_SPILLS := 14
 const SPILL_PENALTY := 0.08  # each spill keeps 8% of customers away...
 const MIN_SPILL_TRAFFIC := 0.4  # ...but never more than 60%
+## With a town, more shoppers come by, since some of them go to the rival.
+## Buy the rival out and they all come to you.
+const TOWN_TRAFFIC := 1.5
+const LOT_WIDTH := 4  # tiles each lot adds to the store
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const CUSTOMER_SCENE := preload("res://scenes/customer.tscn")
 const TILE_DELIVERY := preload("res://assets/sprites/floor_delivery.png")
 const TILE_DOORMAT := preload("res://assets/sprites/floor_doormat.png")
 
-var width := 0
+var width := 0  # the store's size in tiles (walls included)
 var height := 0
+var town: Town  # the town outside (null if Brand.TOWN is empty)
 var astar := AStarGrid2D.new()
 var objects := {}  # cell -> Interactable that blocks the cell
 var boxes := {}  # cell -> StockBox
 var spills := {}  # cell -> Spill
 var shelves: Array[Shelf] = []  # shelves and fridges
+var racks: Array[StorageRack] = []
 var registers: Array[Register] = []  # [0] is the one that came with the store
 var staff: Array[Staff] = []
 var floor_cells := {}  # cell -> its character in LAYOUT
 var wall_cells := {}  # cell -> [Sprite2D, is_tall]
 var delivery_cells: Array[Vector2i] = []
+var delivery_zone: DeliveryZone  # so build mode can pick the zone up and move it
 var line_length := 4  # how many numbered line spots the map has
 var door_cell := NO_CELL
 var player_start := Vector2i(1, 1)
@@ -72,6 +83,7 @@ var reachable := {}  # every cell you can walk to from the door
 var claims := {}  # box or shelf -> the stocker who's handling it
 var _collision := {}  # cell -> CollisionPolygon2D
 var _warned_spill := false
+static var _told_about_rival := false  # once each time you start the game
 
 ## The first register's line (most code only cares about that one).
 var line_cells: Array[Vector2i]:
@@ -100,7 +112,11 @@ func _ready() -> void:
 	else:
 		_load_saved(saved)
 	_update_reachable()
+	if town:
+		town.start()
 	_sync_staff()
+	Game.store_expanded.connect(expand)
+	Game.rival_bought.connect(_on_rival_bought)
 	Game.box_ordered.connect(_on_box_ordered)
 	Game.store_opened.connect(_on_store_opened)
 	Game.decor_changed.connect(_apply_decor)
@@ -126,7 +142,10 @@ func _build(with_furniture := true) -> void:
 	var layout: Array = Brand.LAYOUT
 	height = layout.size()
 	width = (layout[0] as String).length()
-	astar.region = Rect2i(0, 0, width, height)
+	var world_size := Vector2i(width, height)
+	if not Brand.TOWN.is_empty():
+		world_size = Vector2i((Brand.TOWN[0] as String).length(), Brand.TOWN.size())
+	astar.region = Rect2i(Vector2i.ZERO, world_size)
 	astar.cell_size = Vector2.ONE
 	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
 	astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
@@ -170,6 +189,7 @@ func _build(with_furniture := true) -> void:
 						_add_object(mop_bucket, cell)
 				"D":
 					delivery_cells.append(cell)
+					floor_cells[cell] = "."  # the stripes go wherever the zone is
 				"E":
 					door_cell = cell
 				"P":
@@ -178,6 +198,10 @@ func _build(with_furniture := true) -> void:
 					if ch.is_valid_int():
 						line[int(ch)] = cell
 
+	assert(not delivery_cells.is_empty(), "The map needs a delivery zone (D)")
+	delivery_zone = DeliveryZone.new()
+	delivery_zone.cell = delivery_anchor()
+	decals.add_child(delivery_zone)
 	assert(register != null, "The map needs a register (R)")
 	assert(door_cell != NO_CELL, "The map needs a door (E)")
 	var keys := line.keys()
@@ -189,14 +213,64 @@ func _build(with_furniture := true) -> void:
 	line_length = first_line.size()
 	_set_line(register, first_line)
 
-	# Invisible walls just outside the map so nobody walks out the door.
-	for x in range(-1, width + 1):
+	if not Brand.TOWN.is_empty():
+		town = Town.new()
+		add_child(town)
+		town.build(self)
+		for k in range(1, Game.expansions + 1):
+			_open_lot(k)
+
+	# Invisible walls just outside the map (or the town) so nobody walks off it.
+	for x in range(-1, world_size.x + 1):
 		_add_collision_poly(Vector2i(x, -1))
-		_add_collision_poly(Vector2i(x, height))
-	for y in height:
+		_add_collision_poly(Vector2i(x, world_size.y))
+	for y in world_size.y:
 		_add_collision_poly(Vector2i(-1, y))
-		_add_collision_poly(Vector2i(width, y))
+		_add_collision_poly(Vector2i(world_size.x, y))
 	_apply_decor()
+
+
+## Lot k next door becomes part of the store: the old side wall comes
+## down, the lot gets a floor and new walls go up around it.
+func _open_lot(k: int) -> void:
+	if town == null or k >= town.lots.size():
+		return
+	var cells: Array = town.lots[k]
+	var x1 := 0
+	for c: Vector2i in cells:
+		x1 = maxi(x1, c.x)
+	town.open_lot(k)
+	var old_wall := width - 1
+	for y in range(1, height - 1):
+		var c := Vector2i(old_wall, y)
+		_remove_wall(c)
+		floor_cells[c] = "."
+	for c: Vector2i in cells:
+		if c.y >= height:
+			continue
+		if c.y == 0:
+			_add_wall(c, true)
+		elif c.y == height - 1 or c.x == x1:
+			_add_wall(c, false)
+		else:
+			floor_cells[c] = "."
+			_make_walkable(c)
+	width = x1 + 1
+
+
+func _remove_wall(cell: Vector2i) -> void:
+	if wall_cells.has(cell):
+		(wall_cells[cell][0] as Sprite2D).queue_free()
+		wall_cells.erase(cell)
+	_make_walkable(cell)
+
+
+## Bought the next lot (Game.buy_expansion): make the store bigger.
+func expand() -> void:
+	_open_lot(Game.expansions)
+	_apply_decor()
+	$Lights.rebuild()
+	layout_changed()
 
 
 func _add_wall(cell: Vector2i, tall: bool) -> void:
@@ -206,6 +280,10 @@ func _add_wall(cell: Vector2i, tall: bool) -> void:
 	world.add_child(sprite)
 	wall_cells[cell] = [sprite, tall]
 	_make_solid(cell)
+	if Game.WALL_COLORS.size() > 0 and is_inside_tree():
+		var color: String = Game.WALL_COLORS[Game.wall_color].id
+		sprite.texture = load("res://assets/sprites/wall_%s_%s.png" % [color, "tall" if tall else "low"])
+		sprite.offset = Vector2(-32, -(sprite.texture.get_height() - 16))
 
 
 ## Draws the floor and walls in the colors picked in build mode.
@@ -215,6 +293,8 @@ func _apply_decor() -> void:
 	for variant in ["a", "b", "stain"]:
 		tiles.append(load("res://assets/sprites/floor_%s_%s.png" % [style, variant]))
 	floor_layer.clear()
+	if town:
+		town.add_ground_tiles(floor_layer)
 	for cell: Vector2i in floor_cells:
 		floor_layer.add_tile(_floor_texture(cell, floor_cells[cell], tiles), cell)
 
@@ -228,7 +308,7 @@ func _apply_decor() -> void:
 
 
 func _floor_texture(cell: Vector2i, ch: String, tiles: Array[Texture2D]) -> Texture2D:
-	if ch == "D":
+	if cell in delivery_cells:
 		return TILE_DELIVERY
 	if ch == "E":
 		return TILE_DOORMAT
@@ -244,7 +324,8 @@ func _add_object(obj: Interactable, cell: Vector2i) -> void:
 
 func _make_solid(cell: Vector2i) -> void:
 	astar.set_point_solid(cell, true)
-	_collision[cell] = _add_collision_poly(cell)
+	if not _collision.has(cell):
+		_collision[cell] = _add_collision_poly(cell)
 
 
 func _make_walkable(cell: Vector2i) -> void:
@@ -283,6 +364,8 @@ func to_dict() -> Dictionary:
 		if obj is Shelf:
 			f.product = obj.product_id
 			f.stock = obj.stock
+		if obj is StorageRack:
+			f.boxes = obj.boxes.map(func(b): return [b.product_id, b.count])
 		furniture.append(f)
 	var box_list := []
 	for box: StockBox in boxes.values():
@@ -307,8 +390,9 @@ func to_dict() -> Dictionary:
 		var line := []
 		for c in r.line_cells:
 			line.append([c.x, c.y])
-		regs.append({"cell": [r.cell.x, r.cell.y], "line": line})
-	var fixtures := {"registers": regs}
+		regs.append({"id": r.furniture_id if r.furniture_id != "" else "register", "cell": [r.cell.x, r.cell.y], "line": line})
+	var anchor := delivery_anchor()
+	var fixtures := {"registers": regs, "delivery": {"cell": [anchor.x, anchor.y]}}
 	for key in ["computer", "sign", "mop_bucket"]:
 		var obj: Interactable = get(key)
 		if obj:
@@ -332,7 +416,7 @@ func _load_saved(d: Dictionary) -> void:
 	for f: Dictionary in d.get("furniture", []):
 		var id := str(f.get("id", ""))
 		var c := _to_cell(f.get("cell"))
-		if not Game.FURNITURE.has(id) or Game.FURNITURE[id].kind == "register":
+		if not Game.FURNITURE.has(id) or _is_register_kind(id):
 			continue
 		if not _free_spot(c) or c in lines:
 			continue
@@ -341,6 +425,10 @@ func _load_saved(d: Dictionary) -> void:
 		if obj is Shelf and Game.PRODUCTS.has(product) and Game.is_cold(product) == obj.holds_cold():
 			obj.product_id = product
 			obj.stock = clampi(int(f.get("stock", 0)), 0, Shelf.CAPACITY)
+		if obj is StorageRack:
+			for v in f.get("boxes", []):
+				if v is Array and v.size() >= 2 and Game.PRODUCTS.has(str(v[0])):
+					obj.store_box(str(v[0]), maxi(1, int(v[1])))
 	for b: Dictionary in d.get("boxes", []):
 		var c := _to_cell(b.get("cell"))
 		var product := str(b.get("product", ""))
@@ -382,6 +470,11 @@ func _load_fixtures(fx: Dictionary) -> void:
 		if obj:
 			home[key] = obj.cell
 			_lift(obj)
+	# The delivery zone goes first: the rest were saved around it.
+	var zone := _to_cell(fx.get("delivery", {}).get("cell"))
+	if zone != NO_CELL and delivery_cells_at(zone).all(func(c): return floor_cells.has(c) and c != door_cell):
+		_shift_delivery_zone(zone)
+		_apply_decor()
 	for key: String in items:
 		var obj: Interactable = items[key]
 		if obj == null:
@@ -391,11 +484,14 @@ func _load_fixtures(fx: Dictionary) -> void:
 			c = home[key] if _free_spot(home[key]) else _nearest_free_spot(home[key])
 		_put(obj, c)
 	_restore_line(register, regs[0] if not regs.is_empty() else {})
-	for i in range(1, mini(regs.size(), MAX_REGISTERS)):
+	for i in range(1, regs.size()):
 		var c := _to_cell(regs[i].get("cell"))
-		if not _free_spot(c) or c in all_line_cells():
+		var id := str(regs[i].get("id", "register"))
+		if not Game.FURNITURE.has(id) or not _is_register_kind(id):
+			id = "register"
+		if not _free_spot(c) or c in all_line_cells() or register_count(id) >= register_limit(id):
 			continue
-		var r: Register = add_furniture("register", c)
+		var r: Register = add_furniture(id, c)
 		_restore_line(r, regs[i])
 
 
@@ -445,12 +541,18 @@ func add_furniture(furniture_id: String, cell: Vector2i) -> Interactable:
 			obj = Fridge.new()
 		"register":
 			obj = Register.new()
+		"selfcheckout":
+			obj = SelfCheckout.new()
+		"storage":
+			obj = StorageRack.new()
 		_:
 			obj = Decoration.new()
 	obj.furniture_id = furniture_id
 	_add_object(obj, cell)
 	if obj is Shelf:
 		shelves.append(obj)
+	if obj is StorageRack:
+		racks.append(obj)
 	if obj is Register:
 		registers.append(obj)
 		_set_line(obj, _compute_line(cell, register.facing, NO_CELL, obj))
@@ -498,6 +600,15 @@ func remove_furniture(obj: Interactable) -> void:
 		shelves.erase(obj)
 		if obj.stock > 0:
 			_create_box(obj.cell, obj.product_id, obj.stock)
+	if obj is StorageRack:
+		racks.erase(obj)
+		var first := true
+		for b: StorageRack.Box in obj.boxes:
+			release(b)
+			var c := obj.cell if first else nearest_drop_cell(obj.cell)
+			first = false
+			if c != NO_CELL:
+				_create_box(c, b.product_id, b.count)
 	if obj is Register:
 		registers.erase(obj)
 		obj.release_all()
@@ -603,10 +714,25 @@ func assign_register(who: Staff) -> Register:
 		if r.cashier == who:
 			return r
 	for r in registers:
-		if not is_instance_valid(r.cashier):
+		if not is_instance_valid(r.cashier) and not r is SelfCheckout:
 			r.cashier = who
 			return r
 	return null
+
+
+## True for furniture that has a checkout line (registers, self-checkouts).
+static func _is_register_kind(furniture_id: String) -> bool:
+	return Game.FURNITURE[furniture_id].kind in ["register", "selfcheckout"]
+
+
+## How many registers (or self-checkouts, for "selfcheckout") the store has.
+func register_count(furniture_id: String) -> int:
+	var self_service: bool = Game.FURNITURE[furniture_id].kind == "selfcheckout"
+	return registers.filter(func(r): return (r is SelfCheckout) == self_service).size()
+
+
+func register_limit(furniture_id: String) -> int:
+	return MAX_SELF_CHECKOUTS if Game.FURNITURE[furniture_id].kind == "selfcheckout" else MAX_REGISTERS
 
 
 ## Why something can't go on `cell` ("" means it can). `furniture_id` is
@@ -623,9 +749,9 @@ func placement_error(cell: Vector2i, furniture_id: String, moving: Interactable 
 		return "Keep the delivery zone clear"
 	var placing_register := moving is Register
 	if moving == null and Game.FURNITURE.has(furniture_id):
-		placing_register = Game.FURNITURE[furniture_id].kind == "register"
-		if placing_register and registers.size() >= MAX_REGISTERS:
-			return "You can have up to %d registers" % MAX_REGISTERS
+		placing_register = _is_register_kind(furniture_id)
+		if placing_register and register_count(furniture_id) >= register_limit(furniture_id):
+			return "You can have up to %d %ss" % [register_limit(furniture_id), Game.FURNITURE[furniture_id].name.to_lower()]
 	var other_lines := all_line_cells(moving as Register if moving is Register else null)
 	if cell in other_lines:
 		return "Keep the checkout line clear"
@@ -835,6 +961,8 @@ func interactables_near(cell: Vector2i) -> Array[Interactable]:
 				found.append(boxes[c])
 			if spills.has(c):
 				found.append(spills[c])
+			if town and town.objects.has(c):
+				found.append(town.objects[c])
 	return found
 
 
@@ -847,7 +975,10 @@ func interactable_at_point(p: Vector2, prefer_spills := false) -> Interactable:
 			if sp.get_pick_rect().has_point(p - sp.position):
 				return sp
 	var best: Interactable = null
-	for obj: Interactable in objects.values() + boxes.values():
+	var all: Array = objects.values() + boxes.values()
+	if town:
+		all.append_array(town.objects.values())
+	for obj: Interactable in all:
 		if obj.get_pick_rect().has_point(p - obj.position):
 			if best == null or obj.position.y > best.position.y:
 				best = obj
@@ -908,6 +1039,82 @@ func nearest_drop_cell(from: Vector2i, taken := {}) -> Vector2i:
 	return best
 
 
+## The nearest storage rack with room that no other stocker is filling.
+func rack_with_room(from: Vector2, who: Staff) -> StorageRack:
+	var best: StorageRack = null
+	var best_d := INF
+	for r in racks:
+		if not r.has_room() or is_claimed(r, who) or stand_cell_for(r.cell, Iso.world_to_cell(from)) == NO_CELL:
+			continue
+		var d := from.distance_to(r.position)
+		if d < best_d:
+			best_d = d
+			best = r
+	return best
+
+
+# ---------------------------------------------------------------- delivery zone
+
+## The delivery zone's top corner (smallest x and y).
+func delivery_anchor() -> Vector2i:
+	var a := delivery_cells[0]
+	for c in delivery_cells:
+		a = Vector2i(mini(a.x, c.x), mini(a.y, c.y))
+	return a
+
+
+## The delivery zone's cells if its top corner was on `anchor`.
+func delivery_cells_at(anchor: Vector2i) -> Array[Vector2i]:
+	var offset := anchor - delivery_anchor()
+	var cells: Array[Vector2i] = []
+	for c in delivery_cells:
+		cells.append(c + offset)
+	return cells
+
+
+## Why the delivery zone can't go with its top corner on `anchor` ("" means
+## it can). Boxes already on the zone move with it.
+func delivery_zone_error(anchor: Vector2i) -> String:
+	var lines := all_line_cells()
+	for c in delivery_cells_at(anchor):
+		if not floor_cells.has(c):
+			return "It has to fit on the floor"
+		if objects.has(c):
+			return "Something is in the way"
+		if c == door_cell:
+			return "Don't block the door"
+		if c in lines:
+			return "Keep the checkout line clear"
+		if boxes.has(c) and not c in delivery_cells:
+			return "There's a box in the way"
+		if not reachable.has(c):
+			return "Nobody could get there"
+	return ""
+
+
+## Moves the delivery zone, along with any boxes waiting on it.
+func move_delivery_zone(anchor: Vector2i) -> void:
+	_shift_delivery_zone(anchor)
+	_apply_decor()
+	layout_changed()
+
+
+func _shift_delivery_zone(anchor: Vector2i) -> void:
+	var offset := anchor - delivery_anchor()
+	var moving: Array[StockBox] = []
+	for c in delivery_cells:
+		if boxes.has(c):
+			moving.append(boxes[c])
+			boxes.erase(c)
+	for box in moving:
+		box.cell += offset
+		box.position = Iso.cell_to_world(box.cell)
+		boxes[box.cell] = box
+	for i in delivery_cells.size():
+		delivery_cells[i] += offset
+	delivery_zone.cell = anchor
+
+
 # ---------------------------------------------------------------- staff
 
 ## Makes the people in the store match Game.staff (after hiring, firing or
@@ -933,8 +1140,13 @@ func _sync_staff() -> void:
 
 
 func _staff_start(role: String) -> Vector2i:
+	var spot := NO_CELL
 	if role == "stocker" and not delivery_cells.is_empty():
-		var c := stand_cell_for(delivery_cells[-1], delivery_cells[-1])
+		spot = delivery_cells[-1]
+	elif role == "janitor" and mop_bucket:
+		spot = mop_bucket.cell
+	if spot != NO_CELL:
+		var c := stand_cell_for(spot, spot)
 		if c != NO_CELL:
 			return c
 	return door_cell
@@ -1024,7 +1236,7 @@ func _create_box(cell: Vector2i, product_id: String, count: int) -> void:
 
 
 func _on_box_ordered(product_id: String) -> void:
-	pending_deliveries.append({"id": product_id, "time": Game.DELIVERY_SECONDS, "warned": false})
+	pending_deliveries.append({"id": product_id, "time": Game.delivery_seconds(), "warned": false})
 
 
 func _update_deliveries(delta: float) -> void:
@@ -1054,41 +1266,83 @@ func _update_customers(delta: float) -> void:
 		spawn_timer -= delta
 		if spawn_timer <= 0.0:
 			spawn_timer = randf_range(SPAWN_MIN, SPAWN_MAX) / traffic_multiplier()
-			if customers.size() < max_customers():
-				spawn_customer()
+			if town:
+				spawn_timer /= TOWN_TRAFFIC
+			_new_shopper()
 	elif Game.opened and not Game.day_over and customers.is_empty():
 		Game.end_day()  # closing time and the last customer has left
 
 
-func spawn_customer() -> Customer:
+## Someone in town wants to go shopping. With a rival in town they might go
+## there instead: more likely if its prices beat yours, your store is a
+## mess, or your store is packed.
+func _new_shopper() -> void:
+	var kind := Game.pick_shopper_kind()
+	var list := _make_shopping_list(kind)
+	var full := shoppers_inside() >= max_customers()
+	if town and not Game.rival_owned and (full or randf() < Game.rival_pull(list, kind)):
+		town.send_to_rival(kind)
+		Game.record_lost()
+	elif not full:
+		spawn_customer(kind, list)
+
+
+## Sends in a shopper. Without a kind, a regular one with a random list.
+func spawn_customer(kind := {}, list: Array[Dictionary] = []) -> Customer:
+	if kind.is_empty():
+		kind = Brand.SHOPPERS.values()[0]
+	if list.is_empty():
+		list = _make_shopping_list(kind)
 	var c: Customer = CUSTOMER_SCENE.instantiate()
-	c.setup(self, door_cell, _make_shopping_list())
+	c.setup(self, _arrival_cell(kind), list, kind)
 	world.add_child(c)
 	customers.append(c)
 	return c
+
+
+## Where shoppers come from: the edge of town (slow ones from the nearest
+## spot), or the door if there's no town.
+func _arrival_cell(kind: Dictionary) -> Vector2i:
+	if town == null or town.spawns.is_empty():
+		return door_cell
+	if float(kind.get("speed", 1.0)) < 0.75:
+		return exit_cell_near(door_cell)
+	return town.spawns.pick_random()
+
+
+## The edge-of-town spot closest to `from` (where shoppers leave town).
+func exit_cell_near(from: Vector2i) -> Vector2i:
+	if town == null or town.spawns.is_empty():
+		return door_cell
+	var best: Vector2i = town.spawns[0]
+	for c in town.spawns:
+		if Vector2(c - from).length() < Vector2(best - from).length():
+			best = c
+	return best
+
+
+## Shoppers in the store (not counting ones still walking over from town).
+func shoppers_inside() -> int:
+	return customers.filter(func(c): return c.state != Customer.State.ARRIVING).size()
 
 
 func customer_left(c: Customer) -> void:
 	customers.erase(c)
 
 
-## 1-4 different products you sell, 1-2 of each. Products in the news
-## ("Everyone wants...") get picked more often.
-func _make_shopping_list() -> Array[Dictionary]:
+## What a shopper wants: a few different products you sell (how many
+## depends on the kind of shopper; most want only one or two). Products in
+## the news ("Everyone wants...") get picked more often.
+func _make_shopping_list(kind := {}) -> Array[Dictionary]:
 	var pool := Game.unlocked_ids()
-	var r := randf()
-	var n := 1
-	if r > 0.9 and pool.size() >= 6:
-		n = 4
-	elif r > 0.75:
-		n = 3
-	elif r > 0.4:
-		n = 2
+	var items: Array = kind.get("items", [1, 4])
+	var qty: Array = kind.get("qty", [1, 2])
+	var n: int = items[0] + floori(pow(randf(), 1.6) * (items[1] - items[0] + 1))
 	var list: Array[Dictionary] = []
 	for i in mini(n, pool.size()):
 		var id := _weighted_pick(pool)
 		pool.erase(id)
-		list.append({"id": id, "qty": randi_range(1, 2)})
+		list.append({"id": id, "qty": randi_range(qty[0], qty[1])})
 	return list
 
 
@@ -1107,6 +1361,17 @@ func _weighted_pick(ids: Array) -> String:
 func _on_store_opened() -> void:
 	spawn_timer = FIRST_CUSTOMER_DELAY
 	_warned_spill = false
+	if town and not Game.rival_owned and not _told_about_rival:
+		_told_about_rival = true
+		Game.message.emit("Some %s shop at %s down the street. Walk out the front door to check its prices." % [Brand.SAY.shoppers, Brand.RIVAL.name])
+
+
+## Bought out the rival: its owner throws in his leftover stock.
+func _on_rival_bought() -> void:
+	var ids := Game.unlocked_ids()
+	for i in 4:
+		pending_deliveries.append({"id": ids.pick_random(), "time": 2.0 + i * 1.5, "warned": false})
+	Game.message.emit("%s threw in his leftover stock: 4 boxes are on the way." % Brand.RIVAL.owner)
 
 
 # ---------------------------------------------------------------- visuals

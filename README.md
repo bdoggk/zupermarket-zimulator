@@ -31,8 +31,23 @@ are easiest by touch).
 PC" because the game isn't code-signed: click **More info → Run anyway**.
 
 It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The two
-games share all their code. Only `scripts/brand.gd` (names, products, layout,
-wording) and the art are different (see "Two games, one codebase" below).
+games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
+more in it (see "Two games" below).
+
+## What's new in 0.8
+
+- **Step outside:** walk out the front door into a barren town, with wrecked cars,
+  ruins, a little cemetery and street lamps that come on at night. Shoppers now walk
+  in from the edge of town.
+- **Bone Mart**, a skeleton-run store down the street, competes for your shoppers.
+  Walk over and check its prices, beat them, or buy the place out later on.
+- **Expand the store:** buy the fenced lots next door (3 of them) in build mode.
+- **Self-checkouts**, **storage racks**, and a **delivery zone** you can move.
+- **Faster deliveries:** Delivery Bike, Delivery Van and Hearse Express upgrades.
+- **Janitors** who mop up the blood, and **staff levels**: everyone gets faster as
+  they work.
+- **New kinds of shoppers:** crawlers, runners, brutes, rich zombies and skeletons.
+- Fixed: in build mode, the view no longer follows the mouse around after you drag it.
 
 ## Open it
 
@@ -88,11 +103,12 @@ in, so you can stock shelves, order boxes, set prices, mop and build. When you'r
 then starts and the horde shambles in. At 8 PM the sign flips back to CLOSED by itself.
 Boxes you order still get delivered while you're closed.
 
-1. **Boxes** arrive on the yellow-striped delivery zone in the back corner. Pick one up.
+1. **Boxes** arrive on the yellow-striped delivery zone in the back corner (you can
+   move it in build mode). Pick one up.
 2. **Stock a shelf**: carry the box to a shelf and use it. A shelf holds one product
    at a time (12 max); once it's empty it takes anything.
-3. **Zombies** shamble in with a shopping list (the bubble over their head), grab
-   items and line up at the register with the shortest line.
+3. **Zombies** walk in from the edge of town with a shopping list (the bubble over
+   their head), grab items and line up at the register with the shortest line.
 4. **Scan** their items at the register to get paid. Wait too long and they leave
    without paying (watch the bar over their head).
 5. **Use the computer** in the back to order stock, set prices, unlock products, hire
@@ -146,6 +162,37 @@ for new products in the **Products** tab. There are 12 products in total:
 
 Cold products need a **Meat Cooler** (build mode).
 
+### The town and Bone Mart
+Walk out the front door and you're in town. The road runs past your store, with the
+fenced lots for sale next door and **Bone Mart** a little further down the street.
+
+Bone Mart is run by skeletons (the owner is Mr. Bones) and it's usually a bit cheaper
+than the market, with one big **deal of the day** (the morning news tells you which).
+Every shopper in town decides which store to go to:
+- the more of your prices beat Bone Mart's, the more of them come to you
+- a bloody, messy store sends them to Bone Mart; gravestones bring them to you
+- when your store is packed, the overflow goes to Bone Mart
+- skeletons prefer Bone Mart; rich zombies prefer you
+
+**Check Bone Mart's prices** by walking up to its shelves, or use its counter or price
+board to see the whole price list. Prices you've checked show up in a **Bone Mart**
+column in your computer's Stock & Prices tab (with the day you checked). The day
+summary tells you how many shoppers went there instead of you.
+
+**Buy Bone Mart out** ($3000, store level 5) from its price list. Its staff leave,
+Mr. Bones throws in his leftover stock, and every shopper in town comes to you from
+then on.
+
+### Kinds of shoppers
+| | |
+|---|---|
+| Zombie | The regular shopper |
+| Crawler | Drags itself along slowly but waits patiently. Drips a lot |
+| Runner | Fast, impatient. Shows up from store level 2 |
+| Skeleton | Comes over from Bone Mart's side of town. Fussy about prices |
+| Brute | Big and slow, buys a cart full (4-6 different things). Level 3 |
+| Rich zombie | Doesn't mind paying 50% over market. Level 3 |
+
 ### Staff
 Hire help in the computer's **Staff** tab. Each hire costs $50 up front, and staff
 are paid **wages at the end of every day** (shown in the day summary, even if it puts
@@ -159,29 +206,66 @@ you in the red).
   zombies in its line by themselves. While a cashier is at a register, you can't
   use that one, so you're free to stock and order. Customers will wait a little
   longer in a line that has a cashier. Your staff are zombies too.
+- **Janitor** ($20/day, up to 2): brings their own mop and cleans up the blood.
 
-The Staff tab shows what everyone is doing right now, and **Let go** fires someone.
+**Staff level up** as they work (stocking items, ringing up items, mopping). There
+are 5 levels and every level makes them 15% faster at everything, walking included.
+The Staff tab shows what everyone is doing right now, their level and XP, and
+**Let go** fires someone.
 
-### More registers
+Stockers also use **storage racks**: boxes that have no shelf to go on get moved off
+the delivery zone onto a rack, and come back out once a shelf has room.
+
+### More registers and self-checkouts
 Buy extra registers in build mode ($250, up to 4 in total). Each one gets its own
 checkout line (shown in yellow while you place it), and zombies pick the shortest
 line. Put a cashier on each one, or run one yourself. Extra registers can be sold
 again; the first one can only be moved.
 
+**Self-checkouts** ($400, up to 4) work on their own: shoppers with 5 items or fewer
+scan their own stuff (slower than a cashier). Now and then one jams ("Unexpected
+limb in the bagging area!"): its light flashes red and you have to walk over and fix
+it before the shopper loses patience.
+
+### Storage racks
+A **storage rack** ($120) holds up to 6 boxes of anything. Use it while carrying a box
+to put the box away, or with empty hands to take the top box. Great for keeping the
+delivery zone clear.
+
+### Making the store bigger
+In build mode, press **Expand** and tap the outlined lot next door to buy it. Each lot
+makes the store 4 tiles wider:
+
+| Lot | Cost | Store level |
+|---|---|---|
+| 1 | $600 | 2 |
+| 2 | $1200 | 3 |
+| 3 | $2000 | 4 |
+
+The lots are the fenced dirt next to the store with FOR SALE signs.
+
+### Faster deliveries
+Deliveries take 8 seconds to start with. Upgrades in the computer:
+**Delivery Bike** ($150, level 2) 5 seconds, **Delivery Van** ($400, level 3)
+3 seconds, **Hearse Express** ($900, level 5) about a second.
+
 ### Build mode (customize your store)
 Press **B** (or the **Build** button). The game pauses while you build.
-- **Buy** rusty shelves ($60), meat coolers ($150), gravestones ($25) and registers
-  ($250). Gravestones make zombies come more often (it feels like home).
+- **Buy** rusty shelves ($60), meat coolers ($150), storage racks ($120), gravestones
+  ($25), registers ($250) and self-checkouts ($400). Hover over (or select) a button to
+  see its name. Gravestones make zombies come more often (it feels like home).
 - **Move** anything you've placed (stock stays on the shelf), plus the **registers**,
-  the **computer**, the **OPEN sign** and the **mop bucket**. When you pick up a register, a yellow
+  the **computer**, the **OPEN sign**, the **mop bucket** and the **delivery zone**
+  (boxes on it come along). When you pick up a register, a yellow
   preview shows where its checkout line will go. The line comes along with the
   register: it starts next to the register and turns around walls and shelves if it
   needs to.
 - **Sell** for half price. Anything left on a shelf gets boxed up. (The first
   register, the computer, the sign and the mop bucket can be moved but not sold.)
 - **Paint** the floor (5 styles, $40) and walls (5 colors, $30).
+- **Expand** buys the lot next door (see above).
 - Red tiles (door, checkout line, delivery zone) are off limits. Build mode won't let
-  you block anyone's path.
+  you block anyone's path. You can only build inside the store.
 - **On PC:** move the mouse to preview, click to confirm, right-click/Esc to cancel.
 - **On a phone:** tap to preview, tap the same spot again to confirm.
 - Drag (or use WASD) to look around.
@@ -201,6 +285,9 @@ computer. A scanner icon appears next to your money once you own it.
 | Drop a box | E with nothing usable nearby | Big button ("Drop box") |
 | Grab / return the mop | E at the mop bucket | Tap the bucket |
 | Mop up blood | E next to a puddle (holding the mop) | Tap the puddle |
+| Put a box on a rack / take one | E at a storage rack | Tap the rack |
+| Check a Bone Mart price | E at one of its shelves | Tap the shelf |
+| Fix a jammed self-checkout | E next to it | Tap it |
 | Build mode | B | Build button |
 | Zoom | Mouse wheel or the +/- buttons | +/- buttons |
 | Pause menu | Esc or P | II button / back button |
@@ -233,24 +320,34 @@ scripts/
   market.gd            Prices that drift over time + daily news events
   store.gd             Builds the store from the map, furniture placement rules,
                        registers and their lines, deliveries, decor, staff, spills,
-                       customer spawning
+                       customer spawning, the lots next door
+  town.gd              The town outside, the lots for sale and Bone Mart
+  wanderer.gd          People walking around town (Bone Mart's shoppers and staff)
+  prop.gd              Town scenery (trees, cars, lamps, ruins, fences...)
+  rival_shelf.gd       Bone Mart's shelves (check its prices)
+  rival_desk.gd        Bone Mart's counter and price board
   build_mode.gd        Build mode: place / move / sell furniture and registers
   iso.gd               Isometric grid math (cell <-> screen)
   player.gd            Movement, tap-to-walk, carrying boxes, timed actions, scanning
-  customer.gd          Customer AI (shop -> pick a line -> pay -> leave)
-  staff.gd             Staff AI: stockers and cashiers
+  customer.gd          Customer AI (walk in -> shop -> pick a line -> pay -> leave),
+                       kinds of shoppers
+  staff.gd             Staff AI: stockers, cashiers and janitors, staff levels
   interactable.gd      Base class for anything the player can use
   shelf.gd             Shelves (and the items drawn on them), scanner support
   fridge.gd            Meat cooler = a shelf for cold products
   decoration.gd        Gravestones
   stock_box.gd         Delivery boxes
   register.gd          A checkout and its customer line
+  self_checkout.gd     A self-checkout (a register that runs itself)
+  storage_rack.gd      Storage racks for spare boxes
+  delivery_zone.gd     Lets build mode pick up and move the delivery zone
   spill.gd             Blood spills (zombie game)
   mop_bucket.gd        The mop bucket (zombie game)
   computer.gd          Opens the store computer
   floor.gd             Draws the floor tiles and the tap marker
   hud.gd               Main UI (status bar, prompts, messages, summary)
   ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades tabs
+  ui/rival_panel.gd    Bone Mart's price list (and buying it out)
   ui/build_bar.gd      The build mode toolbar and paint menu
   ui/pause_menu.gd     The in-game pause menu
   ui/options_menu.gd   The Options screen (main menu and pause menu)
@@ -277,9 +374,14 @@ Update Mac App.command Rebuilds the Mac app and installs it (see "Mac app")
 ```
 
 Every row has to be the same length. The top row and left column are the tall back
-walls. `M` is the mop bucket. Build mode can rearrange everything except the
-delivery zone and the door,
-which only move if you edit the map.
+walls. `M` is the mop bucket. Build mode can rearrange everything except the door,
+which only moves if you edit the map.
+
+**The town** is another text map, `TOWN` in `scripts/brand.gd` (48x32, with a legend
+above it). The store sits where the `@`s are, `1`-`3` are the lots for sale, and the
+`#` box is Bone Mart. `TOWN_SPAWNS` is where shoppers walk in from, `EXPANSIONS` the
+lot prices, `RIVAL` everything about Bone Mart (name, how many shoppers it gets, its
+prices, the buyout price) and `SHOPPERS` the kinds of shoppers.
 
 **Saving new things:** if you add new game state, add it to `to_dict()` / `from_dict()`
 in `game.gd` (or `store.gd` for things in the store). Missing values fall back to
@@ -303,8 +405,11 @@ example to follow (see `shelf.gd`).
 **Balance:** the numbers are constants at the top of each script:
 - `game.gd`: day length, delivery time, level XP
 - `market.gd`: how often and how much prices move, news chances
-- `store.gd`: zombie numbers, how much gravestones help, how much blood hurts, max registers
-- `customer.gd`: patience, how many zombies drip and how often
+- `store.gd`: zombie numbers, how much gravestones help, how much blood hurts, max
+  registers and self-checkouts, extra town traffic
+- `customer.gd`: patience and how often zombies drip
+- `brand.gd`: shopper kinds, Bone Mart's prices and share, lot prices
+- `staff.gd` / `game.gd`: staff speeds, XP per level
 - `shelf.gd`: shelf size
 
 **Art:** replace any PNG in `assets/sprites/` with your own and keep the same size.
@@ -326,17 +431,26 @@ Iso rules the game expects:
 godot --headless --path . res://tests/feature_test.tscn     # 60+ rule checks
 godot --headless --path . -s res://tests/flow_test.gd       # menus + saving, 50+ checks
 godot --headless --path . --fixed-fps 60 res://tests/staff_test.tscn  # registers, staff, spills
+godot --headless --path . --fixed-fps 60 res://tests/town_test.tscn   # 0.8: town, Bone Mart, lots, racks, self-checkout...
+xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn  # build mode view
 DAYS=5 godot --headless --path . --fixed-fps 60 res://tests/bot_test.tscn   # a bot plays 5 days
 STAFF=1 SHUFFLE=1 godot --headless --path . --fixed-fps 60 res://tests/stuck_test.tscn  # busy-store stress test
 ```
 
 The flow test backs up your real saves and settings first and puts them back afterwards.
 
-## Two games, one codebase
+## Two games
 
 Supermarket Sim and Zupermarket Zimulator are two separate projects (two folders,
-two apps, separate saves), but every script, scene, test and tool is the same in
-both. What's different:
+two apps, separate saves). Up to version 0.7 every script, scene, test and tool was
+the same in both. Version 0.8 added the town, Bone Mart, lots, self-checkouts,
+storage racks, janitors, staff levels, delivery upgrades and shopper kinds to
+Zupermarket Zimulator only, so its scripts have moved on. To bring those to Supermarket
+Sim, copy this game's `scripts/`, `scenes/`, `tests/` and `tools/` over and give its
+`brand.gd` the new sections (`TOWN`, `TOWN_SPAWNS`, `EXPANSIONS`, `RIVAL`, `SHOPPERS`,
+plus the new `FURNITURE`, `UPGRADES` and `STAFF` entries) with its own names and art.
+
+What's different between the two:
 
 - `scripts/brand.gd`: name, tagline, starting layout, products, furniture/paint/staff
   names, wording, lighting colors, and whether blood spills are on
@@ -345,8 +459,6 @@ both. What's different:
 - `project.godot` (the game's name, which also decides where saves go),
   `export_presets.cfg` (app names and ids) and this README
 
-To bring a new feature from one game to the other, copy over `scripts/` (keeping that
-game's `brand.gd`), `scenes/`, `tests/` and `tools/`.
 
 ## Mac app
 
@@ -393,9 +505,9 @@ The project uses the Compatibility renderer, so it runs on older phones too.
 
 ## Ideas for what to build next
 
-- Expand the store (buy more floor space)
-- More upgrades: express delivery, a faster checkout scanner
-- More staff: a zombie janitor who mops, a security guard, staff that level up
+- A second store of your own (run Bone Mart once you've bought it)
+- More upgrades: a faster checkout scanner, bigger delivery trucks
+- More staff: a security guard, a manager who hires for you
 - Real walk animations (4 directions) with `AnimatedSprite2D`
 - Sound: register beeps, scanner beep, door chime, music
 - Humans breaking in (lock the doors!), power outages, a blood bank delivery truck
