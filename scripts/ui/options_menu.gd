@@ -1,6 +1,6 @@
 extends PanelContainer
 ## The Options screen: display mode, window size (PC), frame rate, graphics
-## level, VSync, an FPS counter and vibration. Changes apply right away and
+## level, VSync, an FPS counter, sound volume and vibration. Changes apply right away and
 ## are saved. "Controls" shows every key and button (ControlsList). Used by
 ## the main menu and the in-game pause menu.
 
@@ -23,6 +23,9 @@ var gfx_info: Label
 var vsync_check: CheckButton
 var vsync_info: Label
 var fps_check: CheckButton
+var vol_slider: HSlider
+var vol_value: Label
+var _preview: AudioStreamPlayer  # a growl so you can hear how loud it is
 var vib_check: CheckButton
 var vib_note: Label
 var controls_button: Button
@@ -76,6 +79,13 @@ func _build_settings(parent: Control) -> void:
 	gfx_value = _selector(col, "Graphics", _change_graphics)[0]
 	gfx_info = _info(col)
 
+	var vol := _slider(col, "Sound", func(v: float):
+		Settings.set_volume(v / 100.0)
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_play_preview())  # moved with the keyboard or a controller
+	vol_slider = vol[0]
+	vol_value = vol[1]
+	vol_slider.drag_ended.connect(func(_changed: bool): _play_preview())
 	vib_check = _check(col, "Vibration", func(on: bool): Settings.set_vibration(on))
 	vib_note = _info(col)
 
@@ -196,6 +206,64 @@ func _selector(parent: Control, text: String, on_change: Callable) -> Array:
 	return [value, left, right]
 
 
+## A row like:  Sound   [=======O-----]  60%
+## Drag it, or select it and press left/right (keyboard or controller).
+## Returns [slider, value label].
+func _slider(parent: Control, text: String, on_change: Callable) -> Array:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	parent.add_child(row)
+	var name_label := UI.label(text)
+	name_label.custom_minimum_size.x = 190
+	row.add_child(name_label)
+	var s := HSlider.new()
+	s.min_value = 0
+	s.max_value = 100
+	s.step = 5
+	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	s.custom_minimum_size = Vector2(0, 40)
+	s.focus_mode = Control.FOCUS_ALL
+	var track := StyleBoxFlat.new()  # a thicker bar that's easy to grab on a touch screen
+	track.bg_color = Color(0.2, 0.21, 0.24)
+	track.set_corner_radius_all(4)
+	track.content_margin_top = 5
+	track.content_margin_bottom = 5
+	s.add_theme_stylebox_override("slider", track)
+	var filled := track.duplicate()
+	filled.bg_color = UI.WARN.darkened(0.25)
+	s.add_theme_stylebox_override("grabber_area", filled)
+	s.add_theme_stylebox_override("grabber_area_highlight", filled)
+	var focus := StyleBoxFlat.new()
+	focus.draw_center = false
+	focus.border_color = UI.WARN
+	focus.set_border_width_all(3)
+	focus.set_expand_margin_all(4)
+	s.add_theme_stylebox_override("focus", focus)
+	s.value_changed.connect(on_change)
+	row.add_child(s)
+	var value := UI.label()
+	value.custom_minimum_size.x = 64
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	row.add_child(value)
+	return [s, value]
+
+
+## Plays a growl at the new volume (after you let go of the slider).
+func _play_preview() -> void:
+	if Settings.volume <= 0.0:
+		return
+	if _preview == null:
+		_preview = AudioStreamPlayer.new()
+		for k: Dictionary in Brand.SHOPPERS.values():
+			if k.get("sound") is AudioStream:
+				_preview.stream = k.sound
+				break
+		add_child(_preview)
+	if _preview.stream and not _preview.playing:
+		_preview.play()
+
+
 func _check(parent: Control, text: String, on_toggle: Callable) -> CheckButton:
 	var row := HBoxContainer.new()
 	parent.add_child(row)
@@ -260,6 +328,8 @@ func _refresh() -> void:
 	vsync_check.set_pressed_no_signal(Settings.vsync)
 	vsync_info.text = Settings.vsync_info()
 	fps_check.set_pressed_no_signal(Settings.show_fps)
+	vol_slider.set_value_no_signal(roundf(Settings.volume * 100.0))
+	vol_value.text = Settings.volume_name(Settings.volume)
 	vib_check.set_pressed_no_signal(Settings.vibration)
 	var can := Settings.can_vibrate()
 	vib_check.disabled = not can

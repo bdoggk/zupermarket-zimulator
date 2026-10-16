@@ -113,6 +113,37 @@ func _ready() -> void:
 	hud.pause_menu.close()
 	await _frames(1)
 
+	# ---- the brute's growl, and the Sound setting
+	var brute := store.spawn_customer(Brand.SHOPPERS.brute)
+	var zombie := store.spawn_customer(Brand.SHOPPERS.zombie)
+	await _frames(2)
+	check(brute.voice != null and brute.voice.stream == Brand.SHOPPERS.brute.sound, "brutes have a growl")
+	check(zombie.voice == null, "regular zombies don't")
+	Customer._last_growl = -1000.0
+	check(brute.growl() and brute.voice.playing, "a brute growls")
+	check(not brute.growl(), "but not over itself")
+	check(not zombie.growl(), "a zombie without a sound stays quiet")
+	brute.voice.stop()
+	for c in [brute, zombie]:
+		store.customer_left(c)
+		c.queue_free()
+	Settings.set_volume(0.0)
+	check(AudioServer.is_bus_mute(0), "Sound: Off mutes the game")
+	Settings.set_volume(0.5)
+	check(not AudioServer.is_bus_mute(0) and is_equal_approx(AudioServer.get_bus_volume_db(0), linear_to_db(0.5)), "Sound: 50%% turns it down (%.1f dB)" % AudioServer.get_bus_volume_db(0))
+	check(Settings.volume_name(0.0) == "Off" and Settings.volume_name(0.75) == "75%", "volume names")
+	opt.open()
+	await _frames(2)
+	check(opt.vol_value.text == "50%", "Options shows the Sound setting: " + opt.vol_value.text)
+	check(opt.vol_slider.value == 50.0, "with a slider")
+	opt.vol_slider.value = 80.0
+	check(is_equal_approx(Settings.volume, 0.8) and opt.vol_value.text == "80%", "moving the slider changes the volume (%s)" % opt.vol_value.text)
+	opt._play_preview()
+	check(opt._preview != null and opt._preview.stream != null, "and you hear a growl at the new volume")
+	opt._preview.stop()
+	opt.close()
+	await _frames(1)
+
 	# ---- frame rate and window settings
 	Settings.set_fps_limit(144)
 	check(Engine.max_fps == 144, "the frame rate limit applies (%d)" % Engine.max_fps)

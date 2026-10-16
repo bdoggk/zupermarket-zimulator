@@ -8,7 +8,9 @@ extends Node2D
 ##
 ## There are different kinds of shoppers (Brand.SHOPPERS): slow, fast,
 ## patient, picky about prices, buying lots... In the zombie game some of
-## them drip blood on the floor as they shamble around.
+## them drip blood on the floor as they shamble around. A kind with a
+## "sound" makes it when it walks in, now and then while shopping, and when
+## it storms out (you hear it louder the closer you are).
 
 enum State { ENTERING, ARRIVING, SHOPPING, PICKING, WAIT_FOR_LINE, TO_LINE, IN_LINE, LEAVING, WALKING_AWAY, EXITING }
 
@@ -19,6 +21,9 @@ const BROWSE_RADIUS := 3  # how far they wander while waiting for room in line
 const UNSTICK_AFTER := 4.0  # standing still this long when they should be walking: find a new way
 const DRIP_MIN := 10.0  # seconds between drips
 const DRIP_MAX := 22.0
+const GROWL_MIN := 14.0  # seconds between growls while shopping
+const GROWL_MAX := 30.0
+const GROWL_GAP := 2.5  # no two shoppers growl closer together than this
 const LOOKS := [
 	preload("res://assets/sprites/customer_0.png"),
 	preload("res://assets/sprites/customer_1.png"),
@@ -49,6 +54,9 @@ var _still := 0.0  # seconds without moving
 var _last_pos := Vector2.INF
 var _wanted := ""  # product shown in the thought bubble
 var _walk_anim := 0.0
+var voice: AudioStreamPlayer2D  # kinds with a "sound" (see growl)
+var _growl_timer := 0.0
+static var _last_growl := -1000.0  # when anyone last growled (seconds)
 
 @onready var sprite: Sprite2D = $Sprite
 
@@ -76,6 +84,15 @@ func _ready() -> void:
 	modulate.a = 0.0
 	leaky = Brand.SPILLS and randf() < float(kind.get("leaky", 0.35))
 	drip_timer = randf_range(DRIP_MIN * 0.3, DRIP_MAX)
+	if kind.get("sound") is AudioStream:
+		voice = AudioStreamPlayer2D.new()
+		voice.stream = kind.sound
+		voice.pitch_scale = randf_range(0.9, 1.1)  # every one sounds a bit different
+		voice.max_distance = 900.0
+		voice.attenuation = 1.5
+		voice.position = Vector2(0, -20)
+		add_child(voice)
+		_growl_timer = randf_range(GROWL_MIN * 0.5, GROWL_MAX)
 	if state == State.ARRIVING and not _go_to(store.door_cell):
 		state = State.ENTERING
 
@@ -91,6 +108,7 @@ func _process(delta: float) -> void:
 			if not Game.is_open:
 				turn_back()  # it closed before they got there
 			elif _walk(delta):
+				growl()  # here I am
 				_next_item()
 		State.SHOPPING, State.LEAVING, State.WALKING_AWAY:
 			if _walk(delta):
@@ -122,6 +140,11 @@ func _process(delta: float) -> void:
 				queue_free()
 	if leaky and not path.is_empty():
 		_drip(delta)
+	if voice and state in [State.SHOPPING, State.PICKING, State.WAIT_FOR_LINE, State.TO_LINE, State.IN_LINE]:
+		_growl_timer -= delta
+		if _growl_timer <= 0.0:
+			_growl_timer = randf_range(GROWL_MIN, GROWL_MAX)
+			growl()
 	_watch_for_stuck(delta)
 	_animate(delta)
 	queue_redraw()
@@ -340,11 +363,25 @@ func _tick_patience(delta: float) -> void:
 	if patience <= 0.0:
 		_think(Brand.SAY.walkout)
 		Settings.vibrate(0.5, 0.15)
+		growl(true)
 		Game.record_walkout()
 		if is_instance_valid(register):
 			register.leave_line(self)
 		basket.clear()
 		_leave()
+
+
+## Makes this shopper's sound, if it has one (not too often: if another
+## shopper just did, it waits for next time unless `always`).
+func growl(always := false) -> bool:
+	if voice == null or voice.playing:
+		return false
+	var now := Time.get_ticks_msec() / 1000.0
+	if not always and now - _last_growl < GROWL_GAP:
+		return false
+	_last_growl = now
+	voice.play()
+	return true
 
 
 func _leave() -> void:

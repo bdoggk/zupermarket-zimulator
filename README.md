@@ -35,6 +35,13 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.8.6
+
+- **Sound!** Brutes (the big zombies) growl when they shamble in, now and then while
+  they shop, and when they storm out. You hear them louder the closer you are.
+- **Sound** slider in Options (drag it, or select it and press left/right). You hear a
+  growl at the new volume when you let go.
+
 ## What's new in 0.8.5
 
 - No more Godot logo when the game starts: it shows the Zupermarket Zimulator title
@@ -169,6 +176,7 @@ It has Resume, Save Game, Options, Save & Main Menu, and Save & Quit (PC).
 | Frame rate | A cap on the frames per second: 30, 60, 90, 120, 144, 165, 240 or **No limit** (the default on PC; phones default to 60 to save battery) |
 | VSync | On: the frame rate matches your screen's refresh rate and the picture never tears. Turn it off for the most FPS |
 | Show FPS | A frame counter next to the clock |
+| Sound | How loud the game is, from off to 100% (a slider) |
 | Graphics | **Low**: simple lighting (older phones, battery life). **Medium**: store lights with darker corners. **High**: adds a flickering light tube and floating dust |
 | Vibration | Phone vibration and controller rumble. It turns on when a phone or controller is available, and you feel it when you make a sale, stock a shelf, scan, mop, level up, or when a zombie storms out |
 
@@ -291,7 +299,7 @@ then on.
 | Crawler | Drags itself along slowly but waits patiently. Drips a lot |
 | Runner | Fast, impatient. Shows up from store level 2 |
 | Skeleton | Comes over from Bone Mart's side of town. Fussy about prices. Some just wander around town |
-| Brute | Big and slow, buys a cart full (4-6 different things). Level 3 |
+| Brute | Big and slow, buys a cart full (4-6 different things). Growls. Level 3 |
 | Rich zombie | Doesn't mind paying 50% over market. Level 3 |
 
 ### Staff
@@ -487,6 +495,7 @@ scripts/
   menu/menu.gd         Main menu: Continue / New Game / Load Game / Options / Quit
   menu/menu_backdrop.gd  The store drawn behind the main menu (from your latest save)
 assets/sprites/        All the pixel art
+assets/sounds/         Sounds (.ogg). A shopper kind's "sound" in brand.gd is what it growls
 tools/make_sprites.py  The Python script that draws the placeholder art (for both games)
 tests/                 Automated checks (not included in exports, safe to ignore)
 Update Mac App.command Rebuilds the Mac app and installs it (see "Mac app")
@@ -655,5 +664,5 @@ The project uses the Compatibility renderer, so it runs on older phones too.
 - More upgrades: a faster checkout scanner, bigger delivery trucks
 - More staff: a security guard, a manager who hires for you
 - Real walk animations (4 directions) with `AnimatedSprite2D`
-- Sound: register beeps, scanner beep, door chime, music
+- More sound: register beeps, scanner beep, door chime, music
 - Humans breaking in (lock the doors!), power outages, a blood bank delivery truck

@@ -162,6 +162,10 @@ func _ready() -> void:
 	hud._open_options()
 	await _frames(4)
 	await _shot("options")
+	hud.options.vol_slider.grab_focus()
+	hud.options.settings_scroll.scroll_vertical = 10000
+	await _frames(4)
+	await _shot("options_sound")
 	hud.options.show_controls()
 	await _frames(4)
 	await _shot("controls")

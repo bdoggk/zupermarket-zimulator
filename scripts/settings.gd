@@ -11,6 +11,7 @@ extends Node
 ##   Graphics      Low / Medium / High (see GRAPHICS_INFO)
 ##   VSync         on/off (on: the frame rate matches the screen)
 ##   Show FPS      a frame counter in the corner
+##   Sound         how loud the game is (Off to 100%)
 ##   Vibration     phone and controller rumble, when available
 
 signal changed
@@ -47,6 +48,7 @@ var fps_limit := 0
 var graphics := Graphics.HIGH
 var vsync := true
 var show_fps := false
+var volume := 0.75  # 0-1, for the whole game
 var vibration := true
 
 var _applying := false  # we're resizing the window ourselves
@@ -103,6 +105,10 @@ static func fps_name(limit: int) -> String:
 	return "No limit" if limit <= 0 else "%d FPS" % limit
 
 
+static func volume_name(v: float) -> String:
+	return "Off" if v <= 0.0 else "%d%%" % roundi(v * 100.0)
+
+
 ## Phone vibration, or a connected controller that can rumble.
 func can_vibrate() -> bool:
 	return is_mobile() or not Input.get_connected_joypads().is_empty()
@@ -149,6 +155,8 @@ func apply() -> void:
 		_applying = false
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = fps_limit
+	AudioServer.set_bus_mute(0, volume <= 0.0)
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(volume, 0.001)))
 	changed.emit()
 
 
@@ -206,6 +214,11 @@ func set_vsync(on: bool) -> void:
 	_save_and_apply()
 
 
+func set_volume(v: float) -> void:
+	volume = clampf(v, 0.0, 1.0)
+	_save_and_apply()
+
+
 func set_show_fps(on: bool) -> void:
 	show_fps = on
 	save_settings()
@@ -245,6 +258,7 @@ func save_settings() -> void:
 	cfg.set_value("display", "graphics", graphics)
 	cfg.set_value("display", "vsync", vsync)
 	cfg.set_value("display", "show_fps", show_fps)
+	cfg.set_value("audio", "volume", volume)
 	cfg.set_value("controls", "vibration", vibration)
 	cfg.save(PATH)
 
@@ -264,4 +278,5 @@ func load_settings() -> void:
 	graphics = clampi(int(cfg.get_value("display", "graphics", graphics)), 0, 2) as Graphics
 	vsync = bool(cfg.get_value("display", "vsync", vsync))
 	show_fps = bool(cfg.get_value("display", "show_fps", show_fps))
+	volume = clampf(float(cfg.get_value("audio", "volume", volume)), 0.0, 1.0)
 	vibration = bool(cfg.get_value("controls", "vibration", vibration))

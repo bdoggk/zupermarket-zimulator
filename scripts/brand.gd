@@ -162,6 +162,9 @@ const SHOPPERS := {
 		"name": "Brute", "weight": 1.5, "level": 3, "speed": 0.8, "patience": 1.2,
 		"items": [4, 6], "qty": [1, 3], "tolerance": 1.0, "leaky": 0.5, "rival": 0.0,
 		"looks": [preload("res://assets/sprites/shopper_brute.png")],
+		# A recorded growl: when a brute shambles in, now and then while
+		# shopping, and when one storms out.
+		"sound": preload("res://assets/sounds/brute_growl.ogg"),
 	},
 	"rich": {
 		"name": "Rich Zombie", "weight": 1.2, "level": 3, "speed": 0.9, "patience": 0.8,
