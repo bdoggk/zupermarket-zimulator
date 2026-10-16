@@ -45,6 +45,8 @@ var scroll: ScrollContainer
 var body: VBoxContainer
 var _updaters: Array[Callable] = []  # refresh numbers every frame
 var price_fields: Array[LineEdit] = []  # Stock & Prices: type a price in
+var _rebuild_later := false  # something changed while you were typing a price
+var window_close: Button  # the app window's X
 
 
 func _ready() -> void:
@@ -234,6 +236,7 @@ func _build_window() -> void:
 	window_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(window_title)
 	var x := UI.button("X", go_home, Vector2(44, 36))
+	window_close = x
 	x.tooltip_text = "Back to the desktop"
 	var x_style := StyleBoxFlat.new()
 	x_style.bg_color = Color(0.7, 0.22, 0.2)
@@ -259,6 +262,7 @@ func _build_window() -> void:
 	scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true  # (a controller moving down the list)
 	content.add_child(scroll)
 	body = VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -371,6 +375,8 @@ func show_tab(t: Tab) -> void:
 	window_title.text = TAB_NAMES[t]
 	window_icon.texture = desktop_icons[t].icon
 	window.visible = true
+	UI.pad_focus(auto_button)  # (a controller may have been plugged in since)
+	UI.pad_focus(match_button)
 	_rebuild()
 	scroll.scroll_vertical = 0
 
@@ -412,15 +418,59 @@ func _process(_delta: float) -> void:
 
 func _rebuild_if_open() -> void:
 	if visible and window.visible:
+		if _typing_price():
+			_rebuild_later = true  # not out from under you mid-price
+			return
 		_rebuild()
 	elif visible:
 		_refresh_note()
 
 
+## The buttons in the app, top to bottom (a controller can pick these).
+func _body_buttons() -> Array[Control]:
+	var out: Array[Control] = []
+	var stack: Array[Node] = [body]
+	while not stack.is_empty():
+		var n: Node = stack.pop_front()
+		for c in n.get_children():
+			if c is BaseButton and (c as Control).focus_mode == Control.FOCUS_ALL and not c.is_queued_for_deletion():
+				out.append(c)
+			stack.append(c)
+	return out
+
+
+## After the app was rebuilt: select button `i` again (or the first one).
+func _refocus(i: int) -> void:
+	if not visible or not window.visible:
+		return
+	var buttons := _body_buttons()
+	if buttons.is_empty():
+		var f := UI.first_focusable(window)
+		if f == null:  # nothing to press in this app right now: the X, then
+			UI.pad_focus(window_close)
+			f = window_close
+		f.grab_focus()
+		return
+	buttons[clampi(i, 0, buttons.size() - 1)].grab_focus()
+
+
+## You're typing a price into Stock & Prices right now.
+func _typing_price() -> bool:
+	var f := get_viewport().gui_get_focus_owner()
+	return f is LineEdit and f in price_fields
+
+
 func _rebuild() -> void:
+	# With a controller, keep the selection where it was in the list.
+	var was := -1
+	var had := get_viewport().gui_get_focus_owner()
+	if had and body.is_ancestor_of(had):
+		was = _body_buttons().find(had)
 	UI.clear(body)
 	_updaters.clear()
 	price_fields.clear()
+	if UI.has_pad() and visible:
+		_refocus.call_deferred(was)
 	news_label.text = "NEWS: " + Game.market.news if Game.market.news != "" else "No big news today."
 	match_button.visible = tab == Tab.STOCK
 	auto_button.visible = tab == Tab.STOCK
@@ -450,6 +500,7 @@ func _grid(columns: int) -> GridContainer:
 func _row_button(text: String, on_press: Callable, min_size := Vector2(52, 52)) -> Button:
 	var b := UI.button(text, on_press, min_size)
 	b.mouse_filter = Control.MOUSE_FILTER_PASS
+	UI.pad_focus(b)
 	return b
 
 
@@ -477,6 +528,9 @@ func _apply_typed_price(id: String, f: LineEdit) -> void:
 	if v >= 0.0:
 		Game.set_price(id, v)
 	f.text = "$%.2f" % Game.prices[id]  # tidied up (or put back, if it wasn't a price)
+	if _rebuild_later:
+		_rebuild_later = false
+		_rebuild_if_open.call_deferred()
 
 
 ## Clicking anywhere else finishes typing a price.

@@ -63,6 +63,7 @@ var _bagged := false  # paid: walking out with a shopping bag
 var _walk_anim := 0.0
 var voice: AudioStreamPlayer2D  # kinds with a "sound" (see growl)
 var _growl_timer := 0.0
+static var items_taken := 0  # by every shopper since the game started (tests use it)
 static var _last_growl := -1000.0  # when anyone last growled (seconds)
 
 @onready var sprite: Sprite2D = $Sprite
@@ -360,6 +361,7 @@ func _pick_from_shelf() -> void:
 			for _i in want.qty:
 				if shelf.take_one():
 					basket.append({"id": want.id, "price": Game.prices[want.id]})
+					items_taken += 1
 					took += 1
 			if took > 0:
 				Game.show_item_popup(position + Vector2(0, _top - 6.0), want.id, took)

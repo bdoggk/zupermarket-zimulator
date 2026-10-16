@@ -24,7 +24,7 @@ static func button(text: String, on_press: Callable, min_size := Vector2.ZERO) -
 ## screens with no controller (like a phone). Handhelds with built-in
 ## controls (e.g. an AYN Thor) count as having a controller.
 static func wants_focus() -> bool:
-	return not Game.touch_ui or not Input.get_connected_joypads().is_empty()
+	return not Game.touch_ui or has_pad()
 
 
 ## True for a controller button press or stick push, used to put focus on a
@@ -39,12 +39,46 @@ static func is_pad_input(event: InputEvent) -> bool:
 static func menu_button(text: String, on_press: Callable, min_size := Vector2(360, 60)) -> Button:
 	var b := button(text, on_press, min_size)
 	b.focus_mode = Control.FOCUS_ALL
+	b.add_theme_stylebox_override("focus", focus_style())
+	return b
+
+
+## The yellow outline around the selected button.
+static func focus_style() -> StyleBoxFlat:
 	var focus := StyleBoxFlat.new()
 	focus.draw_center = false
 	focus.border_color = WARN
 	focus.set_border_width_all(3)
-	b.add_theme_stylebox_override("focus", focus)
-	return b
+	return focus
+
+
+## A controller is plugged in (or built in, like on a handheld).
+static func has_pad() -> bool:
+	return pretend_pad or not Input.get_connected_joypads().is_empty()
+
+
+static var pretend_pad := false  # tests: act as if a controller was plugged in
+
+
+## With a controller, `c` can be picked with the d-pad and A (and shows the
+## yellow outline). Without one it stays out of the way of the keyboard, so
+## Space and E keep going to the game.
+static func pad_focus(c: Control) -> void:
+	if has_pad():
+		c.focus_mode = Control.FOCUS_ALL
+		c.add_theme_stylebox_override("focus", focus_style())
+
+
+## The first thing in `root` a controller can select (or null).
+static func first_focusable(root: Node) -> Control:
+	for c in root.get_children():
+		if c is Control and (c as Control).visible:
+			if c is BaseButton and (c as Control).focus_mode == Control.FOCUS_ALL and not (c as BaseButton).disabled:
+				return c
+			var inner := first_focusable(c)
+			if inner:
+				return inner
+	return null
 
 
 ## A dark panel with a title, used by the menus.

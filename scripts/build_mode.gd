@@ -15,6 +15,10 @@ extends Node2D
 ##           Right-click or Esc cancels. Drag or WASD to look around.
 ##   Touch:  Tap a tile to preview, tap it again to confirm.
 ##           Drag to look around.
+##   Controller: the tile in the middle of the screen is the cursor. Left
+##           stick looks around, d-pad left/right (or LB) picks what to build
+##           or Move / Rotate / Sell / Expand, A places (or picks up, sells...),
+##           RB turns it, B cancels, Y leaves build mode.
 
 signal changed  # tool, selection or status text changed (the HUD listens)
 
@@ -47,6 +51,7 @@ var _pressed := false
 var _dragging := false
 var _press_pos := Vector2.ZERO
 var _hover_pos := Vector2.INF  # where the mouse is in the world (for R with nothing in hand)
+var _pad_cell := Store.NO_CELL  # with a controller: the tile in the middle of the screen
 
 @onready var store: Store = get_parent()
 
@@ -109,7 +114,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 
-	if event.is_action_pressed("build") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
+	if event is InputEventJoypadButton and event.pressed and _pad_button(event.button_index):
+		pass  # a controller picked a tool or used the tile in the middle of the screen
+	elif event.is_action_pressed("build") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
 		_back()
 	elif event.is_action_pressed("rotate") and not event.is_echo():
 		rotate_pressed()
@@ -158,6 +165,75 @@ func _process(delta: float) -> void:
 	var v := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if v != Vector2.ZERO:
 		_pan(v * PAN_SPEED * delta)
+	if UI.has_pad():  # the middle of the screen is the cursor
+		var c := Iso.world_to_cell(_screen_center())
+		if c != _pad_cell:
+			_pad_cell = c
+			_hover_pos = _screen_center()
+			_hover(_hover_pos)
+
+
+# ---------------------------------------------------------------- controller
+
+func _screen_center() -> Vector2:
+	return _to_world(get_viewport().get_visible_rect().size / 2.0)
+
+
+## A controller button in build mode. Returns true if it did something.
+func _pad_button(b: JoyButton) -> bool:
+	match b:
+		JOY_BUTTON_DPAD_RIGHT:
+			_pad_cycle(1)
+		JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_LEFT_SHOULDER:
+			_pad_cycle(-1)
+		JOY_BUTTON_A:
+			tap(_screen_center(), true)
+		_:
+			return false
+	return true
+
+
+## What the d-pad goes through: the furniture, then the tools.
+func _pad_tools() -> Array:
+	var list: Array = Game.FURNITURE.keys()
+	list.append_array(["move", "rotate", "sell"])
+	if store.town and not Brand.EXPANSIONS.is_empty():
+		list.append("expand")
+	return list
+
+
+func _pad_current() -> String:
+	match tool:
+		Tool.PLACE:
+			return place_id
+		Tool.MOVE:
+			return "move"
+		Tool.ROTATE:
+			return "rotate"
+		Tool.SELL:
+			return "sell"
+		Tool.EXPAND:
+			return "expand"
+	return ""
+
+
+## Picks the next (or previous) thing to build or tool.
+func _pad_cycle(step: int) -> void:
+	var list := _pad_tools()
+	var i := list.find(_pad_current())
+	i = posmod(i + step, list.size()) if i >= 0 else (0 if step > 0 else list.size() - 1)
+	match list[i]:
+		"move":
+			select_tool(Tool.MOVE)
+		"rotate":
+			select_tool(Tool.ROTATE)
+		"sell":
+			select_tool(Tool.SELL)
+		"expand":
+			select_tool(Tool.EXPAND)
+		var id:
+			select_place(id)
+	_pad_cell = Store.NO_CELL  # preview at the middle of the screen again
 
 
 func _notification(what: int) -> void:
@@ -517,11 +593,15 @@ func _placing_register() -> bool:
 
 
 func _refresh() -> void:
-	var click := "tap again" if Game.touch_ui else "click"
-	var turn_how := "Rotate turns it" if Game.touch_ui else "R turns it"
+	var pad := UI.has_pad() and not Game.touch_ui
+	var click := "press A" if pad else ("tap again" if Game.touch_ui else "click")
+	var turn_how := "RB turns it" if pad else ("Rotate turns it" if Game.touch_ui else "R turns it")
 	match tool:
 		Tool.NONE:
-			status = "Buy furniture, or pick Move / Rotate / Sell. Drag to look around."
+			if pad:
+				status = "D-pad left/right: pick something to buy, or Move / Rotate / Sell. Left stick: look around. B: done."
+			else:
+				status = "Buy furniture, or pick Move / Rotate / Sell. Drag to look around."
 		Tool.PLACE:
 			var f: Dictionary = Game.FURNITURE[place_id]
 			if cursor == Store.NO_CELL:
@@ -534,7 +614,7 @@ func _refresh() -> void:
 				status = "%s ($%d): %s to buy. %s." % [f.name, int(f.cost), click, turn_how]
 		Tool.MOVE:
 			if moving == null:
-				status = "Pick up anything to move it: furniture, registers, the computer, the sign, the delivery zone..."
+				status = "Pick up anything to move it: furniture, registers, the computer, the sign, the delivery zone...%s" % (" (look at it and press A)" if pad else "")
 			elif cursor_error != "":
 				status = "Can't move the %s here: %s" % [moving.display_name(), cursor_error]
 			elif moving is Register:
@@ -548,10 +628,12 @@ func _refresh() -> void:
 				var refund: float = Game.FURNITURE[selected.furniture_id].cost * Game.SELL_REFUND
 				status = "Sell this %s for $%d? %s to sell." % [Game.FURNITURE[selected.furniture_id].name.to_lower(), int(refund), click.capitalize()]
 			else:
-				status = "Pick something to sell (you get half back). The first register can't be sold."
+				status = "Pick something to sell (you get half back). The first register can't be sold.%s" % (" (look at it and press A)" if pad else "")
 		Tool.ROTATE:
 			if selected and not Game.touch_ui:
-				status = "Click to turn the %s a quarter turn.%s" % [selected.display_name(), " Its line turns with it." if selected is Register else ""]
+				status = "%s to turn the %s a quarter turn.%s" % [click.capitalize(), selected.display_name(), " Its line turns with it." if selected is Register else ""]
+			elif pad:
+				status = "Look at something and press A to turn it a quarter turn. A register's line turns with it."
 			else:
 				status = "%s anything to turn it a quarter turn. A register's line turns with it." % ("Tap" if Game.touch_ui else "Click")
 		Tool.EXPAND:
@@ -562,9 +644,9 @@ func _refresh() -> void:
 			elif problem != "":
 				status = "Lot next door ($%d): %s." % [int(e.cost), problem]
 			elif _expand_armed:
-				status = "Buy the lot next door for $%d? Tap it again to buy." % int(e.cost)
+				status = "Buy the lot next door for $%d? %s to buy." % [int(e.cost), "Press A again" if pad else "Tap it again"]
 			else:
-				status = "Lot next door: $%d. It makes the store %d tiles wider. %s the lot to buy it." % [int(e.cost), Store.LOT_WIDTH, "Tap" if Game.touch_ui else "Click"]
+				status = "Lot next door: $%d. It makes the store %d tiles wider. %s the lot to buy it." % [int(e.cost), Store.LOT_WIDTH, "Look at it and press A on" if pad else ("Tap" if Game.touch_ui else "Click")]
 	queue_redraw()
 	_grid.queue_redraw()
 	changed.emit()
@@ -622,6 +704,8 @@ func _draw_grid() -> void:
 		var color := OK_COLOR if cursor_error == "" else BAD_COLOR
 		_diamond(cursor, Color(color, 0.3), true)
 		_diamond(cursor, color, false)
+	elif UI.has_pad() and _pad_cell != Store.NO_CELL:
+		_diamond(_pad_cell, Color(1, 1, 1, 0.7), false)  # the controller's cursor
 
 
 func _diamond(cell: Vector2i, color: Color, filled: bool) -> void:

@@ -24,9 +24,10 @@ over the old one and keep your saves.
 
 **Controls on a handheld:** left stick / d-pad to move, **LT** to sprint, **A** to use,
 **X** to scan a shelf, **Y** for build mode, **RB** to turn things in build mode,
-**Start** to pause (Options > Controls lists everything). Menus work with the d-pad and A/B,
-and you can tap the touchscreen for anything too (the store computer and build mode
-are easiest by touch).
+**Start** to pause (Options > Controls lists everything). Menus (the store computer
+too) work with the d-pad, A and B; in build mode the middle of the screen is the
+cursor (d-pad picks what to buy, A places it). You can tap the touchscreen for anything
+too.
 
 **Windows:** it's a single .exe, no installer. Windows may show "Windows protected your
 PC" because the game isn't code-signed: click **More info → Run anyway**.
@@ -34,6 +35,26 @@ PC" because the game isn't code-signed: click **More info → Run anyway**.
 It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The two
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
+
+## What's new in 0.8.8
+
+A bug hunt: hours of automated play (chaos play over more than 100 game days, a staff
+soak test, random-layout walking, saves from 0.8.6 loaded into this version) plus a
+pass over every screen size and input. Fixed:
+
+- **Controllers:** A now presses the selected button and B goes back in every menu
+  (before, only the touchscreen or a keyboard worked there), and A starts the next day.
+  The **store computer** works with the d-pad: pick an app, move down its list (it
+  scrolls along) and press A to order, license, hire or buy. **Build mode** works with
+  a controller too: the tile in the middle of the screen is the cursor, d-pad left/right
+  (or LB) picks what to buy or Move / Rotate / Sell / Expand, A places, RB turns, B
+  cancels. B no longer opens the pause menu (Start does).
+- Typing a price isn't interrupted when the market changes while you type.
+- Boxes in a save whose spot is taken now go to the nearest free spot instead of
+  vanishing.
+- The day summary no longer has messages showing through it.
+- The first-day tip about the town mentions the market stalls; the Controls list
+  mentions them too.
 
 ## What's new in 0.8.7
 
@@ -509,7 +530,11 @@ computer. A scanner icon appears next to your money once you own it.
 | Close / cancel | Esc | Back button |
 
 A gamepad works too: left stick to move, LT or L3 (sprint), A (use), X (scan), Y
-(build), RB (turn things in build mode), Start (pause).
+(build), Start (pause), B (back). Every menu works with the d-pad, A and B, the store
+computer and its apps included. In build mode the tile in the middle of the screen is
+the cursor: left stick to look around, d-pad left/right (or LB) to pick what to buy or
+Move / Rotate / Sell / Expand, A to place it (or pick up, sell...), RB to turn it, B to
+cancel.
 
 **Forgot a key?** Pause (Esc) > Options > **Controls** lists them all in the game.
 Menus can be navigated with the d-pad, arrow keys, A/Enter and B/Esc.
@@ -670,9 +695,23 @@ xvfb-run -s "-screen 0 1920x1080x24" godot --path . --rendering-driver opengl3 r
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn  # build mode view
 DAYS=5 godot --headless --path . --fixed-fps 60 res://tests/bot_test.tscn   # a bot plays 5 days
 STAFF=1 SHUFFLE=1 godot --headless --path . --fixed-fps 60 res://tests/stuck_test.tscn  # busy-store stress test
+godot --headless --path . --fixed-fps 60 res://tests/shops_test.tscn   # market stalls, brews, witches and vampires
+godot --headless --path . --fixed-fps 60 res://tests/pad_test.tscn     # menus, the computer and build mode with a controller
+SEED=1 godot --headless --path . --fixed-fps 60 res://tests/walk_test.tscn  # walking between random spots in random layouts
+SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below)
 ```
 
-The flow test backs up your real saves and settings first and puts them back afterwards.
+The flow and chaos tests back up your real saves and settings first and put them back
+afterwards.
+
+**Chaos play** (`tests/chaos_test.gd`) plays for hours of game time doing random things a
+player could do (walking, using things, the computer, build mode, the market stalls,
+clicking and pressing keys anywhere, saving and loading, settings, letting days go by)
+and checks every few frames that the game still makes sense: no script errors, nothing
+in the wrong place, no stock appearing or vanishing, nobody stuck, no day that never
+ends, no deliveries that never arrive, no growing pile of nodes. `MODE=staff` builds a
+big store with every kind of staff and just watches them run it. When running two at
+once, give each its own `XDG_DATA_HOME` so they don't share save files.
 
 ## Two games
 

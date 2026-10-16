@@ -447,10 +447,15 @@ func _load_saved(d: Dictionary) -> void:
 			for v in f.get("boxes", []):
 				if v is Array and v.size() >= 2 and Game.PRODUCTS.has(str(v[0])):
 					obj.store_box(str(v[0]), maxi(1, int(v[1])))
+	reachable = _flood()  # (for finding a spot for boxes that don't fit where they were)
 	for b: Dictionary in d.get("boxes", []):
 		var c := _to_cell(b.get("cell"))
 		var product := str(b.get("product", ""))
-		if Game.PRODUCTS.has(product) and can_drop_at(c) and not objects.has(c):
+		if not Game.PRODUCTS.has(product):
+			continue
+		if not can_drop_at(c) or objects.has(c):
+			c = nearest_drop_cell(c)  # something's there now: the closest free spot
+		if c != NO_CELL:
 			_create_box(c, product, maxi(1, int(b.get("count", 1))))
 	for v in d.get("spills", []):
 		if v is Array and v.size() >= 2:

@@ -106,7 +106,10 @@ func _text(step: String) -> String:
 				return "Tap Build to buy more shelves, meat coolers, storage racks and more. You can move things around there too."
 			return "Press %s to go into Build mode: buy more shelves, meat coolers, storage racks and more, and move things around." % ("Y" if not Input.get_connected_joypads().is_empty() else "B")
 		"town":
-			return "Some %s shop at %s down the street. Walk out the front door to check its prices, then beat them!" % [Brand.SAY.shoppers, Brand.RIVAL.name]
+			var tip := "Some %s shop at %s down the street. Walk out the front door to check its prices, then beat them!" % [Brand.SAY.shoppers, Brand.RIVAL.name]
+			if not Brand.SHOPS.is_empty():
+				tip += " Across the road, down the dirt path, a witch and a vampire sell potions and charms that help for a minute or two."
+			return tip
 	return ""
 
 

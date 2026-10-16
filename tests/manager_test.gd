@@ -159,9 +159,9 @@ func _ready() -> void:
 	var looked := 0
 	for i in 900:
 		await get_tree().physics_frame
-		if boss.job == Staff.Job.CHECKING and boss._last_job != Staff.Job.CHECKING:
+		if boss.job in [Staff.Job.TO_CHECK, Staff.Job.CHECKING]:
 			looked += 1
-	check(looked > 0 or boss.job in [Staff.Job.TO_CHECK, Staff.Job.CHECKING], "the manager walked around checking things")
+	check(looked > 0, "the manager walked around checking things")
 	check(is_equal_approx(Game.staff_entry(boss.id).xp, boss_xp), "with nothing to fix or order, that earns no XP (%.0f -> %.0f)" % [boss_xp, Game.staff_entry(boss.id).xp])
 	stocker._give_up()
 	stocker.job = Staff.Job.TO_BOX

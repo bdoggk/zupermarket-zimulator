@@ -2,13 +2,23 @@ extends Node
 # Sets up a later-game store (two registers, staff, coolers, decorations,
 # and in the zombie game some blood and the mop) and saves screenshots.
 #   SHOT_DIR=/some/dir godot --path . res://tests/showcase.tscn
-# TOUCH=1 shows the phone / handheld layout.
+# TOUCH=1 shows the phone / handheld layout. WINDOW=960x540 sets the window size.
+# PAD=1 acts as if a controller was plugged in.
 
 var shot_dir := OS.get_environment("SHOT_DIR")
 
 
 func _ready() -> void:
 	seed(99)
+	var size := OS.get_environment("WINDOW")  # e.g. 960x540: a window that size (not saved)
+	if size != "":
+		var wh := size.split("x")
+		Settings.display = Settings.Display.WINDOWED
+		Settings.resolution = Vector2i(int(wh[0]), int(wh[1]))
+		Settings.apply()
+		await get_tree().process_frame
+		await get_tree().process_frame
+	UI.pretend_pad = OS.get_environment("PAD") == "1"  # as if a controller was plugged in
 	var main: Node = preload("res://scenes/main.tscn").instantiate()
 	var hud: Node = main.get_node("HUD")
 	hud.force_touch_ui = OS.get_environment("TOUCH") == "1"

@@ -9,6 +9,8 @@ static func rows() -> Array:
 	var does := "Whatever is in front of you: boxes, shelves, registers, the computer, the OPEN sign"
 	if Brand.SPILLS:
 		does += ", the mop"
+	if not Brand.SHOPS.is_empty():
+		does += ", the market stalls"
 	return [
 		["Move", "WASD or arrow keys, or click a spot", "Left stick", "Tap a spot"],
 		["Sprint", "Hold Shift", "Hold LT, or click the left stick", "RUN button"],
@@ -17,7 +19,8 @@ static func rows() -> Array:
 		["Next day (end of the day)", "Space", "A", "Tap the bar at the bottom"],
 		["Build mode", "B", "Y", "Build button"],
 		["Turn something (build mode)", "R", "RB", "Rotate button, then tap it"],
-		["Place / confirm (build mode)", "Click", "", "Tap twice"],
+		["Pick what to buy or a tool (build mode)", "Click its button", "D-pad left / right, LB", "Tap its button"],
+		["Place / confirm (build mode)", "Click", "A (on the tile in the middle of the screen)", "Tap twice"],
 		["Cancel (build mode)", "Right-click or Esc", "B", "Back button"],
 		["Look around (build mode)", "Drag, or WASD", "Left stick", "Drag"],
 		["Zoom", "Mouse wheel, or the - / + buttons", "", "- / + buttons"],

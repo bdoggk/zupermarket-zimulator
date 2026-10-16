@@ -8,6 +8,7 @@ var title: Label
 var grid: GridContainer
 var footer_label: Label
 var buy_button: Button
+var close_button: Button
 var _confirming := false
 var _updaters: Array[Callable] = []
 
@@ -41,7 +42,8 @@ func _ready() -> void:
 	buy_button = UI.button("", _on_buy, Vector2(0, 52))
 	buy_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(buy_button)
-	row.add_child(UI.button("Close", close, Vector2(130, 52)))
+	close_button = UI.button("Close", close, Vector2(130, 52))
+	row.add_child(close_button)
 	Game.rival_requested.connect(open)
 	Game.rival_bought.connect(func(): if visible: _rebuild())
 
@@ -51,6 +53,12 @@ func open() -> void:
 	_confirming = false
 	Game.scout_rival(Game.unlocked_ids())
 	_rebuild()
+	if UI.has_pad():  # pick Buy out (or Close) with the d-pad and A
+		for u in _updaters:
+			u.call()  # (is Buy out possible?)
+		UI.pad_focus(buy_button)
+		UI.pad_focus(close_button)
+		(buy_button if buy_button.visible and not buy_button.disabled else close_button).grab_focus.call_deferred()
 
 
 func close() -> void:

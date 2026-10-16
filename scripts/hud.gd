@@ -167,7 +167,7 @@ func _process(delta: float) -> void:
 	var building: bool = Game.build_mode.active
 	var paused := pause_menu.visible or options.visible
 	dimmer.visible = paused
-	message_box.visible = not paused
+	message_box.visible = not paused and not summary_panel.visible  # (it would show through the summary)
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
 	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or summary_panel.visible
@@ -243,7 +243,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if Game.build_mode.active:
 		return  # build mode handles Esc itself
 	get_viewport().set_input_as_handled()
-	_back()
+	_back(event.is_action_pressed("pause"))  # B on a controller closes things; only Start/Esc pauses
 
 
 func _notification(what: int) -> void:
@@ -258,8 +258,8 @@ func _notification(what: int) -> void:
 				open_pause()
 
 
-## Esc / back: close the top thing that's open, or pause the game.
-func _back() -> void:
+## Esc / back: close the top thing that's open, or (`or_pause`) pause the game.
+func _back(or_pause := true) -> void:
 	if levelup_panel.visible:
 		levelup_panel.visible = false
 	elif options.visible:
@@ -272,7 +272,7 @@ func _back() -> void:
 		rival_panel.close()
 	elif shop_panel.visible:
 		shop_panel.close()
-	else:
+	elif or_pause:
 		open_pause()
 
 
