@@ -67,13 +67,14 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	var input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var typing := is_typing()
+	var input := Vector2.ZERO if typing else Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if is_busy() and input != Vector2.ZERO:
 		cancel_action()
 
-	sprinting = (run_toggle or Input.is_action_pressed("sprint")) and not is_busy() \
+	sprinting = (run_toggle or (Input.is_action_pressed("sprint") and not typing)) and not is_busy() \
 		and (input != Vector2.ZERO or not path.is_empty())
-	var speed := SPRINT_SPEED if sprinting else WALK_SPEED
+	var speed := (SPRINT_SPEED if sprinting else WALK_SPEED) * (Game.SWIFT_SPEED if Game.has_effect("swift") else 1.0)
 	if is_busy():
 		velocity = Vector2.ZERO
 		_tick_action(delta)
@@ -90,6 +91,13 @@ func _process(delta: float) -> void:
 	_animate(delta)
 	_update_focus()
 	queue_redraw()
+
+
+## Typing in a text box (a price on the computer): WASD and Shift are
+## letters, not walking.
+func is_typing() -> bool:
+	var f := get_viewport().gui_get_focus_owner()
+	return f is LineEdit or f is TextEdit
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -192,7 +200,7 @@ func _start_action(target: Interactable, duration: float, kind: Action) -> void:
 
 
 func _tick_action(delta: float) -> void:
-	action_time += delta
+	action_time += delta * (Game.QUICKHAND_SPEED if Game.has_effect("quickhand") else 1.0)
 	if action_time < action_duration:
 		return
 	var target := action_target

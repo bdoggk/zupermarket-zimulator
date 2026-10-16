@@ -155,6 +155,7 @@ func _run() -> void:
 	hud.open_pause()
 	await _frames(3)
 	check(get_tree().paused, "pause menu pauses the game")
+	var saved_xp := Game.xp  # 400, plus a little for the license (minus any blood)
 	await _shot("pause_menu")
 	hud.pause_menu._save()
 	await _frames(2)
@@ -202,7 +203,8 @@ func _run() -> void:
 	store = Game.store
 	check(Game.slot == 1, "loaded slot 2")
 	check(is_equal_approx(Game.money, spent_money), "money restored ($%.2f)" % Game.money)
-	check(Game.level == 3 and is_equal_approx(Game.xp, 400.0), "level and XP restored")
+	# (the blood left on the floor costs a hair of XP in the frames since loading)
+	check(Game.level == 3 and absf(Game.xp - saved_xp) < 0.5, "level and XP restored (%.2f, saved %.2f)" % [Game.xp, saved_xp])
 	check(Game.is_licensed(L1) and not Game.is_licensed(L3), "licenses restored")
 	check(Game.has_upgrade("scanner"), "upgrades restored")
 	var s2: Variant = store.objects.get(Vector2i(10, 5))
@@ -292,7 +294,15 @@ func _run() -> void:
 	await _frames(6)
 	Saves.load_game(0)
 	await _frames(10)
-	check(Game.day == 4 and not Game.opened and is_equal_approx(Game.minute, Game.OPEN_MINUTE), "loading a between-days save goes to the next morning, sign not flipped yet (day %d, opened %s, minute %.1f)" % [Game.day, Game.opened, Game.minute])
+	var night_hud: Node = get_tree().current_scene.get_node("HUD")
+	check(Game.day == 3 and Game.day_over and night_hud.day_over_bar.visible, "loading a between-days save waits at the end of the day (day %d): %s" % [Game.day, night_hud.day_over_bar.text])
+	night_hud._day_over_since = -10.0
+	var ev := InputEventAction.new()
+	ev.action = "ui_accept"
+	ev.pressed = true
+	get_viewport().push_input(ev)
+	await _frames(4)
+	check(Game.day == 4 and not Game.opened and is_equal_approx(Game.minute, Game.OPEN_MINUTE), "Space starts the next morning, sign not flipped yet (day %d, opened %s, minute %.1f)" % [Game.day, Game.opened, Game.minute])
 	Saves.quit_to_menu()
 	await _frames(6)
 	menu = get_tree().current_scene

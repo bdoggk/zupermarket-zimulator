@@ -98,7 +98,7 @@ func _text(step: String) -> String:
 		"mop":
 			return "Blood on the floor keeps shoppers away! Grab the mop from the yellow bucket, %s the puddles to mop them up, then put the mop back." % use
 		"order":
-			return "Shelves running low? %s the computer in the back and order more boxes in the Stock & Prices tab." % use_cap
+			return "Shelves running low? %s the computer in the back, open Stock & Prices on its desktop and order more boxes." % use_cap
 		"labels":
 			return "Want a shelf for something else? With empty hands, %s it to take its items off into a box, then %s the empty shelf again to peel off its label." % [use, use]
 		"build":

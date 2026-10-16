@@ -3,9 +3,10 @@ extends Node2D
 ## The barren town around the store, built from Brand.TOWN: the road and
 ## sidewalks, wrecked cars, ruins, street lamps, the lots next door (buy
 ## them in Build mode to make the store bigger) and the rival store down the
-## street (Brand.RIVAL). It also sends townsfolk walking around: shoppers who
-## picked the rival over you, the rival's skeleton staff, and zombies
-## shambling through.
+## street (Brand.RIVAL), and the market stalls down the path across the
+## street (Brand.SHOPS: a witch's brewery and a vampire's curios). It also
+## sends townsfolk walking around: shoppers who picked the rival over you,
+## the rival's skeleton staff, and zombies shambling through.
 ##
 ## The town shares the store's grid (Store.astar), so everyone can walk
 ## between the two. Store cells are marked @ in the map.
@@ -57,6 +58,10 @@ var _lot_props := {}  # lot number -> [Prop]
 var _tall: Array[Interactable] = []  # fade out when you walk behind them
 var _shamble_timer := 6.0
 var _player_in_rival := false
+var shop_counters := {}  # shop id -> ShopCounter
+var shop_keepers := {}  # shop id -> Wanderer
+var _keeper_cells := {}  # shop id -> where its keeper stands
+var _near_shop := ""  # the stall you're standing at (they say hello once)
 
 
 ## Builds everything outside the store. Called by the store while it
@@ -130,7 +135,40 @@ func build(s: Store) -> void:
 					barrel.flicker = true
 				"c":
 					store._make_solid(cell)  # the front half of a car
+				"Q":
+					_prop(cell, ["prop_coffin"], "A coffin. Something inside is snoring.", true)
+				"K":
+					var pot := _prop(cell, ["prop_cauldron"], "Something green is bubbling in the cauldron.")
+					fires.append(pot.add_light(Color(0.45, 1.0, 0.4), Vector2(0, -14), 0.8, 1.6))
+					pot.flicker = true
+				_:
+					_market_stall(ch, cell)
 	_build_lots()
+
+
+## A market stall's counter, or where its keeper stands (Brand.SHOPS).
+func _market_stall(ch: String, cell: Vector2i) -> void:
+	for id: String in Brand.SHOPS:
+		var shop: Dictionary = Brand.SHOPS[id]
+		if ch == shop.map:
+			var counter := ShopCounter.new()
+			counter.shop = id
+			counter.texture = shop.stall
+			_place(counter, cell, true)
+			shop_counters[id] = counter
+			var glow := PointLight2D.new()  # its lantern
+			glow.texture = StoreLights.glow_texture()
+			glow.texture_scale = 1.4
+			glow.scale = Vector2(1.0, 0.6)
+			glow.color = shop.light
+			glow.energy = 0.7
+			glow.blend_mode = Light2D.BLEND_MODE_ADD
+			glow.position = Vector2(14, -30)
+			counter.add_child(glow)
+			fires.append(glow)
+		elif ch == shop.keeper_map:
+			_keeper_cells[id] = cell
+			store._make_solid(cell)
 
 
 ## Once the store is built: staff the rival and stock its shelves.
@@ -141,6 +179,13 @@ func start() -> void:
 	refresh_rival_stock()
 	if not Game.rival_owned:
 		_hire_rival_staff()
+	for id: String in _keeper_cells:
+		var keeper := _walker(Brand.SHOPS[id].keeper_look, _keeper_cells[id], [], 1.0)
+		keeper.stay = true
+		keeper.modulate.a = 1.0
+		if shop_counters.has(id):
+			keeper.face(shop_counters[id].position + Vector2(40, 0))
+		shop_keepers[id] = keeper
 	_add_locals()
 	_apply_settings()
 
@@ -164,6 +209,13 @@ func _process(delta: float) -> void:
 	if inside and not _player_in_rival and not Game.rival_owned and owner_cell != NO_CELL:
 		Game.show_popup(Iso.cell_to_world(owner_cell) + Vector2(0, -46), Brand.RIVAL.hello, Color(0.92, 0.9, 0.82))
 	_player_in_rival = inside
+	var near := ""
+	for id: String in shop_counters:
+		if Iso.chebyshev(p.current_cell(), shop_counters[id].cell) <= 1:
+			near = id
+	if near != "" and near != _near_shop and shop_keepers.has(near):
+		Game.show_popup(shop_keepers[near].position + Vector2(0, -50), Brand.SHOPS[near].hello, Color(0.92, 0.86, 1.0))
+	_near_shop = near
 
 
 func _apply_settings() -> void:

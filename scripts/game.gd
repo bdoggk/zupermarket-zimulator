@@ -10,6 +10,7 @@ extends Node
 
 signal message(text: String)
 signal popup(world_pos: Vector2, text: String, color: Color)
+signal item_popup(world_pos: Vector2, id: String, qty: int)  # a shopper took something
 signal prompt_changed(text: String, can_act: bool, scan_text: String)
 signal computer_requested
 signal box_ordered(product_id: String)
@@ -19,12 +20,15 @@ signal day_ended(summary: Dictionary)
 signal day_started(day: int)
 signal market_changed
 signal unlocks_changed  # a license, upgrade or store level changed
+signal leveled_up(from_level: int, to_level: int)  # the store went up a level (the HUD shows what's new)
 signal decor_changed  # floor style or wall color changed
 signal staff_changed  # someone was hired or fired
 signal staff_leveled(id: int, level: int)
 signal store_expanded  # bought the next lot
 signal rival_requested  # open the rival's price list
 signal rival_bought
+signal shop_requested(shop: String)  # use a market stall's counter (Brand.SHOPS)
+signal effects_changed  # a brew started or wore off
 signal tutorial_changed
 
 const OPEN_MINUTE := 8 * 60
@@ -33,11 +37,25 @@ const CLOSE_MINUTE := 20 * 60
 const SECONDS_PER_GAME_MINUTE := 0.5
 const DELIVERY_SECONDS := 8.0  # without delivery upgrades
 const PRICE_STEP := 0.25
+const NIGHT_MINUTE := 17 * 60  # dusk: night owls (vampires) start coming out
+const NIGHT_KIND_BY_DAY := 0.3  # ...and before that they're this much rarer
+const MAX_EFFECT_SECONDS := 600.0  # brews stack up to this long
+const SWIFT_SPEED := 1.5  # Swift Potion: you run this much faster
+const QUICKHAND_SPEED := 2.0  # Quickhand Potion: you work this much faster
+const CHARM_TRAFFIC := 1.5  # Charm Potion: this many more shoppers
+const WINE_PATIENCE := 0.5  # Grave Wine: shoppers lose patience this fast
+const MIN_PRICE := 0.05
+const MAX_PRICE := 999.99
 const STARTING_MONEY := 100.0
 
 ## Store level. You earn 1 XP for every dollar of sales. Each number is the
 ## XP needed to reach the next level (level 2 at 150 XP, level 3 at 400...).
 const LEVEL_XP := [0, 150, 400, 800, 1400, 2200]
+## Blood on the floor costs XP while the store is open: this much per spill
+## per game hour (you never drop a level, though).
+const BLOOD_XP_PER_HOUR := 1.5
+## Licensing a product earns XP: this much per dollar the license cost.
+const LICENSE_XP := 0.25
 
 ## The catalogs. Edit them in brand.gd.
 const PRODUCTS := Brand.PRODUCTS
@@ -84,6 +102,7 @@ var rival_deal := ""  # the rival's deal of the day
 var rival_seen := {}  # product id -> [price, day] when you last checked the rival
 var tutorial := {}  # first-day tips you've done (see ui/tutorial.gd)
 var tutorial_hidden := false  # you pressed "Hide tips"
+var effects := {}  # brew id -> seconds it still works for (Brand.BREWS)
 
 # Set by these nodes when they load.
 var player: Node2D
@@ -124,6 +143,7 @@ func reset() -> void:
 	rival_seen = {}
 	tutorial = {}
 	tutorial_hidden = false
+	effects = {}
 	player = null
 	store = null
 	build_mode = null
@@ -144,9 +164,12 @@ func _process(delta: float) -> void:
 	if not in_game():
 		return
 	play_time += delta
+	_tick_effects(delta)
 	if not is_open:
 		return
 	minute += delta / SECONDS_PER_GAME_MINUTE
+	if Brand.SPILLS and is_instance_valid(store) and not store.spills.is_empty() and not has_effect("crucifix"):
+		lose_xp(store.spills.size() * BLOOD_XP_PER_HOUR * delta / (SECONDS_PER_GAME_MINUTE * 60.0))
 	if minute >= next_market_minute and next_market_minute < CLOSE_MINUTE:
 		next_market_minute += Market.UPDATE_EVERY_HOURS * 60
 		update_market(false)
@@ -208,7 +231,21 @@ func delivery_seconds() -> float:
 
 
 func change_price(id: String, amount: float) -> void:
-	prices[id] = maxf(PRICE_STEP, snappedf(prices[id] + amount, 0.01))
+	set_price(id, prices[id] + amount)
+
+
+## A price you typed in (or nudged with - and +), to the cent.
+func set_price(id: String, price: float) -> void:
+	prices[id] = clampf(snappedf(price, 0.01), MIN_PRICE, MAX_PRICE)
+
+
+## "3", "3.5", "$3.50" or "3,50" -> 3.5. -1 if it isn't a price.
+static func parse_price(text: String) -> float:
+	var t := text.strip_edges().trim_prefix("$").strip_edges().replace(",", ".")
+	if t.is_empty() or not t.is_valid_float():
+		return -1.0
+	var v := t.to_float()
+	return v if v >= 0.0 else -1.0
 
 
 func match_market(id: String) -> void:
@@ -237,17 +274,27 @@ func buy_chance(id: String, tolerance := 1.0) -> float:
 func pick_shopper_kind() -> Dictionary:
 	var pool := []
 	var total := 0.0
+	var weights: Array[float] = []
 	for id in Brand.SHOPPERS:
 		var k: Dictionary = Brand.SHOPPERS[id]
 		if level >= int(k.level):
 			pool.append(k)
-			total += k.weight
+			weights.append(shopper_weight(k))
+			total += weights[-1]
 	var roll := randf() * total
-	for k: Dictionary in pool:
-		roll -= k.weight
+	for i in pool.size():
+		roll -= weights[i]
 		if roll <= 0.0:
-			return k
+			return pool[i]
 	return pool[-1]
+
+
+## How common a kind of shopper is right now (night owls come out after 5 PM).
+func shopper_weight(k: Dictionary) -> float:
+	var w := float(k.weight)
+	if k.has("night"):
+		w *= float(k.night) if minute >= NIGHT_MINUTE else NIGHT_KIND_BY_DAY
+	return w
 
 
 # ---------------------------------------------------------------- the rival store
@@ -277,17 +324,19 @@ func scout_rival(ids: Array) -> void:
 ## of you. It's cheaper for most things, so match or beat its prices. A
 ## messy store drives shoppers away; decorations bring them in.
 func rival_pull(list: Array, kind: Dictionary) -> float:
-	if rival_owned:
-		return 0.0
+	if rival_owned or has_effect("stake"):
+		return 0.0  # it's yours, or there's a stake in its door
 	var pull: float = Brand.RIVAL.share + float(kind.get("rival", 0.0))
 	if not list.is_empty():
 		var diff := 0.0
 		for item: Dictionary in list:
 			var m := market_price(item.id)
 			diff += clampf((prices[item.id] - rival_price(item.id)) / m, -0.6, 0.6)
+			if not is_licensed(item.id):
+				pull += 0.08  # you don't even sell it
 		pull += diff / list.size() * 1.2
 	if in_game():
-		pull += 0.025 * store.spills.size()
+		pull += 0.025 * (0 if has_effect("crucifix") else store.spills.size())
 		pull -= 0.02 * mini(store.plant_count(), 6)
 	return clampf(pull, 0.05, 0.85)
 
@@ -389,12 +438,22 @@ func buy_license(id: String) -> bool:
 		return false
 	licensed[id] = true
 	prices[id] = market_price(id)
+	var bonus := roundf(PRODUCTS[id].license * LICENSE_XP)
 	var text := "You can now sell %s! Order it in the Stock tab." % product_name(id)
 	if is_cold(id):
 		text += " It needs a fridge (Build mode)."
+	if bonus > 0.0:
+		text += " +%d XP" % int(bonus)
 	message.emit(text)
 	unlocks_changed.emit()
+	if bonus > 0.0:
+		add_xp(bonus)
 	return true
+
+
+## Products you could license now (your level is high enough) but haven't.
+func licensable_ids() -> Array:
+	return PRODUCTS.keys().filter(func(id): return can_license(id))
 
 
 func has_upgrade(id: String) -> bool:
@@ -440,22 +499,61 @@ func next_level_xp() -> float:
 	return LEVEL_XP[level] if level < LEVEL_XP.size() else -1.0
 
 
+## XP at the start of the current level (you never drop below it).
+func level_start_xp() -> float:
+	return LEVEL_XP[level - 1] if level >= 1 and level <= LEVEL_XP.size() else 0.0
+
+
+## How far along the current level you are, 0 to 1 (1 at max level).
+func level_progress() -> float:
+	var next := next_level_xp()
+	if next < 0.0:
+		return 1.0
+	return clampf((xp - level_start_xp()) / (next - level_start_xp()), 0.0, 1.0)
+
+
 func add_xp(amount: float) -> void:
 	xp += amount
 	var new_level := level_for(xp)
 	if new_level <= level:
 		return
+	var from := level
 	level = new_level
-	var count := 0
-	for id in PRODUCTS:
-		if PRODUCTS[id].level == level:
-			count += 1
 	Settings.vibrate(0.8, 0.35)
-	var text := "Store level %d!" % level
-	if count > 0:
-		text += " %d new product%s at the computer." % [count, "" if count == 1 else "s"]
-	message.emit(text)
+	message.emit("Store level %d!" % level)
 	unlocks_changed.emit()
+	leveled_up.emit(from, level)
+
+
+## Takes XP away (blood on the floor), but never below the start of your
+## current level. Returns how much was really lost.
+func lose_xp(amount: float) -> float:
+	var lost := minf(amount, maxf(0.0, xp - level_start_xp()))
+	xp -= lost
+	stats.xp_lost = float(stats.get("xp_lost", 0.0)) + lost
+	return lost
+
+
+## What reaching store level `lv` gives you, as lines of text: products you
+## can license, upgrades, the next lot, new kinds of shoppers...
+func unlocks_at(lv: int) -> Array[String]:
+	var lines: Array[String] = []
+	var products := PRODUCTS.keys().filter(func(id): return int(PRODUCTS[id].level) == lv)
+	if not products.is_empty():
+		lines.append("New products to license: %s" % ", ".join(products.map(func(id): return product_name(id))))
+	var ups := UPGRADES.keys().filter(func(id): return int(UPGRADES[id].get("level", 1)) == lv)
+	if not ups.is_empty():
+		lines.append("New upgrades: %s" % ", ".join(ups.map(func(id): return UPGRADES[id].name)))
+	for i in Brand.EXPANSIONS.size():
+		if int(Brand.EXPANSIONS[i].level) == lv:
+			lines.append("You can buy lot %d next door (Build > Expand) to make the store bigger" % (i + 1))
+	var kinds := Brand.SHOPPERS.values().filter(func(k): return int(k.get("level", 1)) == lv)
+	if not kinds.is_empty():
+		lines.append("New shoppers: %s" % ", ".join(kinds.map(func(k): return str(k.get("plural", (k.name as String).to_lower() + "s")))))
+	if not Brand.RIVAL.is_empty() and int(Brand.RIVAL.get("buyout_level", 0)) == lv and not rival_owned:
+		lines.append("You can buy out %s ($%d)" % [Brand.RIVAL.name, int(Brand.RIVAL.buyout)])
+	lines.append("%d%% more shoppers come by" % roundi(Store.LEVEL_TRAFFIC * 100.0))
+	return lines
 
 
 # ---------------------------------------------------------------- staff
@@ -594,6 +692,16 @@ func record_missed() -> void:
 	stats.missed += 1
 
 
+## A shopper wanted `id`, but you don't sell it (no license yet). Asked
+## about twice in a day, you get a reminder to license it.
+func record_wanted(id: String) -> void:
+	var wanted: Dictionary = stats.get("wanted", {})
+	wanted[id] = int(wanted.get(id, 0)) + 1
+	stats.wanted = wanted
+	if wanted[id] == 2:
+		message.emit("%s keep asking for %s. License it at the computer (Products)!" % [Brand.SAY.shoppers.capitalize(), product_name(id)])
+
+
 func record_walkout() -> void:
 	stats.walkouts += 1
 
@@ -645,7 +753,7 @@ func to_dict() -> Dictionary:
 		"play_time": play_time,
 		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
 		"rival": {"owned": rival_owned, "factor": rival_factor, "deal": rival_deal, "seen": rival_seen},
-		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden,
+		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden, "effects": effects,
 		"market": {"factor": market.factor, "previous": market.previous, "demand": market.demand, "news": market.news},
 	}
 
@@ -677,7 +785,12 @@ func from_dict(d: Dictionary) -> void:
 			upgrades[id] = true
 	var saved_stats: Dictionary = d.get("stats", {})
 	for k: String in stats:
-		if saved_stats.has(k):
+		if not saved_stats.has(k):
+			continue
+		if stats[k] is Dictionary:
+			if saved_stats[k] is Dictionary:
+				stats[k] = (saved_stats[k] as Dictionary).duplicate()
+		else:
 			stats[k] = int(saved_stats[k]) if stats[k] is int else float(saved_stats[k])
 	var m: Dictionary = d.get("market", {})
 	for key in ["factor", "previous", "demand"]:
@@ -694,6 +807,11 @@ func from_dict(d: Dictionary) -> void:
 				"xp": xp_have, "level": staff_level_for(xp_have)})
 	_next_staff_id = int(d.get("next_staff_id", staff.size() + 1))
 	expansions = clampi(int(d.get("expansions", 0)), 0, Brand.EXPANSIONS.size())
+	var fx: Variant = d.get("effects", {})
+	if fx is Dictionary:
+		for id: String in fx:
+			if Brand.BREWS.has(id) and float(fx[id]) > 0.0:
+				effects[id] = minf(float(fx[id]), MAX_EFFECT_SECONDS)
 	var r: Dictionary = d.get("rival", {})
 	rival_owned = bool(r.get("owned", false))
 	var factors: Dictionary = r.get("factor", {})
@@ -719,6 +837,56 @@ func show_popup(world_pos: Vector2, text: String, color := Color.WHITE) -> void:
 	popup.emit(world_pos, text, color)
 
 
+# ---------------------------------------------------------------- brews
+
+## A brew (or charm) from a market stall is working right now.
+func has_effect(id: String) -> bool:
+	return float(effects.get(id, 0.0)) > 0.0
+
+
+## Why you can't buy brew `id` right now ("" if you can).
+func brew_problem(id: String) -> String:
+	if id == "stake" and rival_owned:
+		return "%s is yours already" % Brand.RIVAL.name
+	if float(effects.get(id, 0.0)) + float(Brand.BREWS[id].seconds) > MAX_EFFECT_SECONDS + 0.01:
+		return "You've got plenty"
+	if money + 0.001 < float(Brand.BREWS[id].cost):
+		return "Not enough money"
+	return ""
+
+
+## Buys brew `id` from its stall. It works straight away; another one
+## adds more time.
+func buy_brew(id: String) -> bool:
+	if not Brand.BREWS.has(id) or brew_problem(id) != "":
+		return false
+	var b: Dictionary = Brand.BREWS[id]
+	if not spend(float(b.cost)):
+		return false
+	effects[id] = float(effects.get(id, 0.0)) + float(b.seconds)
+	stats.brews = int(stats.get("brews", 0)) + 1
+	message.emit(Brand.SAY.brew_bought % [b.name, b.desc])
+	Settings.vibrate(0.3, 0.08)
+	effects_changed.emit()
+	return true
+
+
+func _tick_effects(delta: float) -> void:
+	if effects.is_empty():
+		return
+	for id: String in effects.keys():
+		effects[id] = float(effects[id]) - delta
+		if effects[id] <= 0.0:
+			effects.erase(id)
+			message.emit(Brand.SAY.brew_done % Brand.BREWS[id].name)
+			effects_changed.emit()
+
+
+## "+2 Canned Guts" with the product's picture, over a shopper's head.
+func show_item_popup(world_pos: Vector2, id: String, qty: int) -> void:
+	item_popup.emit(world_pos, id, qty)
+
+
 func end_day() -> void:
 	if day_over:
 		return
@@ -732,6 +900,17 @@ func end_day() -> void:
 	summary.profit = stats.revenue - stats.spent - stats.invested - stats.wages
 	_reset_stats()  # anything bought overnight counts toward tomorrow
 	day_ended.emit(summary)
+
+
+## A save made after the day ended was loaded: it's still that night.
+## The day-over prompt comes back up, and the next day starts when you say
+## so (the day's wages were already paid).
+func resume_day_over() -> void:
+	day_over = true
+	opened = true
+	is_open = false
+	minute = CLOSE_MINUTE
+	day_ended.emit({"day": day, "resumed": true})
 
 
 ## Moves to the next morning. The clock waits until you flip the OPEN sign.
@@ -772,4 +951,4 @@ func clock_text() -> String:
 
 
 func _reset_stats() -> void:
-	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0}
+	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0, "wanted": {}, "xp_lost": 0.0, "brews": 0}

@@ -61,7 +61,7 @@ func _ready() -> void:
 
 
 func enter() -> void:
-	if active or Game.day_over or get_tree().paused:  # not on top of the pause menu
+	if active or get_tree().paused:  # not on top of the pause menu (you can build after closing too)
 		return
 	active = true
 	_end_drag()

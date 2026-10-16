@@ -224,6 +224,7 @@ func _slider(parent: Control, text: String, on_change: Callable) -> Array:
 	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	s.custom_minimum_size = Vector2(0, 40)
 	s.focus_mode = Control.FOCUS_ALL
+	s.scrollable = false  # the mouse wheel scrolls the page, not the slider
 	var track := StyleBoxFlat.new()  # a thicker bar that's easy to grab on a touch screen
 	track.bg_color = Color(0.2, 0.21, 0.24)
 	track.set_corner_radius_all(4)

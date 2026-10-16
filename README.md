@@ -35,6 +35,45 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.8.7
+
+- **The market across the street:** walk down the dirt path on the other side of the
+  road to two stalls. Old Hagatha's **Bubbling Cauldron** brews potions and wine, and
+  Count Fangsworth's **Curios** sells garlic, crucifixes and wooden stakes. Each one works
+  straight away for a minute or two (Swift Potion: run 50% faster; Quickhand Potion:
+  scan, stock and mop twice as fast; Garlic: nobody drips blood; Wooden Stake: nobody
+  shops at Bone Mart...). What's working shows under the corner buttons with the time
+  left. See "The market stalls" below.
+- **Witches and vampires** shop with you: witches from store level 2, vampires from
+  level 3 (mostly after dark, and they don't mind paying more).
+- **See what shoppers are buying:** they carry a basket with their stuff sticking out,
+  "+2 Canned Guts" pops up when they take something, and they leave with a bag. Point at
+  a shopper (or stand next to one) to see their basket, total and what they still want.
+- **Type in a price:** click the price in Stock & Prices, type it and press Enter.
+- **The store computer is a PC** now, with its own desktop (and a zombie girl
+  wallpaper). Click an app to open it: Stock & Prices, Products, Staff, Upgrades. The
+  sticky note says what's running low and what shoppers asked for.
+- **XP bar** next to your level, and a **level-up panel** that lists what the new level
+  unlocks.
+- **Blood costs you:** every puddle keeps shoppers away (the status bar says how many:
+  "Blood: 3 (-24% shoppers)") and slowly drains your XP while you're open.
+- **Reasons to license more:** every product you add brings more shoppers and earns XP,
+  shoppers ask for things you don't sell yet ("You don't sell Lungs?!"), and the day
+  summary and computer say what they asked for.
+- **Lanterns** ($40) in build mode: warm candlelight for the dark corners. And the
+  build buttons show each item's name above its picture.
+- **The general manager orders properly:** they reorder when a product's shelves are
+  down to a third full (not 2 items), and enough boxes to fill them back up.
+- **Staff only earn XP for real work** (walking around and standing at an empty
+  register earn nothing).
+- **Reset** button for each employee in the Staff app, if someone gets stuck.
+- **The next day only starts when you press Space** (not E), so you can keep working
+  after closing.
+- Fixed: a stray box on the floor after loading an older save; the mouse wheel moving
+  the Sound slider and the Options page at the same time.
+- The floor tiles lost their painted-on blood (so the real puddles stand out), with
+  mold, grime and cracks instead.
+
 ## What's new in 0.8.6
 
 - **Sound!** Brutes (the big zombies) growl when they shamble in, now and then while
@@ -230,8 +269,11 @@ If a box is on the floor right there too, using picks up the box first.
 
 ### Blood and the mop
 About a third of the zombies drip blood as they walk around, leaving puddles on the
-floor. **Every puddle keeps some shoppers away** (even zombies hate a messy store), so
-the status bar shows how many there are ("Blood: 3").
+floor. **Every puddle keeps some shoppers away** (even zombies hate a messy store) and
+**slowly costs you XP** while you're open, so the status bar shows how many there are
+and how many shoppers they're costing you ("Blood: 3 (-24% shoppers)"). Garlic from
+the vampire's stall stops the dripping for a bit, and a crucifix makes everyone ignore
+the blood for a while.
 1. Walk to the **mop bucket** (the yellow bucket near the computer) and press E (or
    tap it) to grab the mop.
 2. Walk onto or next to a puddle and press E (or tap the puddle) to mop it up.
@@ -255,10 +297,17 @@ In the **Stock & Prices** tab:
 - **=** sets one product to the market price. **Match all to market** does it for
   everything.
 - **Auto-match** keeps all your prices at market automatically.
+- **Type a price:** click the price box, type it (like `3.50`) and press Enter (or click
+  somewhere else). **-** and **+** still nudge it by 25 cents.
 
 ### Store level and new products
-Every $1 of sales is 1 XP. Leveling up your store (6 levels) lets you buy **licenses**
-for new products in the **Products** tab. There are 12 products in total:
+Every $1 of sales is 1 XP (the bar next to your level shows how close the next level
+is), and every license you buy earns a bit too. Blood on the floor slowly costs you XP
+while you're open. When you level up, a panel lists everything the new level unlocks.
+Leveling up your store (6 levels) lets you buy **licenses** for new products in the
+**Products** tab. Every product you add brings a few more shoppers (up to +50%), and
+shoppers ask for products you don't sell yet: the Products tab and the day summary
+say which. There are 12 products in total:
 
 | Level | Products |
 |---|---|
@@ -301,6 +350,30 @@ then on.
 | Skeleton | Comes over from Bone Mart's side of town. Fussy about prices. Some just wander around town |
 | Brute | Big and slow, buys a cart full (4-6 different things). Growls. Level 3 |
 | Rich zombie | Doesn't mind paying 50% over market. Level 3 |
+| Witch | A bit fussy about prices, never drips. Level 2 |
+| Vampire | Comes out mostly after 5 PM, patient, pays up to 30% over market, never drips. Level 3 |
+
+**What are they buying?** The bubble over a shopper's head is what they're looking
+for, "+2 Canned Guts" pops up when they take something, and it goes in the basket they
+carry. Point the mouse at a shopper (or stand next to one) to see what's in their
+basket, the total, and what's still on their list.
+
+### The market stalls
+Across the road from your store, a dirt path leads to two market stalls. Walk up to a
+counter and press E (or tap it):
+
+| Stall | Sells | What it does | Lasts |
+|---|---|---|---|
+| The Bubbling Cauldron (Old Hagatha, a witch) | Swift Potion, $20 | Run 50% faster | 1 minute |
+| | Quickhand Potion, $35 | Scan, stock and mop twice as fast | 1 minute |
+| | Charm Potion, $50 | Half again as many shoppers come in | 90 seconds |
+| | Grave Wine, $15 | Shoppers wait in line twice as long | 2 minutes |
+| Fangsworth's Curios (Count Fangsworth, a vampire) | Garlic, $10 | Nobody drips blood | 90 seconds |
+| | Crucifix, $30 | Blood doesn't scare shoppers off or cost XP | 2 minutes |
+| | Wooden Stake, $40 | Nobody shops at Bone Mart | 2 minutes |
+
+It works as soon as you buy it, and buying another adds more time (up to 10 minutes).
+What's working shows under the corner buttons with the time left.
 
 ### Staff
 Hire help in the computer's **Staff** tab. Each hire costs $50 up front, and staff
@@ -319,15 +392,21 @@ you in the red).
   walked away.
 - **Janitor** ($20/day, up to 2): brings their own mop and cleans up the blood.
 - **General Manager** ($100 to hire, $45/day, one): walks around checking the shelves
-  and the staff. When a product is down to 2 on the shelves and there's none on the
-  way, they walk to the computer and order a box (if you can afford it; the message
-  says what they ordered). While you have a manager, everyone else works 15% faster,
-  and anyone stuck on a job gets a "Back to work!".
+  and the staff. When a product's shelves are down to a third full (counting boxes
+  that are already around or on the way), they walk to the computer and order enough
+  boxes to fill them back up, up to 4 at a time and as many as fit on the delivery
+  zone (if you can afford it; the message says what they ordered). While you have a
+  manager, everyone else works 15% faster, and anyone stuck on a job gets a
+  "Back to work!".
 
-**Staff level up** as they work (stocking items, ringing up items, mopping). There
-are 5 levels and every level makes them 15% faster at everything, walking included.
-The Staff tab shows what everyone is doing right now, their level and XP, and
-**Let go** fires someone.
+**Staff level up** as they work, and only for real work: items stocked, items rung
+up, spills mopped, boxes ordered, self-checkouts fixed. Walking around or standing
+at an empty register earns nothing, and a manager only gets credit for a
+"Back to work!" once that person actually gets something done. There are 5 levels
+and every level makes them 15% faster at everything, walking included.
+The Staff tab shows what everyone is doing right now, their level and XP. **Reset**
+sends someone back to where they start the day (their register, the mop bucket, the
+delivery zone...) if they ever get stuck, and **Let go** fires someone.
 
 When a stocker fills a shelf and there's some of the box left, they put the rest away:
 on a **storage rack** if one has room, otherwise back on the delivery zone. Boxes
@@ -382,8 +461,9 @@ way, the upgrade says what: move it (or move the zone somewhere roomier) first.
 ### Build mode (customize your store)
 Press **B** (or the **Build** button). The game pauses while you build.
 - **Buy** rusty shelves ($60), meat coolers ($150), storage racks ($120), gravestones
-  ($25), registers ($250) and self-checkouts ($400). Hover over (or select) a button to
-  see its name. Gravestones make zombies come more often (it feels like home).
+  ($25), lanterns ($40), registers ($250) and self-checkouts ($400). Each button shows
+  the name, a picture and the price. Gravestones and lanterns make zombies come more
+  often (it feels like home), and a lantern lights up the floor around it.
 - **Move** anything you've placed (stock stays on the shelf), plus the **registers**,
   the **computer**, the **OPEN sign**, the **mop bucket** and the **delivery zone**
   (boxes on it come along). When you pick up a register, a yellow
@@ -419,9 +499,9 @@ computer. A scanner icon appears next to your money once you own it.
 |---|---|---|
 | Move | WASD / arrow keys, or click a spot | Tap a spot |
 | Sprint | Hold Shift | RUN button (tap again to stop) |
-| Interact: pick up / drop boxes, stock or empty shelves, ring up shoppers, take over a register, racks, the computer, the OPEN sign, the mop, a jammed self-checkout, Bone Mart's prices | E (or click the thing) | Tap it, or the big button |
+| Interact: pick up / drop boxes, stock or empty shelves, ring up shoppers, take over a register, racks, the computer, the OPEN sign, the mop, a jammed self-checkout, Bone Mart's prices, the market stalls | E (or click the thing) | Tap it, or the big button |
 | Scan a shelf | Q | SCAN button |
-| Next day (end of the day) | Space | Tap the bar at the bottom |
+| Next day (end of the day) | Space (only Space: you can keep working after closing) | Tap the bar at the bottom |
 | Build mode | B | Build button |
 | Turn something (build mode) | R | Rotate button, then tap it |
 | Zoom | Mouse wheel or the +/- buttons | +/- buttons |

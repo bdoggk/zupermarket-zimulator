@@ -7,6 +7,7 @@ extends CanvasLayer
 const ComputerMenu := preload("res://scripts/ui/computer_menu.gd")
 const BuildBar := preload("res://scripts/ui/build_bar.gd")
 const RivalPanel := preload("res://scripts/ui/rival_panel.gd")
+const ShopPanel := preload("res://scripts/ui/shop_panel.gd")
 const Tutorial := preload("res://scripts/ui/tutorial.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
@@ -24,6 +25,19 @@ var root: Control
 var status_panel: PanelContainer
 var money_label: Label
 var level_label: Label
+var xp_bar: Control  # progress to the next store level
+var levelup_panel: PanelContainer  # "Store level 3!" and what it unlocks
+var levelup_title: Label
+var levelup_list: Label
+var levelup_scroll: ScrollContainer  # a long list (several levels at once) scrolls
+var shopper_card: PanelContainer  # what the shopper you point at (or stand by) is buying
+var shopper_text: Label
+var _player_still := 0.0  # seconds since you last moved
+var _player_was := Vector2.INF
+var _xp_shown := -1.0  # XP the bar showed last frame (to flash red when it drops)
+var _xp_flash := 0.0
+var _levelup_left := 0.0  # seconds before the level-up panel closes by itself
+const LEVELUP_SECONDS := 15.0
 var clock_label: Label
 var scanner_icon: TextureRect
 var mess_label: Label
@@ -41,6 +55,9 @@ var run_button: Button  # touch screens: sprint on/off
 var message_box: VBoxContainer
 var computer: PanelContainer
 var rival_panel: PanelContainer
+var shop_panel: PanelContainer  # a market stall's wares (the witch's, the vampire's)
+var effects_box: VBoxContainer  # brews working right now, under the corner buttons
+var _effect_rows := {}  # brew id -> its Label in effects_box
 var build_bar: PanelContainer
 var pause_menu: PanelContainer
 var options: PanelContainer
@@ -52,6 +69,8 @@ var summary_hint: Label
 var next_day_button: Button
 var day_over_bar: Button  # "Day 3 is over! Press Space..." along the bottom
 var _summary := {}  # the day that just ended, waiting to be shown
+var _day_over_since := 0.0  # when the day-over prompt (or the summary) came up, in seconds
+const DAY_OVER_WAIT := 1.0  # Space is ignored this long, so a key you were mashing doesn't skip the day
 var _prompt := ["", false, ""]
 
 
@@ -75,6 +94,13 @@ func _ready() -> void:
 	root.add_child(computer)
 	rival_panel = RivalPanel.new()
 	root.add_child(rival_panel)
+	shop_panel = ShopPanel.new()
+	root.add_child(shop_panel)
+	effects_box = VBoxContainer.new()
+	effects_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	effects_box.add_theme_constant_override("separation", 4)
+	root.add_child(effects_box)
+	root.move_child(effects_box, 0)
 	build_bar = BuildBar.new()
 	root.add_child(build_bar)
 	_build_summary_panel()
@@ -91,14 +117,19 @@ func _ready() -> void:
 	options.closed.connect(_on_options_closed)
 	# Panels keep the mouse to themselves: scrolling or clicking on a menu
 	# mustn't zoom the view or walk you somewhere behind it.
-	for panel: Control in [status_panel, tutorial, computer, rival_panel, build_bar, summary_panel, pause_menu, options, day_over_bar]:
+	for panel: Control in [status_panel, tutorial, computer, rival_panel, shop_panel, build_bar, summary_panel, pause_menu, options, day_over_bar, levelup_panel]:
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	Game.message.connect(show_message)
 	Game.popup.connect(_show_popup)
+	Game.item_popup.connect(_show_item_popup)
 	Game.prompt_changed.connect(_on_prompt_changed)
 	Game.computer_requested.connect(open_computer)
 	Game.day_ended.connect(_on_day_ended)
+	Game.leveled_up.connect(_on_leveled_up)
+	Game.effects_changed.connect(_rebuild_effects)
+	Game.shop_requested.connect(func(_id): computer.close(); rival_panel.close())
+	_rebuild_effects()
 	Game.build_mode.changed.connect(_on_build_changed)
 
 	if is_touch:
@@ -107,13 +138,26 @@ func _ready() -> void:
 		show_message("WASD to move (hold Shift to sprint), E to use things, B to build. Esc > Options > Controls lists every key.")
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	money_label.text = "$%.2f" % Game.money
 	UI.set_color(money_label, UI.GOOD if Game.money >= 0.0 else UI.BAD)
 	level_label.text = "Lv %d" % Game.level
+	if Game.xp < _xp_shown - 0.001:
+		_xp_flash = 0.6  # losing XP (blood on the floor)
+	_xp_shown = Game.xp
+	_xp_flash = maxf(0.0, _xp_flash - delta)
+	xp_bar.tooltip_text = "Store XP: %d / %d" % [int(Game.xp), int(Game.next_level_xp())] if Game.next_level_xp() > 0.0 else "Store XP: max level"
+	xp_bar.queue_redraw()
+	if levelup_panel.visible:
+		_levelup_left -= delta
+		if _levelup_left <= 0.0:
+			levelup_panel.visible = false
 	var mess: int = Game.store.spills.size()
 	mess_label.visible = mess > 0
-	mess_label.text = "Blood: %d" % mess
+	if Game.has_effect("crucifix"):
+		mess_label.text = "Blood: %d (the crucifix keeps everyone calm)" % mess
+	else:
+		mess_label.text = "Blood: %d (-%d%% shoppers)" % [mess, roundi((1.0 - Game.store.mess_multiplier()) * 100.0)]
 	clock_label.text = "Day %d   %s   %s" % [Game.day, Game.clock_text(), "OPEN" if Game.is_open else "CLOSED"]
 	scanner_icon.visible = Game.has_upgrade("scanner")
 	fps_label.visible = Settings.show_fps
@@ -126,19 +170,24 @@ func _process(_delta: float) -> void:
 	message_box.visible = not paused
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
-	var menu_open: bool = computer.visible or rival_panel.visible or summary_panel.visible
-	day_over_bar.visible = Game.day_over and not _summary.is_empty() and not summary_panel.visible and not paused
+	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or summary_panel.visible
+	# After closing you can keep working (stock, order, build...) until you
+	# press Space for the summary and the next day.
+	var summing_up := summary_panel.visible
+	day_over_bar.visible = Game.day_over and not _summary.is_empty() and not summing_up and not paused and not building
 	tutorial.visible = tutorial.current != "" and not building and not paused and not menu_open and not Game.day_over
 	prep_panel.visible = not Game.opened and not Game.day_over and not building and not paused and not tutorial.visible
-	prompt_panel.visible = not is_touch and not building and not Game.day_over and (_prompt[0] != "" or _prompt[2] != "")
-	use_button.visible = is_touch and not building and not Game.day_over and _prompt[0] != ""
-	scan_button.visible = is_touch and not building and not Game.day_over and _prompt[2] != ""
-	run_button.visible = is_touch and not building and not paused and not Game.day_over and not menu_open
+	prompt_panel.visible = not is_touch and not building and not summing_up and (_prompt[0] != "" or _prompt[2] != "")
+	use_button.visible = is_touch and not building and not summing_up and _prompt[0] != ""
+	scan_button.visible = is_touch and not building and not summing_up and _prompt[2] != ""
+	run_button.visible = is_touch and not building and not paused and not summing_up and not menu_open
+	_update_shopper_card(delta, building or paused or menu_open or levelup_panel.visible or Game.day_over)
 
 	# Keep things pinned to the screen edges whatever the window size.
 	var s := root.size
 	computer.custom_minimum_size = Vector2(minf(1100.0, s.x - 2 * MARGIN), minf(660.0, s.y - 2 * MARGIN))
 	rival_panel.custom_minimum_size = Vector2(minf(860.0, s.x - 2 * MARGIN), minf(600.0, s.y - 2 * MARGIN))
+	shop_panel.custom_minimum_size = Vector2(minf(820.0, s.x - 2 * MARGIN), minf(560.0, s.y - 2 * MARGIN))
 	build_bar.custom_minimum_size.x = minf(1180.0, s.x - 2 * MARGIN)
 	_place(status_panel, Vector2(MARGIN, MARGIN))
 	_place(prep_panel, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
@@ -151,26 +200,44 @@ func _process(_delta: float) -> void:
 	_place(run_button, Vector2(MARGIN, s.y - run_button.size.y - MARGIN))
 	_place(computer, (s - computer.size) / 2.0)
 	_place(rival_panel, (s - rival_panel.size) / 2.0)
+	_place(shop_panel, (s - shop_panel.size) / 2.0)
+	effects_box.visible = not effects_box.get_children().is_empty() and not paused
+	_place(effects_box, Vector2(s.x - effects_box.size.x - MARGIN, corner_box.position.y + corner_box.size.y + 8))
+	for id: String in _effect_rows:
+		(_effect_rows[id] as Label).text = "%s  %s" % [Brand.BREWS[id].name, ShopPanel.time_text(float(Game.effects.get(id, 0.0)))]
 	_place(build_bar, Vector2((s.x - build_bar.size.x) / 2.0, s.y - build_bar.size.y - MARGIN))
 	_place(summary_panel, (s - summary_panel.size) / 2.0)
-	_place(day_over_bar, Vector2((s.x - day_over_bar.size.x) / 2.0, s.y - day_over_bar.size.y - MARGIN))
+	# Above whatever is along the bottom (the E prompt, or the big touch buttons).
+	var bottom := s.y - MARGIN
+	if prompt_panel.visible:
+		bottom = prompt_panel.position.y - 8
+	elif is_touch:
+		bottom = s.y - use_button.size.y - 2 * MARGIN
+	_place(day_over_bar, Vector2((s.x - day_over_bar.size.x) / 2.0, bottom - day_over_bar.size.y))
+	_place(levelup_panel, Vector2((s.x - levelup_panel.size.x) / 2.0, roundf(s.y * 0.2)))
 	_place(pause_menu, (s - pause_menu.size) / 2.0)
 	_place(options, (s - options.size) / 2.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	# End of the day: Space (or A, or Enter) shows the summary, then starts
-	# the next day.
-	if (event.is_action_pressed("interact") or event.is_action_pressed("ui_accept")) \
-			and not pause_menu.visible and not options.visible:
+	# the next day. Only a fresh press, a moment after it comes up: never a
+	# key held down (or E) from scanning the last shopper.
+	if summary_panel.visible and event.is_action_pressed("build"):
+		get_viewport().set_input_as_handled()  # not on top of the summary
+		return
+	if (summary_panel.visible or day_over_bar.visible) and event.is_action_pressed("ui_accept") \
+			and not event.is_echo() and not pause_menu.visible and not options.visible:
+		get_viewport().set_input_as_handled()
+		if _now() - _day_over_since < DAY_OVER_WAIT:
+			return
 		if summary_panel.visible:
-			get_viewport().set_input_as_handled()
 			_on_next_day()
-			return
-		if day_over_bar.visible:
-			get_viewport().set_input_as_handled()
+		elif _summary.get("resumed", false):
+			_on_next_day()  # nothing to sum up after loading a save
+		else:
 			show_day_summary()
-			return
+		return
 	if not (event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause")):
 		return
 	if Game.build_mode.active:
@@ -193,14 +260,18 @@ func _notification(what: int) -> void:
 
 ## Esc / back: close the top thing that's open, or pause the game.
 func _back() -> void:
-	if options.visible:
+	if levelup_panel.visible:
+		levelup_panel.visible = false
+	elif options.visible:
 		options.close()
 	elif pause_menu.visible:
 		pause_menu.close()
 	elif computer.visible:
-		computer.close()
+		computer.back()  # an app back to the desktop, then off
 	elif rival_panel.visible:
 		rival_panel.close()
+	elif shop_panel.visible:
+		shop_panel.close()
 	else:
 		open_pause()
 
@@ -208,6 +279,7 @@ func _back() -> void:
 func open_pause() -> void:
 	computer.close()
 	rival_panel.close()
+	shop_panel.close()
 	pause_menu.open()
 
 
@@ -240,7 +312,28 @@ func show_message(text: String) -> void:
 
 func open_computer() -> void:
 	rival_panel.close()
+	shop_panel.close()
 	computer.open()
+
+
+## The brews working right now: icon, name and time left, under the
+## corner buttons.
+func _rebuild_effects() -> void:
+	UI.clear(effects_box)
+	_effect_rows.clear()
+	for id: String in Game.effects:
+		var row := HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.alignment = BoxContainer.ALIGNMENT_END
+		row.add_theme_constant_override("separation", 6)
+		var l := _popup_label("", Color(0.85, 0.95, 1.0))
+		row.add_child(l)
+		var pic := UI.icon(Brand.BREWS[id].icon, Vector2(32, 32))
+		pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(pic)
+		effects_box.add_child(row)
+		_effect_rows[id] = l
+	effects_box.reset_size()
 
 
 # ---------------------------------------------------------------- building
@@ -255,6 +348,12 @@ func _build_status() -> void:
 	row.add_child(money_label)
 	level_label = UI.label("", UI.INFO)
 	row.add_child(level_label)
+	xp_bar = Control.new()
+	xp_bar.custom_minimum_size = Vector2(130 if is_touch else 110, 20 if is_touch else 16)
+	xp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	xp_bar.mouse_filter = Control.MOUSE_FILTER_PASS
+	xp_bar.draw.connect(_draw_xp_bar)
+	row.add_child(xp_bar)
 	clock_label = UI.label()
 	row.add_child(clock_label)
 	scanner_icon = UI.icon(Game.UPGRADES.scanner.icon, Vector2(24, 24))
@@ -278,6 +377,84 @@ func _build_status() -> void:
 	prep_panel.add_child(hint)
 	tutorial = Tutorial.new()
 	root.add_child(tutorial)
+	_build_levelup_panel()
+	_build_shopper_card()
+
+
+## The bar next to the store level: how close you are to the next one.
+## It flashes red while blood on the floor is costing you XP.
+func _draw_xp_bar() -> void:
+	var r := Rect2(Vector2.ZERO, xp_bar.size)
+	xp_bar.draw_rect(r, Color(0.08, 0.08, 0.1))
+	var f := Game.level_progress()
+	var maxed := Game.next_level_xp() < 0.0
+	var fill := Color(0.95, 0.8, 0.4) if maxed else UI.INFO.darkened(0.15)
+	if _xp_flash > 0.0:
+		fill = fill.lerp(UI.BAD, minf(1.0, _xp_flash * 3.0))
+	xp_bar.draw_rect(Rect2(1, 1, (r.size.x - 2) * f, r.size.y - 2), fill)
+	xp_bar.draw_rect(r, UI.PANEL_BORDER, false, 1.0)
+	var text := "MAX" if maxed else "%d/%d" % [int(Game.xp - Game.level_start_xp()), int(Game.next_level_xp() - Game.level_start_xp())]
+	var font := ThemeDB.fallback_font
+	var fs := 12 if not is_touch else 15
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var pos := Vector2((r.size.x - w) / 2.0, (r.size.y + fs * 0.7) / 2.0)
+	xp_bar.draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, Color(0, 0, 0, 0.8))
+	xp_bar.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+
+
+func _build_levelup_panel() -> void:
+	levelup_panel = PanelContainer.new()
+	levelup_panel.visible = false
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.1, 0.11, 0.13, 0.96)
+	style.border_color = UI.WARN
+	style.set_border_width_all(3)
+	style.set_content_margin_all(18)
+	levelup_panel.add_theme_stylebox_override("panel", style)
+	root.add_child(levelup_panel)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 10)
+	levelup_panel.add_child(col)
+	levelup_title = UI.label("", UI.WARN)
+	levelup_title.add_theme_font_size_override("font_size", 34 if is_touch else 30)
+	levelup_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(levelup_title)
+	levelup_list = UI.label()
+	levelup_list.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	levelup_list.custom_minimum_size.x = 560
+	levelup_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	levelup_scroll = ScrollContainer.new()
+	levelup_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	levelup_scroll.add_child(levelup_list)
+	col.add_child(levelup_scroll)
+	var hint := UI.label("License products and buy upgrades at the store computer.", UI.DIM)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.custom_minimum_size.x = 560
+	col.add_child(hint)
+	var ok := UI.button("Nice!", func(): levelup_panel.visible = false, Vector2(160, 52))
+	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(ok)
+
+
+## The store went up a level (or several): say so, and what you can do now.
+func _on_leveled_up(from_level: int, to_level: int) -> void:
+	var lines: Array[String] = []
+	for lv in range(from_level + 1, to_level + 1):
+		if to_level - from_level > 1:
+			lines.append("Level %d:" % lv)
+		for line in Game.unlocks_at(lv):
+			lines.append("  •  " + line)
+	levelup_title.text = "STORE LEVEL %d!" % to_level
+	levelup_list.text = "\n".join(lines)
+	# As tall as the list, up to most of the screen; then it scrolls.
+	var fs := levelup_list.get_theme_font_size("font_size")
+	var line_h := levelup_list.get_theme_font("font").get_height(fs) + levelup_list.get_theme_constant("line_spacing")
+	var max_h := maxf(120.0, root.size.y * 0.75 - 200.0)
+	levelup_scroll.custom_minimum_size.y = minf(lines.size() * line_h + 4.0, max_h)
+	levelup_scroll.scroll_vertical = 0
+	levelup_panel.reset_size()
+	levelup_panel.visible = true
+	_levelup_left = LEVELUP_SECONDS
 
 
 func _build_corner_buttons() -> void:
@@ -373,29 +550,132 @@ func _on_build_changed() -> void:
 	if Game.build_mode.active:
 		computer.close()
 		rival_panel.close()
+		shop_panel.close()
 
 
 func _show_popup(world_pos: Vector2, text: String, color: Color) -> void:
+	_float_up(_popup_label(text, color), world_pos)
+
+
+## "+2 Canned Guts" and its picture: a shopper took something off a shelf.
+func _show_item_popup(world_pos: Vector2, id: String, qty: int) -> void:
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 4)
+	var pic := TextureRect.new()
+	pic.texture = Game.icon(id)
+	pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	pic.custom_minimum_size = pic.texture.get_size() * (3.0 if is_touch else 2.0)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(pic)
+	row.add_child(_popup_label("+%d %s" % [qty, Game.product_name(id)], Color(0.72, 1.0, 0.66)))
+	_float_up(row, world_pos + Vector2(0, -8))
+
+
+func _popup_label(text: String, color: Color) -> Label:
 	var l := UI.label(text, color)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.add_theme_constant_override("outline_size", 5)
 	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	l.add_theme_font_size_override("font_size", 20 if is_touch else 16)
-	root.add_child(l)
-	root.move_child(l, 0)  # under all the menus and panels
-	l.reset_size()
+	return l
+
+
+## Shows `c` over `world_pos`, drifting up and fading away.
+func _float_up(c: Control, world_pos: Vector2) -> void:
+	root.add_child(c)
+	root.move_child(c, 0)  # under all the menus and panels
+	c.reset_size()
 	var screen := get_viewport().get_canvas_transform() * world_pos
-	l.position = (screen - Vector2(l.size.x / 2.0, l.size.y)).round()
-	var tw := l.create_tween().set_parallel()
-	tw.tween_property(l, "position:y", l.position.y - 30.0, 1.2)
-	tw.tween_property(l, "modulate:a", 0.0, 0.8).set_delay(0.4)
-	tw.chain().tween_callback(l.queue_free)
+	c.position = (screen - Vector2(c.size.x / 2.0, c.size.y)).round()
+	var tw := c.create_tween().set_parallel()
+	tw.tween_property(c, "position:y", c.position.y - 30.0, 1.2)
+	tw.tween_property(c, "modulate:a", 0.0, 0.8).set_delay(0.4)
+	tw.chain().tween_callback(c.queue_free)
+
+
+func _build_shopper_card() -> void:
+	shopper_card = PanelContainer.new()
+	shopper_card.visible = false
+	shopper_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.07, 0.08, 0.09, 0.9)
+	style.border_color = Color(0.45, 0.75, 0.5)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(4)
+	style.set_content_margin_all(8)
+	shopper_card.add_theme_stylebox_override("panel", style)
+	root.add_child(shopper_card)
+	root.move_child(shopper_card, 0)  # under the menus
+	shopper_text = UI.label()
+	shopper_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shopper_text.add_theme_font_size_override("font_size", 17 if is_touch else 15)
+	shopper_card.add_child(shopper_text)
+
+
+## The shopper card: what the shopper under the mouse (or the one right
+## next to you, once you stop) has in their basket and still wants.
+func _update_shopper_card(delta: float, hidden: bool) -> void:
+	var p: Player = Game.player
+	if p.position.distance_to(_player_was) > 0.5:
+		_player_still = 0.0
+	else:
+		_player_still += delta
+	_player_was = p.position
+	var c: Customer = null if hidden else shopper_of_interest()
+	shopper_card.visible = c != null
+	if c == null:
+		return
+	shopper_text.text = c.describe()
+	shopper_card.reset_size()
+	var head := get_viewport().get_canvas_transform() * c.head_position()
+	var s := root.size
+	var pos := Vector2(head.x - shopper_card.size.x / 2.0, head.y - shopper_card.size.y)
+	pos.x = clampf(pos.x, MARGIN, maxf(MARGIN, s.x - shopper_card.size.x - MARGIN))
+	pos.y = clampf(pos.y, MARGIN, maxf(MARGIN, s.y - shopper_card.size.y - MARGIN))
+	shopper_card.position = pos.round()
+
+
+## The shopper the mouse is over (the one in front, if they overlap), or
+## else the closest one right next to you once you've stopped moving.
+func shopper_of_interest() -> Customer:
+	var store: Store = Game.store
+	if not is_touch:
+		var m := store.get_global_mouse_position()
+		var front: Customer = null
+		for c: Customer in store.customers:
+			if is_instance_valid(c) and c.pick_rect().has_point(m) and (front == null or c.position.y > front.position.y):
+				front = c
+		if front:
+			return front
+	if _player_still < 0.3:
+		return null
+	var p: Player = Game.player
+	var best: Customer = null
+	var best_d := INF
+	for c: Customer in store.customers:
+		if is_instance_valid(c) and Iso.chebyshev(p.current_cell(), c.current_cell()) <= 1:
+			var d := p.position.distance_to(c.position)
+			if d < best_d:
+				best_d = d
+				best = c
+	return best
 
 
 ## The last shopper has left: ask before showing how the day went.
 func _on_day_ended(s: Dictionary) -> void:
 	_summary = s
-	day_over_bar.text = "Day %d is over!  %s to see how you did." % [s.day, _key_hint("here")]
+	_day_over_since = _now()
+	if s.get("resumed", false):
+		day_over_bar.text = "Day %d is over.  %s to start Day %d." % [s.day, _key_hint("here"), s.day + 1]
+	else:
+		day_over_bar.text = "Day %d is over!  %s when you're ready to see how you did." % [s.day, _key_hint("here")]
+
+
+static func _now() -> float:
+	return Time.get_ticks_msec() / 1000.0
 
 
 ## "Press Space" / "Press A" / "Tap here", for whatever you play with.
@@ -409,7 +689,10 @@ func _key_hint(tap_what: String) -> String:
 
 
 func show_day_summary() -> void:
-	if not _summary.is_empty():
+	if _summary.get("resumed", false):
+		_on_next_day()
+	elif not _summary.is_empty():
+		_day_over_since = _now()
 		_show_summary(_summary)
 
 
@@ -428,15 +711,32 @@ func _show_summary(s: Dictionary) -> void:
 		"Missed sales: %d" % s.missed,
 		"Walked out: %d" % s.walkouts,
 		"Went to %s instead: %d" % [Brand.RIVAL.name, s.get("lost", 0)],
+		_wanted_line(s.get("wanted", {})),
 		"Blood mopped up: %d" % s.cleaned,
+		"XP lost to blood on the floor: %d" % roundi(float(s.get("xp_lost", 0.0))),
 		"",
 		"Store level %d" % Game.level,
 	].filter(func(line: String): return (Brand.SPILLS or not line.begins_with("Blood")) \
-		and (not line.begins_with("Went to") or s.get("lost", 0) > 0)))
+		and (not line.begins_with("Went to") or s.get("lost", 0) > 0) \
+		and (not line.begins_with("XP lost") or roundi(float(s.get("xp_lost", 0.0))) > 0) \
+		and line != "--"))
 	next_day_button.text = "Go to Day %d" % (s.day + 1)
 	summary_hint.text = "" if is_touch and Input.get_connected_joypads().is_empty() else "%s to go to Day %d" % [_key_hint("the button"), s.day + 1]
 	summary_hint.visible = summary_hint.text != ""
 	summary_panel.visible = true
+
+
+## "Asked for things you don't sell: 5 (Brains x3, Lungs x2)", or "--"
+## (left out) if nobody did.
+static func _wanted_line(wanted: Dictionary) -> String:
+	if wanted.is_empty():
+		return "--"
+	var total := 0
+	var parts: Array[String] = []
+	for id: String in wanted:
+		total += int(wanted[id])
+		parts.append("%s x%d" % [Game.product_name(id), int(wanted[id])])
+	return "Asked for things you don't sell: %d (%s)" % [total, ", ".join(parts)]
 
 
 func _on_next_day() -> void:

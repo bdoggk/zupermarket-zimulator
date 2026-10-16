@@ -234,6 +234,16 @@ func _town(floor_layer: FloorLayer, world: Node2D, expansions: int, rival_owned:
 				"m":
 					if not rival_owned:
 						_sprite(world, Brand.RIVAL.textures.owner, cell, true)
+				"Q":
+					_sprite(world, load("res://assets/sprites/prop_coffin.png"), cell)
+				"K":
+					_sprite(world, load("res://assets/sprites/prop_cauldron.png"), cell)
+				_:
+					for shop: Dictionary in Brand.SHOPS.values():
+						if ch == shop.map:
+							_sprite(world, shop.stall, cell)
+						elif ch == shop.keeper_map:
+							_sprite(world, shop.keeper_look, cell, true)
 
 
 func _sprite(world: Node2D, tex: Texture2D, cell: Vector2i, person := false) -> Sprite2D:
@@ -268,7 +278,7 @@ func _furniture(id: String) -> Interactable:
 			return Fridge.new()
 		"storage":
 			return StorageRack.new()
-	var d := Decoration.new()
+	var d: Decoration = Lantern.new() if Game.FURNITURE[id].get("light", false) else Decoration.new()
 	d.furniture_id = id
 	return d
 

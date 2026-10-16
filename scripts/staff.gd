@@ -12,10 +12,15 @@ extends Node2D
 ##            it yourself, so you're free to do other things.
 ##   Janitor  (zombie game) mops up the blood shoppers leave behind.
 ##   General manager  walks around checking the shelves and the staff.
-##            Orders a box of anything that's down to REORDER_AT on the
-##            shelves (at the computer), gets anyone who's stuck or slacking
-##            back to work, and while they're on the payroll everyone else
-##            works MANAGED_BOOST faster.
+##            Orders more of anything whose shelves are down to a third full
+##            (Store.reorder_list: enough boxes to fill them back up), gets
+##            anyone who's stuck or slacking back to work, and while they're
+##            on the payroll everyone else works MANAGED_BOOST faster.
+##
+## XP only comes from real work (_earn): items stocked, items scanned, spills
+## mopped, boxes ordered, jams fixed. Walking around doesn't count. A manager
+## who tells someone to get back to work gets NUDGE_XP once that person
+## actually gets something done.
 
 enum Job { IDLE, TO_BOX, PICKING_UP, TO_SHELF, STOCKING, TO_DROP, TO_RACK, STORING, TO_POST, AT_POST, SCANNING, NO_POST, TO_SPILL, MOPPING, TO_CHECK, CHECKING, TO_COMPUTER, ORDERING }
 
@@ -26,7 +31,13 @@ const SCAN_SLOWDOWN := 1.15  # cashiers scan a little slower than you
 const MOP_SECONDS := 1.4  # a little slower than you
 const LOOK_FOR_WORK := 0.6  # seconds between looking for something to do
 const XP_PER_SPILL := 4.0
-const REORDER_AT := 2  # the manager orders more of anything down to this many on the shelves
+const REORDER_AT := 2  # the manager always orders more of anything down to this many...
+const REORDER_SHARE := 0.34  # ...or to a third of the shelf space labeled for it
+const MAX_BOXES_PER_ORDER := 4  # of one product, in one trip to the computer
+const ORDER_XP := 4.0  # per box the manager orders
+const FIX_XP := 4.0  # the manager fixing a jammed self-checkout
+const NUDGE_XP := 2.0  # the manager, once someone they told off gets back to work
+const NUDGE_CREDIT_SECONDS := 60.0  # ...if they do within this long
 const MANAGED_BOOST := 1.15  # everyone works this much faster with a manager around
 const CHECK_SECONDS := 1.5  # the manager looking over a shelf or a worker
 const ORDER_SECONDS := 1.5  # the manager placing orders at the computer
@@ -73,6 +84,8 @@ var fixing: SelfCheckout = null  # a jammed self-checkout they're going to fix
 var _shout_timer := SHOUT_EVERY
 var _broke_timer := 0.0  # don't keep saying we can't afford something
 
+var nudged_by := -1  # the manager who told them to get back to work
+var _nudge_credit := 0.0  # seconds left for that manager to get credit for it
 var _job_time := 0.0  # how long they've been on the current job
 var _last_job := Job.IDLE
 
@@ -129,6 +142,7 @@ func _process(delta: float) -> void:
 			_manager(delta)
 		_:
 			_cashier(delta)
+	_nudge_credit -= delta
 	if job != _last_job:
 		_last_job = job
 		_job_time = 0.0
@@ -141,7 +155,20 @@ func _process(delta: float) -> void:
 ## Stuck on the same job for `longer_than` seconds (waiting for work doesn't
 ## count). The manager notices.
 func is_slacking(longer_than := SLACK_SECONDS) -> bool:
+	if job == Job.NO_POST and register == null:
+		return false  # a cashier with no free register just has nothing to do
 	return job in BUSY_JOBS and _job_time > longer_than and not on_break()
+
+
+## Did some real work: XP for it. If the manager had to tell them to get back
+## to work, the manager gets credit too.
+func _earn(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	Game.add_staff_xp(id, amount)
+	if nudged_by >= 0 and _nudge_credit > 0.0:
+		Game.add_staff_xp(nudged_by, NUDGE_XP)
+	nudged_by = -1
 
 
 ## A cashier whose register you took over.
@@ -160,10 +187,29 @@ func relieve(r: Register) -> void:
 	timer = 0.0
 
 
-## The manager told them to get back to work: drop whatever they were stuck
-## on and find something to do.
-func nudge() -> void:
+## The Staff tab's Reset button, for when they're stuck somewhere: back to
+## where they start the day (a cashier: their register), dropping whatever
+## they were doing. A box in their hands stays in their hands.
+func reset_to_start() -> void:
+	var cell := store._staff_start(role)
+	if role == "cashier" and post != Store.NO_CELL and store.is_walkable(post):
+		cell = post
+	if not store.is_walkable(cell):
+		cell = store.door_cell
+	_give_up()
+	timer = 0.0
 	_job_time = 0.0
+	nudged_by = -1  # you got them going, not the manager
+	position = Iso.cell_to_world(cell)
+	Game.show_popup(position + Vector2(0, -50), "Reset!", Color(0.8, 0.95, 1.0))
+
+
+## The manager (`by`, their id) told them to get back to work: drop
+## whatever they were stuck on and find something to do.
+func nudge(by := -1) -> void:
+	_job_time = 0.0
+	nudged_by = by
+	_nudge_credit = NUDGE_CREDIT_SECONDS
 	if role == "cashier":
 		register = null
 		post = Store.NO_CELL
@@ -313,7 +359,7 @@ func _stocker(delta: float) -> void:
 			if timer <= 0.0:
 				var stocked := target_shelf.add_stock(carry_product, carry_count)
 				carry_count -= stocked
-				Game.add_staff_xp(id, stocked)
+				_earn(stocked)
 				if carry_count <= 0:
 					carry_count = 0
 					carry_product = ""
@@ -566,7 +612,7 @@ func _cashier(delta: float) -> void:
 				var front := register.front_customer()
 				var items := front.item_count() if front else 0
 				register.checkout()
-				Game.add_staff_xp(id, items)
+				_earn(items)
 				job = Job.AT_POST
 		Job.NO_POST, Job.IDLE:
 			timer -= delta
@@ -623,7 +669,7 @@ func _janitor(delta: float) -> void:
 				Game.record_spill_cleaned()
 				Game.show_popup(target_spill.position + Vector2(0, -20), "Clean!", Color(0.7, 0.9, 1.0))
 				store.remove_spill(target_spill)
-				Game.add_staff_xp(id, XP_PER_SPILL)
+				_earn(XP_PER_SPILL)
 				_give_up()
 				timer = 0.1
 
@@ -686,12 +732,11 @@ func _manager(delta: float) -> void:
 					store.release(fixing)
 					if fixing.jammed:
 						fixing.fix()
-						Game.add_staff_xp(id, 2.0)
+						_earn(FIX_XP)
 				fixing = null
 				if is_instance_valid(watching) and watching.is_slacking():
 					_nudge(watching)
-				Game.add_staff_xp(id, 1.0)
-				watching = null
+				watching = null  # just looking around: no XP for that
 				job = Job.IDLE
 				timer = 0.3
 		Job.TO_COMPUTER:
@@ -727,7 +772,7 @@ func _plan_fix() -> bool:
 
 ## Something's running low: head to the computer to order more.
 func _plan_order() -> bool:
-	if store.computer == null or _broke_timer > 0.0 or store.products_running_low(REORDER_AT).is_empty():
+	if store.computer == null or _broke_timer > 0.0 or store.reorder_list().is_empty():
 		return false
 	var stand := store.stand_cell_for(store.computer.cell, current_cell())
 	if stand == Store.NO_CELL or not _go_to(stand):
@@ -736,17 +781,31 @@ func _plan_order() -> bool:
 	return true
 
 
+## At the computer: orders what's running low. One box of each first (the
+## emptiest first), then more to fill the shelves back up, as long as they
+## fit on the delivery zone.
 func _place_orders() -> void:
-	var ordered: Array[String] = []
+	var wants := store.reorder_list()
+	var room := maxi(1, store.delivery_room())
+	var got := {}
 	var broke: Array[String] = []
-	for pid in store.products_running_low(REORDER_AT):
-		if Game.order_box(pid, true):
-			ordered.append(Game.product_name(pid))
-			Game.add_staff_xp(id, 3.0)
-		else:
-			broke.append(Game.product_name(pid))
+	for n in MAX_BOXES_PER_ORDER:  # a round of one box each
+		for pid: String in wants:
+			if room <= 0:
+				break
+			if int(got.get(pid, 0)) != n or int(wants[pid]) <= n or Game.product_name(pid) in broke:
+				continue
+			if not Game.order_box(pid, true):
+				broke.append(Game.product_name(pid))
+				continue
+			got[pid] = int(got.get(pid, 0)) + 1
+			room -= 1
+			_earn(ORDER_XP)
+	var ordered: Array[String] = []
+	for pid: String in got:
+		ordered.append(("a box of %s" if got[pid] == 1 else "%d boxes of %%s" % got[pid]) % Game.product_name(pid))
 	if not ordered.is_empty():
-		Game.message.emit("%s ordered more %s." % [staff_name, _list(ordered)])
+		Game.message.emit("%s ordered %s." % [staff_name, _list(ordered)])
 		Game.show_popup(position + Vector2(0, -50), "Ordered!", Color(0.7, 0.9, 1.0))
 	if not broke.is_empty():
 		_broke_timer = 60.0
@@ -776,10 +835,10 @@ func _patrol() -> void:
 		watching = null
 
 
+## Tells `s` to get back to work. The XP for it comes later, if they do.
 func _nudge(s: Staff) -> void:
-	s.nudge()
+	s.nudge(id)
 	Game.show_popup(s.position + Vector2(0, -52), "Back to work, %s!" % s.staff_name, Color(1.0, 0.75, 0.4))
-	Game.add_staff_xp(id, 2.0)
 
 
 # ---------------------------------------------------------------- both

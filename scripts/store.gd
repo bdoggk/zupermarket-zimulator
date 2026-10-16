@@ -46,6 +46,12 @@ const MIN_SPILL_TRAFFIC := 0.4  # ...but never more than 60%
 ## With a town, more shoppers come by, since some of them go to the rival.
 ## Buy the rival out and they all come to you.
 const TOWN_TRAFFIC := 1.5
+## Every product you've licensed (beyond the ones you start with) brings
+## this many more shoppers, up to VARIETY_MAX.
+const VARIETY_TRAFFIC := 0.05
+const VARIETY_MAX := 0.5
+## How often a shopper also wants something you could sell but don't (yet).
+const WANT_UNSOLD_CHANCE := 0.25
 const LOT_WIDTH := 4  # tiles each lot adds to the store
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
@@ -123,9 +129,9 @@ func _ready() -> void:
 	Game.store_opened.connect(_on_store_opened)
 	Game.decor_changed.connect(_apply_decor)
 	Game.staff_changed.connect(_sync_staff)
-	if Saves.pending_next_day:  # saved between days: start the next one
+	if Saves.pending_next_day:  # saved after the day ended: it's still that night
 		Saves.pending_next_day = false
-		Game.start_next_day.call_deferred()
+		Game.resume_day_over.call_deferred()
 	Saves.save_game.call_deferred()  # marks this slot as the latest played
 
 
@@ -385,8 +391,8 @@ func to_dict() -> Dictionary:
 	for b in box_list:
 		taken[_to_cell(b.cell)] = true
 	for s in staff:
-		if s.carry_count > 0:
-			var c := nearest_drop_cell(s.current_cell(), taken)
+		if s.carry_count > 0:  # put back on the delivery zone (not wherever they were standing)
+			var c := _spare_box_cell(taken)
 			if c != NO_CELL:
 				taken[c] = true
 				box_list.append({"cell": [c.x, c.y], "product": s.carry_product, "count": s.carry_count})
@@ -567,7 +573,7 @@ func add_furniture(furniture_id: String, cell: Vector2i, step := -1) -> Interact
 		"storage":
 			obj = StorageRack.new()
 		_:
-			obj = Decoration.new()
+			obj = Lantern.new() if Game.FURNITURE[furniture_id].get("light", false) else Decoration.new()
 	obj.furniture_id = furniture_id
 	if step >= 0:
 		obj.rotation_step = step
@@ -983,8 +989,21 @@ func plant_count() -> int:
 ## How much busier than normal the store is (1.0 = normal).
 func traffic_multiplier() -> float:
 	var appeal := 1.0 + PLANT_APPEAL * mini(plant_count(), MAX_PLANTS_COUNTED)
-	var mess := maxf(MIN_SPILL_TRAFFIC, 1.0 - SPILL_PENALTY * spills.size())
-	return appeal * mess * (1.0 + LEVEL_TRAFFIC * (Game.level - 1))
+	var charm := Game.CHARM_TRAFFIC if Game.has_effect("charm") else 1.0
+	return appeal * mess_multiplier() * (1.0 + LEVEL_TRAFFIC * (Game.level - 1)) * (1.0 + variety_bonus()) * charm
+
+
+## How many shoppers the blood still lets in (1 = all of them).
+func mess_multiplier() -> float:
+	if Game.has_effect("crucifix"):
+		return 1.0  # nobody minds the blood for now
+	return maxf(MIN_SPILL_TRAFFIC, 1.0 - SPILL_PENALTY * spills.size())
+
+
+## Extra shoppers for selling lots of different things (0.15 = 15% more).
+static func variety_bonus() -> float:
+	var extra := Game.unlocked_ids().filter(func(id): return float(Game.PRODUCTS[id].license) > 0.0).size()
+	return minf(VARIETY_MAX, VARIETY_TRAFFIC * extra)
 
 
 # ---------------------------------------------------------------- queries
@@ -1093,32 +1112,69 @@ func best_shelf_for(product_id: String, from: Vector2, who: Staff) -> Shelf:
 	return best
 
 
-## Products that are down to `at` or fewer on the shelves (counting every
-## shelf labeled for them) with no more on the way: no box waiting anywhere,
-## none being carried, none ordered. The general manager reorders these.
-func products_running_low(at: int) -> Array[String]:
-	var on_shelves := {}
+## Products that are running low (see reorder_list), most urgent first.
+func products_running_low(at := Staff.REORDER_AT) -> Array[String]:
+	var low: Array[String] = []
+	low.assign(reorder_list(at).keys())
+	return low
+
+
+## What the general manager should order: product id -> boxes, most urgent
+## (emptiest) first. A product needs more once everything we have of it (on
+## its shelves, in boxes anywhere, in anyone's hands, ordered) would fill a
+## third of the shelves labeled for it, or `at` items, whichever's more.
+## Then: enough boxes to fill those shelves back up (at least one, at most
+## Staff.MAX_BOXES_PER_ORDER).
+func reorder_list(at := Staff.REORDER_AT) -> Dictionary:
+	var room := {}
+	var have := {}
 	for s in shelves:
 		if s.product_id != "":
-			on_shelves[s.product_id] = int(on_shelves.get(s.product_id, 0)) + s.stock
-	var coming := {}
+			room[s.product_id] = int(room.get(s.product_id, 0)) + Shelf.CAPACITY
+			have[s.product_id] = int(have.get(s.product_id, 0)) + s.stock
+	var coming := stock_on_the_way()
+	for id: String in coming:
+		if have.has(id):
+			have[id] += coming[id]
+	var ids: Array = room.keys().filter(func(id: String) -> bool:
+		return Game.is_licensed(id) and have[id] <= maxi(at, floori(room[id] * Staff.REORDER_SHARE)))
+	ids.sort_custom(func(a: String, b: String) -> bool: return float(have[a]) / room[a] < float(have[b]) / room[b])
+	var out := {}
+	for id: String in ids:
+		var size: int = Game.PRODUCTS[id].box_size
+		var n := 1
+		while n < Staff.MAX_BOXES_PER_ORDER and have[id] + (n + 1) * size <= room[id]:
+			n += 1
+		out[id] = n
+	return out
+
+
+## Stock that isn't on the shelves yet: in boxes on the floor or the racks,
+## in someone's hands, or ordered. Product id -> items.
+func stock_on_the_way() -> Dictionary:
+	var n := {}
 	for b: StockBox in boxes.values():
-		coming[b.product_id] = true
+		n[b.product_id] = int(n.get(b.product_id, 0)) + b.count
 	for r in racks:
 		for b: StorageRack.Box in r.boxes:
-			coming[b.product_id] = true
+			n[b.product_id] = int(n.get(b.product_id, 0)) + b.count
 	for s in staff:
 		if s.carry_count > 0:
-			coming[s.carry_product] = true
+			n[s.carry_product] = int(n.get(s.carry_product, 0)) + s.carry_count
 	if player and player.is_carrying():
-		coming[player.carry_product] = true
+		n[player.carry_product] = int(n.get(player.carry_product, 0)) + player.carry_count
 	for d in pending_deliveries:
-		coming[d.id] = true
-	var low: Array[String] = []
-	for id: String in on_shelves:
-		if on_shelves[id] <= at and not coming.has(id) and Game.is_licensed(id):
-			low.append(id)
-	return low
+		n[d.id] = int(n.get(d.id, 0)) + int(Game.PRODUCTS[d.id].box_size)
+	return n
+
+
+## Room on the delivery zone for more boxes (counting the ones on the way).
+func delivery_room() -> int:
+	var used := pending_deliveries.size()
+	for c in delivery_cells:
+		if boxes.has(c):
+			used += 1
+	return delivery_cells.size() - used
 
 
 ## The closest empty spot on the delivery zone (where spare boxes go back).
@@ -1132,6 +1188,15 @@ func free_delivery_cell(from: Vector2i) -> Vector2i:
 				best_d = d
 				best = c
 	return best
+
+
+## Where a box someone was carrying goes when the game is saved: a free
+## spot on the delivery zone, or the floor closest to it.
+func _spare_box_cell(taken: Dictionary) -> Vector2i:
+	for c in delivery_cells:
+		if can_drop_at(c) and not taken.has(c):
+			return c
+	return nearest_drop_cell(delivery_anchor(), taken)
 
 
 ## The closest free floor cell to put a box down on (not in a line, not on
@@ -1545,6 +1610,10 @@ func _make_shopping_list(kind := {}) -> Array[Dictionary]:
 		var id := _weighted_pick(pool)
 		pool.erase(id)
 		list.append({"id": id, "qty": randi_range(qty[0], qty[1])})
+	# Now and then they also want something you could sell but don't yet.
+	var unsold := Game.licensable_ids()
+	if not unsold.is_empty() and randf() < WANT_UNSOLD_CHANCE:
+		list.append({"id": unsold.pick_random(), "qty": 1})
 	return list
 
 

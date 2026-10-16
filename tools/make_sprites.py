@@ -207,23 +207,33 @@ def floor_tile(base, seed, stain=False, pattern="tile"):
             elif n < 0.11:
                 c = shade(base, 1.05)
         px[x, y] = solid(c)
-    if stain:  # a grimy blotch, Project Zomboid style (old blood in the zombie game)
+    if stain:  # a grimy blotch, Project Zomboid style (black mold in the zombie game)
         sx, sy = random.randint(22, 40), random.randint(11, 19)
         for x, y in diamond(32, 16, 32):
             d = ((x - sx) / 7.0) ** 2 + ((y - sy) / 3.5) ** 2
             if d < 1.0 and random.random() < 0.85:
                 if ZOMBIE:
                     old = px[x, y]
-                    px[x, y] = solid(tuple(int(old[i] * 0.55 + (90, 22, 24)[i] * 0.45) for i in range(3)))
+                    px[x, y] = solid(tuple(int(old[i] * 0.55 + (38, 44, 34)[i] * 0.45) for i in range(3)))
                 else:
                     px[x, y] = shade(px[x, y], 0.86)
-    if ZOMBIE:  # specks of grime and dried blood
+    if ZOMBIE:
+        # Grime and specks of mold. (No blood: real blood on the floor is
+        # something to mop up, so the floor itself stays clean of it.)
         for x, y in diamond(32, 16, 32):
             r = random.random()
-            if r < 0.012:
-                px[x, y] = solid((96, 24, 26))
+            if r < 0.008:
+                px[x, y] = solid((46, 56, 40))
             elif r < 0.03:
                 px[x, y] = shade(px[x, y], 0.8)
+        if pattern == "tile" and random.random() < 0.6:  # a crack across the tile
+            x, y = random.randint(14, 50), random.randint(9, 23)
+            inside = set(diamond(32, 16, 32))
+            for _ in range(random.randint(5, 11)):
+                if (x, y) in inside:
+                    px[x, y] = shade(base, 0.58)
+                x += random.choice((1, 1, -1))
+                y += random.choice((0, 1, -1))
     if pattern == "tile":  # grout line along the two lower edges
         lowest = {}
         for x, y in diamond(32, 16, 32):
@@ -1402,12 +1412,12 @@ def ground_tile(base, seed, kind="dirt"):
         if random.random() < 0.5:  # a weed in a crack
             dot(img, 30, 20, (100, 112, 64))
             dot(img, 31, 19, (120, 132, 74))
-    if ZOMBIE and kind != "lot" and random.random() < 0.3:  # an old blood stain
+    if ZOMBIE and kind != "lot" and random.random() < 0.3:  # a dark patch of mud (or worse)
         sx, sy = random.randint(20, 44), random.randint(10, 22)
         for x, y in cells:
             if ((x - sx) / 5.0) ** 2 + ((y - sy) / 2.5) ** 2 < 1 and random.random() < 0.8:
                 old = px[x, y]
-                px[x, y] = solid(tuple(int(old[i] * 0.6 + (80, 20, 22)[i] * 0.4) for i in range(3)))
+                px[x, y] = solid(tuple(int(old[i] * 0.6 + (34, 32, 30)[i] * 0.4) for i in range(3)))
     return img
 
 
@@ -1998,6 +2008,598 @@ def crawler():
     return img
 
 
+# --------------------------------------------------------------------------
+# The store computer's desktop (ZombOS): wallpaper, the zombie girl on it,
+# app icons (zombie game)
+# --------------------------------------------------------------------------
+def _ellipse_pixels(cx, cy, rx, ry):
+    for y in range(int(cy - ry), int(cy + ry) + 1):
+        for x in range(int(cx - rx), int(cx + rx) + 1):
+            if ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1.0:
+                yield x, y
+
+
+def zombie_girl():
+    """The wallpaper girl: a cheerful zombie in the store's uniform (96x112)."""
+    from PIL import ImageDraw
+    img = new(96, 112)
+    d = ImageDraw.Draw(img)
+    skin, skin_dark, skin_light = (150, 192, 136), (114, 156, 106), (176, 212, 160)
+    hair, hair_dark, hair_light = (70, 36, 84), (46, 22, 58), (110, 66, 128)
+    shirt, shirt_dark = (84, 120, 74), (62, 92, 56)
+    apron, apron_dark = (190, 180, 160), (156, 146, 128)
+    # hair behind the head and down past the shoulders
+    d.polygon([(22, 40), (74, 40), (82, 96), (70, 100), (26, 100), (14, 96)], fill=hair_dark)
+    for x, y in _ellipse_pixels(48, 42, 30, 30):
+        dot(img, x, y, hair_dark)
+    # shoulders and shirt
+    d.polygon([(10, 112), (16, 92), (34, 82), (62, 82), (80, 92), (86, 112)], fill=shirt)
+    d.polygon([(10, 112), (16, 92), (24, 88), (22, 112)], fill=shirt_dark)
+    d.polygon([(32, 112), (34, 92), (62, 92), (64, 112)], fill=apron)  # apron bib
+    d.line([(34, 92), (30, 83)], fill=apron_dark, width=2)  # apron straps
+    d.line([(62, 92), (66, 83)], fill=apron_dark, width=2)
+    d.rectangle([52, 98, 61, 103], fill=(236, 232, 220))  # name tag
+    d.line([(54, 100), (59, 100)], fill=(120, 40, 40))
+    d.line([(54, 102), (57, 102)], fill=(120, 40, 40))
+    for x, y in [(40, 104), (41, 105), (43, 103), (45, 106)]:
+        dot(img, x, y, BLOOD)  # a little blood on the apron
+    # neck, with stitches
+    d.rectangle([40, 70, 56, 86], fill=skin_dark)
+    for i in range(5):
+        dot(img, 41 + i * 3, 80, (60, 40, 40))
+        dot(img, 42 + i * 3, 79, (60, 40, 40))
+    # face
+    for x, y in _ellipse_pixels(48, 50, 21, 25):
+        dot(img, x, y, skin)
+    for x, y in _ellipse_pixels(42, 44, 10, 12):
+        if img.load()[x, y][3]:
+            dot(img, x, y, skin_light)
+    for x, y in _ellipse_pixels(48, 50, 21, 25):
+        if x > 62:
+            dot(img, x, y, skin_dark)  # shade on the right side
+    # eyes: big, round, a bit sunken
+    for ex in (39, 57):
+        for x, y in _ellipse_pixels(ex, 50, 6.5, 5.5):
+            dot(img, x, y, (90, 110, 84))  # dark rings
+        for x, y in _ellipse_pixels(ex, 50, 5, 4.5):
+            dot(img, x, y, (240, 236, 214))
+        for x, y in _ellipse_pixels(ex + 1, 50, 2.6, 2.8):
+            dot(img, x, y, (200, 40, 50))
+        dot(img, ex + 1, 50, (30, 10, 14))
+        dot(img, ex + 1, 49, (30, 10, 14))
+        dot(img, ex - 1, 48, (255, 255, 255))  # shine
+    for x in range(33, 45):
+        dot(img, x, 44, hair_dark)  # brows
+    for x in range(52, 63):
+        dot(img, x, 44, hair_dark)
+    # nose and a stitched grin
+    dot(img, 48, 56, skin_dark)
+    dot(img, 49, 57, skin_dark)
+    for x in range(42, 56):
+        dot(img, x, 63 + (1 if 44 < x < 53 else 0), (70, 30, 36))
+    for x in range(45, 52):
+        dot(img, x, 65, (150, 50, 60))  # tongue showing in the grin
+    for x in (43, 47, 51, 55):
+        dot(img, x, 62, (70, 30, 36))
+        dot(img, x, 66, (70, 30, 36))
+    # a scar with stitches across the left cheek
+    for i in range(9):
+        dot(img, 30 + i, 58 - i // 3, (96, 60, 60))
+    for i in range(0, 9, 3):
+        dot(img, 31 + i, 56 - i // 3, (60, 40, 40))
+        dot(img, 31 + i, 60 - i // 3, (60, 40, 40))
+    # bangs and side hair over the face
+    d.polygon([(24, 46), (27, 26), (40, 18), (60, 18), (71, 28), (73, 46), (66, 34), (58, 40), (52, 32), (44, 40), (36, 32), (30, 42)], fill=hair)
+    d.polygon([(24, 36), (20, 80), (28, 92), (30, 60)], fill=hair)
+    d.polygon([(72, 36), (76, 80), (68, 92), (66, 60)], fill=hair)
+    for i in range(10):
+        dot(img, 40 + i, 21 + (i % 3), hair_light)  # shine on the hair
+    # a red bow, a little lopsided
+    d.polygon([(62, 18), (74, 12), (74, 24)], fill=(200, 40, 50))
+    d.polygon([(62, 18), (54, 10), (54, 24)], fill=(170, 30, 40))
+    for x, y in _ellipse_pixels(62, 18, 2.5, 2.5):
+        dot(img, x, y, (230, 70, 80))
+    outline_outside(img)
+    return img
+
+
+def pc_wallpaper():
+    """ZombOS desktop background (320x180): a graveyard under a big moon."""
+    img = new(320, 180)
+    px = img.load()
+    top, bottom = (34, 22, 52), (86, 40, 72)
+    for y in range(180):
+        f = y / 179.0
+        c = tuple(int(top[i] + (bottom[i] - top[i]) * f) for i in range(3))
+        for x in range(320):
+            px[x, y] = solid(c)
+    random.seed(77)
+    for _ in range(70):  # stars
+        dot(img, random.randint(0, 319), random.randint(0, 100), (200, 190, 220) if random.random() < 0.7 else (255, 250, 200))
+    for x, y in _ellipse_pixels(232, 50, 26, 26):  # the moon
+        px[x, y] = solid((236, 228, 190) if (x - 232) + (y - 50) < 10 else (214, 204, 168))
+    for cx, cy, r in [(224, 44, 4), (240, 58, 3), (236, 40, 2)]:
+        for x, y in _ellipse_pixels(cx, cy, r, r):
+            px[x, y] = solid((196, 186, 152))
+    hill = (26, 18, 34)
+    for x in range(320):  # hills and graves
+        h = int(140 + 8 * math.sin(x / 37.0) + 5 * math.sin(x / 13.0 + 1))
+        for y in range(h, 180):
+            px[x, y] = solid(hill)
+    for gx in (30, 64, 102, 150, 186, 250, 288):
+        gy = int(140 + 8 * math.sin(gx / 37.0) + 5 * math.sin(gx / 13.0 + 1))
+        if gx % 3:
+            rect(img, gx, gy - 14, gx + 8, gy, hill)  # headstone
+            for x, y in _ellipse_pixels(gx + 4.5, gy - 14, 4.5, 4):
+                px[x, y] = solid(hill)
+        else:
+            rect(img, gx + 3, gy - 18, gx + 5, gy, hill)  # cross
+            rect(img, gx, gy - 14, gx + 8, gy - 12, hill)
+    return img
+
+
+def app_icon_pc(kind):
+    """32x32 desktop icons for the store computer's apps."""
+    img = new(32, 32)
+    if kind == "stock":  # a box with a price tag
+        prism(img, 15, 24, 11, 10, CARD_TOP, CARD_L, CARD_R)
+        rect(img, 18, 6, 29, 13, (236, 220, 120))
+        rect(img, 18, 6, 18, 13, (200, 180, 90))
+        for x, y in [(23, 7), (22, 8), (23, 9), (24, 10), (23, 11), (22, 12), (23, 8), (23, 12)]:
+            dot(img, x, y, (60, 120, 50))
+    elif kind == "products":  # a jar with an eyeball in it
+        rect(img, 9, 8, 22, 9, (150, 130, 110))
+        rect(img, 8, 10, 23, 28, (170, 214, 200))
+        rect(img, 8, 10, 9, 28, (200, 236, 226))
+        for x, y in _ellipse_pixels(16, 20, 5, 5):
+            dot(img, x, y, (240, 236, 220))
+        for x, y in _ellipse_pixels(17, 20, 2.2, 2.2):
+            dot(img, x, y, (190, 40, 50))
+        dot(img, 17, 20, (20, 10, 10))
+        rect(img, 18, 2, 28, 7, (240, 210, 80))  # a "NEW!" star burst
+        dot(img, 23, 1, (240, 210, 80))
+    elif kind == "staff":  # a zombie face on an ID badge
+        rect(img, 5, 6, 26, 28, (230, 228, 220))
+        rect(img, 5, 6, 26, 9, (80, 120, 70))
+        rect(img, 13, 3, 18, 6, (120, 120, 126))
+        for x, y in _ellipse_pixels(15.5, 18, 6, 6):
+            dot(img, x, y, (150, 192, 136))
+        dot(img, 13, 17, (200, 40, 50))
+        dot(img, 18, 17, (200, 40, 50))
+        rect(img, 13, 21, 18, 21, (70, 30, 36))
+        rect(img, 8, 25, 23, 25, (150, 150, 156))
+    elif kind == "upgrades":  # a green arrow up and a wrench
+        for i in range(10):
+            rect(img, 15 - i, 4 + i, 16 + i, 4 + i, (90, 200, 100))
+        rect(img, 12, 14, 19, 28, (90, 200, 100))
+        rect(img, 12, 14, 13, 28, (130, 230, 140))
+        for i in range(12):
+            dot(img, 20 + i // 2, 28 - i, (170, 174, 184))
+            dot(img, 21 + i // 2, 28 - i, (130, 134, 144))
+    outline_outside(img)
+    return img
+
+
+def skull_icon():
+    """16x16 skull for the ZombOS start button."""
+    img = new(16, 16)
+    for x, y in _ellipse_pixels(8, 7, 6, 5.5):
+        dot(img, x, y, BONE_WHITE)
+    rect(img, 5, 11, 10, 13, BONE_WHITE)
+    for x, y in [(5, 7), (6, 7), (5, 8), (6, 8), (9, 7), (10, 7), (9, 8), (10, 8)]:
+        dot(img, x, y, (30, 26, 28))
+    dot(img, 8, 10, (60, 50, 48))
+    for x in (6, 8, 10):
+        dot(img, x, 13, (90, 80, 70))
+    outline_outside(img)
+    return img
+
+
+def lantern(view="front"):
+    """A candle in a rusty iron lantern on a little stand (64x64). The game
+    adds the glow. The hook for hanging it sticks out on one side."""
+    img = new(64, 64)
+    cy = img.height - 16
+    iron, iron_dark, iron_light = (64, 60, 62), (40, 38, 42), (96, 90, 88)
+    prism(img, 32, cy, 7, 2, iron_light, iron, iron_dark)  # base plate
+    rect(img, 31, cy - 22, 32, cy - 2, iron)  # post
+    dot(img, 31, cy - 12, iron_light)
+    top = cy - 40
+    rect(img, 26, top + 4, 37, top + 18, iron_dark)  # cage
+    rect(img, 27, top + 5, 36, top + 17, (214, 150, 64))  # amber glass
+    rect(img, 27, top + 5, 28, top + 17, (236, 184, 96))
+    rect(img, 30, top + 11, 33, top + 17, (240, 232, 214))  # the candle
+    rect(img, 31, top + 7, 32, top + 10, (255, 236, 150))  # flame
+    dot(img, 31, top + 6, (255, 200, 90))
+    for x in (29, 34):
+        rect(img, x, top + 5, x, top + 17, iron)  # bars
+    rect(img, 25, top + 18, 38, top + 20, iron)  # bottom
+    rect(img, 25, top + 2, 38, top + 4, iron)  # roof
+    rect(img, 28, top, 35, top + 1, iron)
+    rect(img, 31, top - 3, 32, top - 1, iron_dark)  # ring
+    hook = 23 if view == "front" else 40
+    rect(img, min(hook, 26), top + 1, max(hook, 25) if hook < 30 else hook, top + 1, iron_dark)
+    rect(img, hook, top + 1, hook, top + 4, iron_dark)
+    random.seed(19)
+    for _ in range(6):  # rust
+        x, y = random.randint(26, 37), random.choice((top + 3, top + 19, top + 4))
+        if img.load()[x, y][3]:
+            dot(img, x, y, (130, 76, 50))
+    outline_object(img, 0.6)
+    return img
+
+
+
+# --------------------------------------------------------------------------
+# Witches, vampires, and their shops in town (zombie game): the brewery and
+# the curio stall, the cauldron and the coffin, and what they sell
+# --------------------------------------------------------------------------
+SIGN_GLYPHS.update({
+    "W": ["#...#", "#...#", "#.#.#", "#.#.#", ".#.#."],  # 5 wide (only _slant_word spaces it right)
+    "U": ["#..#", "#..#", "#..#", "#..#", ".##."],
+    "I": ["###.", ".#..", ".#..", ".#..", "###."],
+    "H": ["#..#", "#..#", "####", "#..#", "#..#"],
+    "G": [".###", "#...", "#.##", "#..#", ".###"],
+    "Y": ["#..#", "#..#", ".##.", "..#.", "..#."],
+    "V": ["#..#", "#..#", "#..#", "#.#.", ".#.."],
+    "K": ["#..#", "#.#.", "##..", "#.#.", "#..#"],
+})
+
+
+def _shadowed(body):
+    """A soft shadow under a character of any size."""
+    w, h = body.size
+    img = new(w, h)
+    px = img.load()
+    for y in range(h - 5, h):
+        for x in range(w):
+            if ((x + 0.5 - w / 2) / (w / 2 - 0.5)) ** 2 + ((y + 0.5 - (h - 2.5)) / 2.2) ** 2 <= 1:
+                px[x, y] = (0, 0, 0, 70)
+    img.alpha_composite(body)
+    return img
+
+
+def witch(dress=(84, 50, 112), hair=(52, 46, 60), band=(150, 60, 170), skin=(132, 176, 104),
+          ladle=False):
+    """A witch (16x42: the pointy hat sticks up above everyone else)."""
+    body = new(16, 42)
+    o = 6  # below the hat, everything sits 6px lower than on a 36px sprite
+    dress_d = shade(dress, 0.8)
+    rect(body, 4, 13 + o, 11, 31 + o, dress)  # a long dress
+    rect(body, 10, 13 + o, 11, 31 + o, dress_d)
+    rect(body, 3, 25 + o, 12, 31 + o, dress)  # flaring out at the hem
+    rect(body, 11, 25 + o, 12, 31 + o, dress_d)
+    for x in range(3, 13, 2):
+        dot(body, x, 31 + o, dress_d)  # a ragged hem
+    boot = (30, 26, 30)
+    rect(body, 4, 32 + o, 7, 33 + o, boot)
+    rect(body, 8, 32 + o, 11, 33 + o, shade(boot, 0.8))
+    dot(body, 3, 33 + o, boot)  # pointy toes
+    dot(body, 12, 33 + o, shade(boot, 0.8))
+    rect(body, 4, 21 + o, 11, 21 + o, (40, 30, 30))  # belt
+    dot(body, 7, 21 + o, (226, 196, 84))  # buckle
+    rect(body, 2, 14 + o, 3, 20 + o, dress)  # sleeves
+    rect(body, 12, 14 + o, 13, 20 + o, dress_d)
+    rect(body, 2, 21 + o, 3, 22 + o, skin)  # hands
+    rect(body, 12, 21 + o, 13, 22 + o, shade(skin, 0.88))
+    rect(body, 7, 11 + o, 8, 12 + o, shade(skin, 0.85))
+    rect(body, 5, 3 + o, 10, 10 + o, skin)
+    rect(body, 10, 3 + o, 10, 10 + o, shade(skin, 0.9))
+    for y in range(3 + o, 16 + o):  # long straggly hair
+        dot(body, 4, y, hair)
+        dot(body, 11, y, shade(hair, 0.85))
+    dot(body, 3, 15 + o, hair)
+    dot(body, 12, 14 + o, shade(hair, 0.85))
+    rect(body, 5, 3 + o, 10, 3 + o, hair)
+    dot(body, 6, 6 + o, (246, 226, 80))  # yellow eyes
+    dot(body, 9, 6 + o, (246, 226, 80))
+    dot(body, 7, 7 + o, shade(skin, 0.72))  # a long nose...
+    dot(body, 7, 8 + o, shade(skin, 0.72))
+    dot(body, 8, 8 + o, (84, 112, 64))  # ...with a wart
+    rect(body, 6, 9 + o, 9, 9 + o, (64, 30, 44))  # a crooked grin
+    dot(body, 8, 9 + o, (232, 226, 200))
+    hat = (34, 30, 40)
+    rect(body, 1, 2 + o, 14, 3 + o, hat)  # brim
+    rect(body, 4, o - 1, 11, 1 + o, hat)
+    rect(body, 4, o + 1, 11, o + 1, band)
+    dot(body, 7, o + 1, (226, 196, 84))
+    rect(body, 5, o - 3, 10, o - 2, hat)
+    rect(body, 6, o - 5, 9, o - 4, hat)
+    rect(body, 8, 0, 10, 0, hat)  # the tip flops over
+    if ladle:  # the brewer stirs with a big wooden ladle
+        wood = (138, 96, 56)
+        rect(body, 13, 11 + o, 13, 22 + o, wood)
+        rect(body, 12, 9 + o, 14, 10 + o, shade(wood, 0.8))
+    outline_outside(body)
+    return _shadowed(body)
+
+
+def vampire(cape=(26, 22, 30), lining=(150, 24, 36), vest=(120, 20, 32), hair=(24, 20, 28),
+            grey=False, bowtie=None):
+    """A vampire: pale, slicked-back hair, a high-collared cape."""
+    body = new(16, 36)
+    skin = (222, 218, 228)
+    skin_d = shade(skin, 0.86)
+    suit = (40, 36, 46)
+    rect(body, 2, 12, 13, 29, cape)  # the cape hangs behind
+    rect(body, 2, 13, 2, 29, lining)
+    rect(body, 13, 13, 13, 29, shade(lining, 0.8))
+    for x in (3, 5, 10, 12):
+        dot(body, x, 30, cape)  # a jagged hem
+    rect(body, 2, 7, 3, 12, cape)  # the tall collar
+    rect(body, 12, 7, 13, 12, cape)
+    rect(body, 3, 8, 3, 12, lining)
+    rect(body, 12, 8, 12, 12, shade(lining, 0.8))
+    rect(body, 5, 24, 7, 31, suit)
+    rect(body, 8, 24, 10, 31, shade(suit, 0.8))
+    rect(body, 4, 32, 7, 33, (18, 16, 20))
+    rect(body, 8, 32, 11, 33, (12, 10, 14))
+    rect(body, 4, 13, 11, 24, suit)
+    rect(body, 10, 13, 11, 24, shade(suit, 0.8))
+    rect(body, 6, 13, 9, 22, (232, 230, 236))  # shirt
+    rect(body, 5, 15, 6, 22, vest)
+    rect(body, 9, 15, 10, 22, shade(vest, 0.85))
+    dot(body, 7, 16, (226, 196, 84))  # a gold medallion
+    dot(body, 8, 16, (226, 196, 84))
+    dot(body, 7, 17, (190, 160, 60))
+    if bowtie:
+        rect(body, 6, 13, 9, 13, bowtie)
+    rect(body, 2, 14, 3, 21, suit)  # arms
+    rect(body, 12, 14, 13, 21, shade(suit, 0.8))
+    rect(body, 2, 22, 3, 23, skin)  # long pale hands
+    rect(body, 12, 22, 13, 23, skin_d)
+    rect(body, 7, 11, 8, 12, skin_d)
+    rect(body, 5, 3, 10, 10, skin)
+    rect(body, 10, 3, 10, 10, skin_d)
+    rect(body, 4, 1, 11, 3, hair)  # slicked back, with a widow's peak
+    rect(body, 4, 4, 4, 6, hair)
+    rect(body, 11, 4, 11, 5, shade(hair, 0.85))
+    dot(body, 7, 4, hair)
+    dot(body, 8, 4, hair)
+    if grey:
+        dot(body, 5, 2, (170, 170, 176))
+        dot(body, 6, 1, (170, 170, 176))
+        dot(body, 4, 5, (170, 170, 176))
+    dot(body, 6, 6, (214, 34, 44))  # red eyes
+    dot(body, 9, 6, (214, 34, 44))
+    rect(body, 6, 9, 9, 9, (92, 22, 32))
+    dot(body, 6, 10, (250, 250, 250))  # fangs
+    dot(body, 9, 10, (250, 250, 250))
+    outline_outside(body)
+    return _with_shadow(body)
+
+
+def _word_width(word):
+    return sum(len(SIGN_GLYPHS[ch][0]) + 1 for ch in word) - 1
+
+
+def _slant_word(img, word, cx, y, color):
+    """Letters centered on cx (glyphs can be 4 or 5 wide)."""
+    x = cx - _word_width(word) // 2
+    for ch in word:
+        for gy, line in enumerate(SIGN_GLYPHS[ch]):
+            for gx, bit in enumerate(line):
+                if bit == "#":
+                    dot(img, x + gx, y + gy, color)
+        x += len(SIGN_GLYPHS[ch][0]) + 1
+
+
+def _bottle(img, x, y, liquid, h=6):
+    """A little potion bottle standing at (x, y) (its bottom left)."""
+    rect(img, x, y - h + 1, x + 2, y, liquid)
+    dot(img, x, y - h + 1, shade(liquid, 1.35))
+    rect(img, x + 1, y - h - 1, x + 1, y - h, (200, 214, 220))  # neck
+    dot(img, x + 1, y - h - 2, (140, 96, 56))  # cork
+
+
+def stall(kind):
+    """A market stall in town (64x124), its counter facing the bottom right
+    of the screen (that's the path its customers walk up). A striped awning
+    on four posts and a name board on the roof."""
+    img = new(64, 124)
+    cy = img.height - 16
+    if kind == "brewery":
+        wood, cloth, cloth2, word, ink = (96, 72, 58), (104, 58, 146), (70, 150, 92), "BREWERY", (150, 236, 140)
+    else:
+        wood, cloth, cloth2, word, ink = (78, 46, 46), (150, 26, 38), (34, 28, 36), "CURIOS", (236, 90, 96)
+    post = shade(wood, 0.7)
+    tall = 54  # from the floor to the awning
+    hw = 28
+    left, right, top, bottom = (32 - hw, cy), (32 + hw - 1, cy), (32, cy - hw // 2), (32, cy + hw // 2 - 1)
+
+    def post_at(p, light=False):
+        x, y = p
+        c = shade(post, 1.2) if light else post
+        rect(img, x - 1 if x > 32 else x, y - tall, x if x > 32 else x + 1, y - 1, c)
+
+    post_at(top)  # the back posts, behind the counter
+    post_at(left, True)
+
+    def planks(x, y, h, side, c):
+        if side == "right":
+            if (x - 32) % 7 == 0:
+                return shade(c, 0.8)
+            if 6 <= h <= 11:  # a cloth draped over the front
+                return cloth if (x // 3) % 2 else shade(cloth, 0.85)
+        return c
+
+    prism(img, 32, cy, hw, 18, shade(wood, 1.25), shade(wood, 0.78), wood, planks)
+    ty = cy - 18  # the counter top
+    random.seed(7 if kind == "brewery" else 8)
+    if kind == "brewery":
+        for x, y, c in ((22, ty - 1, (150, 80, 200)), (27, ty + 2, (90, 220, 110)), (33, ty - 3, (90, 180, 250)),
+                        (37, ty + 1, (240, 150, 50)), (42, ty - 1, (240, 90, 150)), (30, ty - 5, (70, 20, 32))):
+            _bottle(img, x, y, c, 6 if c != (70, 20, 32) else 8)
+    else:
+        for x, y in ((22, ty - 1), (26, ty + 2), (24, ty - 3)):  # a heap of garlic
+            rect(img, x, y - 2, x + 3, y, (236, 230, 214))
+            dot(img, x + 1, y - 3, (200, 196, 160))
+            dot(img, x + 3, y, (196, 190, 170))
+        gold = (226, 190, 76)
+        for x, y in ((34, ty - 2), (40, ty + 1)):  # crucifixes
+            rect(img, x + 1, y - 7, x + 1, y, gold)
+            rect(img, x - 1, y - 5, x + 3, y - 5, gold)
+            dot(img, x + 1, y - 7, shade(gold, 1.2))
+        stake = (160, 112, 64)
+        for x, y in ((44, ty - 3), (47, ty - 2)):  # stakes in a bucket
+            for i in range(9):
+                dot(img, x + i // 4, y - i, stake if i < 7 else shade(stake, 1.3))
+        rect(img, 43, ty - 2, 49, ty + 2, (70, 70, 76))
+    post_at(right)  # the front posts, in front of the counter
+    post_at(bottom, True)
+    ry = cy - tall  # the awning, striped
+    prism(img, 32, ry, hw + 2, 3, cloth, shade(cloth, 0.75), shade(cloth, 0.9))
+    for x, y in diamond(32, ry - 3, hw + 2):
+        if ((x + 2 * y) // 8) % 2:
+            dot(img, x, y, cloth2)
+    px = img.load()
+    for x in range(32, 32 + hw + 2):  # a scalloped edge hanging off the front
+        edge_y = ry + 14 - (x - 32) // 2 + 1
+        if (x // 3) % 2 and 0 <= edge_y + 1 < img.height:
+            dot(img, x, edge_y, cloth)
+            dot(img, x, edge_y + 1, shade(cloth, 0.8))
+    lx, ly = 46, ry + 12  # a lantern hanging under the front of the awning
+    rect(img, lx + 1, ly - 3, lx + 1, ly - 1, (40, 38, 42))
+    rect(img, lx, ly, lx + 3, ly + 4, (40, 38, 42))
+    rect(img, lx + 1, ly + 1, lx + 2, ly + 3, (255, 214, 120) if kind == "curios" else (170, 255, 150))
+    by = ry - 3 - 10  # the name board on the roof
+    width = _word_width(word) + 6
+    for x in (32 - width // 2 + 3, 32 + width // 2 - 4):
+        rect(img, x, by + 10, x + 1, ry - 4, post)
+    rect(img, 32 - width // 2, by, 32 + width // 2, by + 10, (30, 26, 32))
+    rect(img, 32 - width // 2 + 1, by + 1, 32 + width // 2 - 1, by + 9, (52, 44, 50))
+    _slant_word(img, word, 33, by + 3, ink)
+    outline_object(img, 0.6)
+    return img
+
+
+def cauldron():
+    """A witch's cauldron bubbling green over a little fire (64x60). The
+    game adds the green glow."""
+    img = new(64, 60)
+    cy = img.height - 16
+    px = img.load()
+    for y in range(cy - 4, cy + 5):  # shadow
+        for x in range(14, 50):
+            if ((x - 32) / 16.0) ** 2 + ((y - cy) / 3.5) ** 2 <= 1:
+                px[x, y] = (0, 0, 0, 70)
+    for x0, x1 in ((22, 41), (24, 39)):  # logs
+        rect(img, x0, cy - 1 if x0 == 22 else cy + 1, x1, cy if x0 == 22 else cy + 2, (92, 62, 40))
+    for x in range(25, 40, 2):  # flames
+        h = 3 + (x * 7) % 4
+        rect(img, x, cy - h, x, cy - 1, (240, 120, 40))
+        dot(img, x, cy - h, (255, 220, 110))
+    iron, iron_d, iron_l = (46, 44, 52), (30, 28, 34), (82, 80, 92)
+    for x, y in _ellipse_pixels(32, cy - 11, 12, 9):  # the pot
+        if 0 <= y < img.height:
+            px[x, y] = solid(iron_l if x < 27 and y < cy - 12 else (iron_d if x > 37 else iron))
+    for x, y in _ellipse_pixels(32, cy - 18, 12, 4):  # the rim...
+        px[x, y] = solid(iron_l)
+    for x, y in _ellipse_pixels(32, cy - 18, 10, 3):  # ...and the brew
+        px[x, y] = solid((84, 210, 92))
+    random.seed(4)
+    for x, y in ((28, cy - 19), (35, cy - 18), (31, cy - 17)):  # bubbles
+        dot(img, x, y, (180, 255, 170))
+    for x, y in ((30, cy - 24), (34, cy - 27), (31, cy - 30), (35, cy - 33)):  # rising
+        dot(img, x, y, (150, 240, 150))
+    outline_object(img, 0.6)
+    return img
+
+
+def coffin():
+    """A coffin standing on end, lid shut (64x76)."""
+    img = new(64, 76)
+    cy = img.height - 16
+    px = img.load()
+    for y in range(cy - 3, cy + 4):
+        for x in range(18, 46):
+            if ((x - 32) / 13.0) ** 2 + ((y - cy) / 3.0) ** 2 <= 1:
+                px[x, y] = (0, 0, 0, 70)
+    wood, dark, light = (92, 44, 46), (62, 28, 32), (126, 66, 64)
+    top, shoulder, foot = cy - 50, cy - 38, cy + 1
+
+    def half(y):
+        if y < shoulder:
+            return 6 + (y - top) * 4 // (shoulder - top)
+        return 10 - (y - shoulder) * 5 // (foot - shoulder)
+
+    for y in range(top, foot + 1):
+        w = half(y)
+        for x in range(32 - w, 32 + w + 1):
+            px[x, y] = solid(light if x <= 32 - w + 1 else (dark if x >= 32 + w - 1 else wood))
+    gold = (214, 178, 70)
+    rect(img, 31, top + 8, 33, top + 22, gold)  # a cross on the lid (it's a vampire's: ironic)
+    rect(img, 28, top + 12, 36, top + 13, gold)
+    for y in (top + 30, top + 36):
+        dot(img, 32 - half(y) + 2, y, (170, 150, 120))  # hinges
+    outline_object(img, 0.6)
+    return img
+
+
+def brew_icon(kind):
+    """What the town shops sell, as 16x16 icons."""
+    img = new(16, 16)
+    cork, glass = (146, 100, 58), (206, 222, 230)
+    if kind in ("swift", "quickhand", "charm"):
+        liquid = {"swift": (80, 180, 250), "quickhand": (244, 150, 40), "charm": (240, 90, 160)}[kind]
+        if kind == "charm":  # a heart-shaped bottle
+            for x, y in [(x, y) for y in range(6, 15) for x in range(2, 14)]:
+                u, v = (x - 7.5) / 5.5, (y - 9.0) / 5.0
+                if (u * u + v * v - 1) ** 3 - u * u * v * v * v <= 0:
+                    dot(img, x, 21 - y, liquid)
+        else:
+            for x, y in _ellipse_pixels(8, 10, 5, 5):
+                dot(img, x, y, liquid)
+        rect(img, 7, 2, 8, 5, glass)
+        rect(img, 6, 0, 9, 1, cork)
+        dot(img, 5, 8, shade(liquid, 1.45))
+        dot(img, 5, 9, shade(liquid, 1.3))
+        if kind == "swift":  # a little wing
+            for x, y in ((12, 4), (13, 4), (14, 3), (12, 5), (13, 5), (14, 5), (12, 6), (13, 6)):
+                dot(img, x, y, (246, 246, 250))
+        if kind == "quickhand":  # a lightning bolt
+            for x, y in ((9, 7), (8, 8), (7, 9), (8, 9), (9, 9), (8, 10), (7, 11)):
+                dot(img, x, y, (255, 246, 140))
+    elif kind == "wine":
+        bottle = (64, 18, 32)
+        rect(img, 5, 6, 10, 15, bottle)
+        rect(img, 7, 1, 8, 5, bottle)
+        rect(img, 6, 4, 9, 5, bottle)
+        rect(img, 7, 0, 8, 0, (170, 30, 44))
+        rect(img, 5, 9, 10, 12, (226, 214, 180))  # label
+        dot(img, 7, 10, (150, 24, 36))
+        dot(img, 8, 11, (150, 24, 36))
+        rect(img, 6, 6, 6, 8, shade(bottle, 1.6))
+    elif kind == "garlic":
+        white, line = (238, 234, 220), (196, 190, 172)
+        for x, y in _ellipse_pixels(8, 10, 5, 4):
+            dot(img, x, y, white)
+        for y in range(8, 14):
+            dot(img, 6, y, line)
+            dot(img, 10, y, line)
+        rect(img, 7, 3, 8, 6, (170, 176, 120))  # stem
+        for x in (5, 7, 9, 11):
+            dot(img, x, 15, (200, 180, 140))  # roots
+    elif kind == "crucifix":
+        gold, dark = (226, 190, 76), (170, 134, 48)
+        rect(img, 7, 1, 8, 14, gold)
+        rect(img, 3, 4, 12, 5, gold)
+        rect(img, 8, 1, 8, 14, dark)
+        rect(img, 3, 5, 12, 5, dark)
+        dot(img, 7, 1, (250, 230, 150))
+    elif kind == "stake":
+        wood, dark = (176, 124, 72), (126, 86, 48)
+        for i in range(12):
+            x, y = 2 + i, 14 - i
+            dot(img, x, y, wood)
+            dot(img, x + 1, y, dark if i < 10 else wood)
+            if i < 9:
+                dot(img, x, y - 1, shade(wood, 1.15))
+        dot(img, 14, 1, (230, 210, 170))  # the sharp end
+        rect(img, 2, 13, 4, 14, (100, 66, 40))  # where the hammer hits
+    outline_outside(img)
+    return img
+
 def splash():
     """What shows while the game starts up (instead of Godot's logo): the
     title, 6x bigger, on a 640x360 canvas. The game scales it up to fit the
@@ -2138,6 +2740,18 @@ def main():
         save(runner(), "shopper_runner")
         save(brute(), "shopper_brute")
         save(rich_zombie(), "shopper_rich")
+        save(witch(), "shopper_witch_0")
+        save(witch(dress=(36, 70, 60), hair=(150, 60, 40), band=(220, 140, 40)), "shopper_witch_1")
+        save(witch(dress=(60, 40, 70), hair=(200, 200, 208), band=(200, 120, 40), ladle=True), "keeper_witch")
+        save(vampire(), "shopper_vampire_0")
+        save(vampire(cape=(30, 26, 44), lining=(70, 40, 130), vest=(60, 30, 110), hair=(60, 40, 30)), "shopper_vampire_1")
+        save(vampire(grey=True, bowtie=(150, 24, 36)), "keeper_vampire")
+        save(stall("brewery"), "stall_brewery")
+        save(stall("curios"), "stall_curios")
+        save(cauldron(), "prop_cauldron")
+        save(coffin(), "prop_coffin")
+        for kind in ("swift", "quickhand", "charm", "wine", "garlic", "crucifix", "stake"):
+            save(brew_icon(kind), f"brew_{kind}")
     else:
         save(person((224, 182, 142), (92, 62, 40), (70, 88, 128), (58, 58, 68),
                     apron=(148, 62, 52)), "player")
@@ -2167,6 +2781,13 @@ def main():
     save(scanner(), "scanner")
     save(title(), "title")
     save(splash(), "splash")
+    save(lantern(), "lantern")
+    if ZOMBIE:
+        save(zombie_girl(), "pc_girl")
+        save(pc_wallpaper(), "pc_wallpaper")
+        for kind in ("stock", "products", "staff", "upgrades"):
+            save(app_icon_pc(kind), f"pc_app_{kind}")
+        save(skull_icon(), "pc_skull")
     # The sign stands at an angle: *_r1 is it turned to face the other way
     # (drawn separately so the letters don't come out backwards).
     save(sign("OPEN", sign_open, 1), "sign_open")

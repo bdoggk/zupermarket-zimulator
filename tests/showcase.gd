@@ -21,6 +21,9 @@ func _ready() -> void:
 	Game.open_store()
 	Game.money = 3000.0
 	Game.add_xp(1500.0)
+	await _frames(3)
+	await _shot("level_up")
+	hud.levelup_panel.visible = false
 	for id in Game.PRODUCTS:
 		if Game.can_license(id):
 			Game.buy_license(id)
@@ -35,6 +38,12 @@ func _ready() -> void:
 		b.tap(Iso.cell_to_world(c))
 	b.select_place("plant")
 	b.tap(Iso.cell_to_world(Vector2i(13, 3)))
+	var lanterns := 0
+	for c in [Vector2i(1, 4), Vector2i(1, 8), Vector2i(13, 9), Vector2i(6, 9), Vector2i(14, 5), Vector2i(4, 1)]:
+		if lanterns < 3 and store.placement_error(c, "lantern") == "":
+			b.select_place("lantern")
+			b.tap(Iso.cell_to_world(c))
+			lanterns += 1
 	b.select_place("register")
 	b.tap(Iso.cell_to_world(Vector2i(2, 6)))
 	if store.town:
@@ -65,6 +74,7 @@ func _ready() -> void:
 			di += 1
 	Game.minute = 10 * 60 + 40
 	Game.next_market_minute = 12 * 60
+	Game.money = maxf(Game.money, 2000.0)
 	Game.hire("cashier")
 	Game.hire("cashier")
 	Game.hire("stocker")
@@ -93,9 +103,27 @@ func _ready() -> void:
 	p.zoom_by(0.72)
 	await _seconds(1.2)
 	await _shot("store")
+	# Point at a shopper with something in their basket.
+	var shopper: Customer = null
+	for c in store.customers:
+		if not c.basket.is_empty():
+			shopper = c
+	if shopper == null and not store.customers.is_empty():
+		shopper = store.customers[0]
+	if shopper:
+		var at: Vector2 = get_viewport().get_canvas_transform() * (shopper.position + Vector2(0, -16))
+		get_viewport().warp_mouse(at)
+		await _frames(3)
+		await _shot("shopper_card")
+		get_viewport().warp_mouse(Vector2(5, 5))
 	p.zoom_by(1.0 / 0.72)
 
 	hud.open_computer()
+	await _frames(4)
+	await _shot("computer_desktop")
+	hud.computer.show_tab(1)  # Products
+	await _frames(4)
+	await _shot("computer_products")
 	hud.computer.show_tab(2)  # Staff
 	await _frames(4)
 	await _shot("computer_staff")
@@ -111,6 +139,30 @@ func _ready() -> void:
 		await _frames(4)
 		await _shot("rival_prices")
 		hud.rival_panel.close()
+		# The market stalls across the street.
+		var counter: ShopCounter = store.town.shop_counters.brewery
+		p.position = Iso.cell_to_world(counter.cell + Vector2i(1, -1))
+		p.camera.reset_smoothing()
+		await _seconds(1.0)
+		Game.shop_requested.emit("brewery")
+		await _frames(4)
+		await _shot("shop_brewery")
+		Game.buy_brew("swift")
+		Game.buy_brew("wine")
+		Game.shop_requested.emit("curios")
+		await _frames(4)
+		await _shot("shop_curios")
+		Game.buy_brew("garlic")
+		hud.shop_panel.close()
+		await _seconds(0.5)
+		await _shot("stalls")
+		var at_night := Game.minute
+		Game.minute = 19 * 60 + 50
+		await _seconds(0.6)
+		await _shot("stalls_night")
+		Game.minute = at_night
+		p.position = Iso.cell_to_world(Vector2i(8, 7))
+		p.camera.reset_smoothing()
 		b.enter()
 		b.select_tool(BuildMode.Tool.EXPAND)
 		b._hover(Iso.cell_to_world(b.next_lot()[18]))
@@ -145,6 +197,14 @@ func _ready() -> void:
 		await _frames(4)
 		await _shot("computer_staff_manager")
 		hud.computer.close()
+	var lit: Array = store.objects.values().filter(func(o): return o is Lantern)
+	if not lit.is_empty():
+		Game.minute = 19 * 60 + 50  # dark out: the lanterns matter
+		p.position = lit[0].position + Vector2(40, 10)
+		p.camera.reset_smoothing()
+		await _seconds(1.0)
+		await _shot("lanterns")
+		Game.minute = 10 * 60 + 40
 	for c in store.customers.duplicate():
 		if is_instance_valid(c.register):
 			c.register.leave_line(c)

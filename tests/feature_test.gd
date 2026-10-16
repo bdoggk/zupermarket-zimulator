@@ -81,12 +81,19 @@ func _ready() -> void:
 	check(Game.is_licensed(COLD) and COLD in Game.unlocked_ids(), "%s is now sold" % COLD)
 	var milk_lists := 0
 	var only_licensed := true
+	var asks := 0
 	for i in 300:
+		var unsold := 0
 		for want in store._make_shopping_list():
 			if want.id == COLD:
 				milk_lists += 1
-			only_licensed = only_licensed and Game.is_licensed(want.id)
-	check(only_licensed, "shopping lists only use licensed products")
+			if not Game.is_licensed(want.id):
+				unsold += 1
+				only_licensed = only_licensed and want.id in Game.licensable_ids()
+		only_licensed = only_licensed and unsold <= 1
+		asks += unsold
+	check(only_licensed, "shopping lists use licensed products, plus at most one you could license (%d of 300 lists asked for one)" % asks)
+	check(asks > 20 and asks < 150, "now and then someone asks for something you don't sell yet")
 	check(milk_lists > 0, "customers start wanting newly licensed products")
 
 	# ---- scanner

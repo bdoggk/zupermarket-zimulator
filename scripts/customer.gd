@@ -11,6 +11,12 @@ extends Node2D
 ## them drip blood on the floor as they shamble around. A kind with a
 ## "sound" makes it when it walks in, now and then while shopping, and when
 ## it storms out (you hear it louder the closer you are).
+##
+## You can see what they're buying: a thought bubble shows what they're
+## looking for, "+2 Canned Guts" pops up when they take something, it goes
+## in the basket they carry (the top few items stick out of it), and after
+## paying they leave with a bag. Point at one (or stand next to one) and the
+## HUD shows their basket and list (see describe()).
 
 enum State { ENTERING, ARRIVING, SHOPPING, PICKING, WAIT_FOR_LINE, TO_LINE, IN_LINE, LEAVING, WALKING_AWAY, EXITING }
 
@@ -53,6 +59,7 @@ var _top := -34.0  # top of their sprite (for the thought bubble)
 var _still := 0.0  # seconds without moving
 var _last_pos := Vector2.INF
 var _wanted := ""  # product shown in the thought bubble
+var _bagged := false  # paid: walking out with a shopping bag
 var _walk_anim := 0.0
 var voice: AudioStreamPlayer2D  # kinds with a "sound" (see growl)
 var _growl_timer := 0.0
@@ -80,6 +87,7 @@ func _ready() -> void:
 	var looks: Array = kind.get("looks", LOOKS)
 	sprite.texture = looks.pick_random()
 	sprite.offset = Vector2(-floorf(sprite.texture.get_width() / 2.0), -(sprite.texture.get_height() - 2))
+	sprite.show_behind_parent = true  # so the basket (drawn in _draw) is in their hand, in front
 	_top = sprite.offset.y
 	modulate.a = 0.0
 	leaky = Brand.SPILLS and randf() < float(kind.get("leaky", 0.35))
@@ -196,6 +204,10 @@ func _unstick() -> void:
 
 
 func _draw() -> void:
+	if not basket.is_empty():
+		_draw_basket()
+	elif _bagged and state in [State.LEAVING, State.WALKING_AWAY, State.EXITING]:
+		_draw_bag()
 	if _wanted != "" and (state == State.SHOPPING or state == State.PICKING):
 		# thought bubble with the product they're looking for
 		var y := _top - 20.0
@@ -210,6 +222,93 @@ func _draw() -> void:
 		draw_rect(Rect2(-8, y + 1, 16 * f, 2), Color(1.0 - f, 0.4 + 0.5 * f, 0.25))
 
 
+## Where their hand is (a basket or bag hangs from it), following the walk.
+func _hand() -> Vector2:
+	var x := 5.0 if not sprite.flip_h else -15.0
+	return Vector2(x, roundf(_top * 0.36) + sprite.position.y)
+
+
+## A wire basket with the last few things they picked sticking out of it.
+func _draw_basket() -> void:
+	var at := _hand()
+	var shown: Array[String] = []
+	for i in range(basket.size() - 1, -1, -1):
+		if not basket[i].id in shown:
+			shown.append(basket[i].id)
+		if shown.size() == 3:
+			break
+	for i in shown.size():
+		draw_texture(Game.icon(shown[i]), at + Vector2(1 + i * 2, -7 - (i % 2)))
+	var rim := Color(0.16, 0.17, 0.2)
+	var wire := Color(0.62, 0.66, 0.72)
+	draw_rect(Rect2(at + Vector2(0, -1), Vector2(10, 6)), wire)
+	for x in [2, 5, 8]:
+		draw_rect(Rect2(at + Vector2(x, 0), Vector2(1, 4)), rim)
+	draw_rect(Rect2(at + Vector2(0, -1), Vector2(10, 6)), rim, false, 1.0)
+	draw_rect(Rect2(at + Vector2(-1, -2), Vector2(12, 2)), Color(0.85, 0.25, 0.2))  # the red handle/rim
+
+
+## A paper bag of what they bought.
+func _draw_bag() -> void:
+	var at := _hand()
+	draw_rect(Rect2(at + Vector2(0, -4), Vector2(9, 9)), Color(0.66, 0.5, 0.32))
+	draw_rect(Rect2(at + Vector2(0, -4), Vector2(9, 2)), Color(0.55, 0.4, 0.25))
+	draw_rect(Rect2(at + Vector2(0, -4), Vector2(9, 9)), Color(0.25, 0.18, 0.12), false, 1.0)
+
+
+## Above their head (where the HUD puts their shopper card).
+func head_position() -> Vector2:
+	return position + Vector2(0, _top - 24.0)
+
+
+## Where they are on screen, for pointing at them with the mouse.
+func pick_rect() -> Rect2:
+	return Rect2(position + Vector2(-11, _top - 3), Vector2(22, -_top + 7))
+
+
+## What's in the basket, one entry per product: [{id, qty, price}].
+func basket_summary() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for item in basket:
+		var entry: Dictionary = {}
+		for e in out:
+			if e.id == item.id:
+				entry = e
+		if entry.is_empty():
+			out.append({"id": item.id, "qty": 1, "price": float(item.price)})
+		else:
+			entry.qty += 1
+	return out
+
+
+## A few lines for the HUD's shopper card: who they are, what's in their
+## basket and what they still want.
+func describe() -> String:
+	var lines: Array[String] = []
+	var who: String = kind.get("name", "Shopper")
+	match state:
+		State.WAIT_FOR_LINE, State.TO_LINE, State.IN_LINE:
+			lines.append("%s, waiting to pay (patience %d%%)" % [who, roundi(clampf(patience / max_patience, 0.0, 1.0) * 100.0)])
+		State.LEAVING, State.WALKING_AWAY, State.EXITING:
+			lines.append("%s, heading home%s" % [who, " with a bag of stuff" if _bagged else ""])
+		_:
+			lines.append("%s, shopping" % who)
+	if basket.is_empty():
+		if not state in [State.LEAVING, State.WALKING_AWAY, State.EXITING]:
+			lines.append("Basket: empty")
+	else:
+		lines.append("In the basket:")
+		for e in basket_summary():
+			lines.append("  %d x %s   $%.2f" % [e.qty, Game.product_name(e.id), e.qty * e.price])
+		lines.append("  Total: $%.2f" % checkout_total())
+	var wants: Array[String] = []
+	for w in shopping_list:
+		wants.append("%s%s" % [("%d x " % w.qty) if w.qty > 1 else "", Game.product_name(w.id)])
+	if not wants.is_empty():
+		lines.append(("Getting: " if state in [State.SHOPPING, State.PICKING] else "Still wants: ") + ", ".join(wants))
+	return "\n".join(lines)
+
+
 # ---------------------------------------------------------------- shopping
 
 func _next_item() -> void:
@@ -217,8 +316,12 @@ func _next_item() -> void:
 		var want: Dictionary = shopping_list[0]
 		var shelf := _find_shelf(want.id)
 		if shelf == null:
-			_think(Brand.SAY.no_product % Game.product_name(want.id).to_lower())
-			Game.record_missed()
+			if Game.is_licensed(want.id):
+				_think(Brand.SAY.no_product % Game.product_name(want.id).to_lower())
+				Game.record_missed()
+			else:  # you don't sell it (yet)
+				_think(Brand.SAY.get("not_sold", "No %s here?!") % Game.product_name(want.id).to_lower())
+				Game.record_wanted(want.id)
 			shopping_list.pop_front()
 			continue
 		var stand := store.stand_cell_for(shelf.cell, current_cell(), 1.5)
@@ -253,9 +356,13 @@ func _pick_from_shelf() -> void:
 	target_shelf = null
 	if is_instance_valid(shelf) and shelf.product_id == want.id and shelf.stock > 0:
 		if randf() <= Game.buy_chance(want.id, tolerance):
+			var took := 0
 			for _i in want.qty:
 				if shelf.take_one():
 					basket.append({"id": want.id, "price": Game.prices[want.id]})
+					took += 1
+			if took > 0:
+				Game.show_item_popup(position + Vector2(0, _top - 6.0), want.id, took)
 		else:
 			_think(Brand.SAY.too_pricey)
 			Game.record_missed()
@@ -352,6 +459,7 @@ func checkout_total() -> float:
 func on_checked_out() -> void:
 	if is_instance_valid(register):
 		register.leave_line(self)
+	_bagged = not basket.is_empty()
 	basket.clear()
 	_leave()
 
@@ -359,7 +467,7 @@ func on_checked_out() -> void:
 func _tick_patience(delta: float) -> void:
 	if is_instance_valid(register) and register.is_serving(self):
 		return
-	patience -= delta
+	patience -= delta * (Game.WINE_PATIENCE if Game.has_effect("wine") else 1.0)
 	if patience <= 0.0:
 		_think(Brand.SAY.walkout)
 		Settings.vibrate(0.5, 0.15)
@@ -508,6 +616,9 @@ func _animate(delta: float) -> void:
 func _drip(delta: float) -> void:
 	drip_timer -= delta
 	if drip_timer > 0.0:
+		return
+	if Game.has_effect("garlic"):
+		drip_timer = 1.0  # not while the garlic's up
 		return
 	drip_timer = randf_range(DRIP_MIN, DRIP_MAX)
 	store.add_spill(current_cell())

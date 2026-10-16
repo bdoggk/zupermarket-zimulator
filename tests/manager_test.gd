@@ -1,6 +1,7 @@
 extends Node
-# Checks the general manager (reorders anything down to 2 on the shelves,
-# boosts the other staff, gets stuck staff moving), stockers taking spare
+# Checks the general manager (reorders anything down to a third of its
+# shelves, enough boxes to fill them, boosts the other staff, gets stuck
+# staff moving), staff XP only coming from real work, stockers taking spare
 # boxes back to the delivery zone, and the end-of-day prompt (Space shows
 # the summary, Space again starts the next day).
 #   godot --headless --path . --fixed-fps 60 res://tests/manager_test.tscn
@@ -110,6 +111,90 @@ func _ready() -> void:
 	check(nudged, "the manager gets them moving again")
 	check(boss.status_text() != "", "the Staff tab says what the manager is up to: " + boss.status_text())
 
+	# ---- a product with more shelves gets more boxes, before it runs out
+	for b: StockBox in store.boxes.values():
+		store.remove_box(b)
+	store.pending_deliveries.clear()
+	for s in dry:
+		s.product_id = S1
+		s.stock = Shelf.CAPACITY
+	var three: Array[Shelf] = dry.slice(0, 3)
+	for s in three:
+		s.product_id = S0
+		s.stock = 3  # 9 of 36: a quarter full
+	var wants := store.reorder_list()
+	var box_size: int = Game.PRODUCTS[S0].box_size
+	check(wants.get(S0, 0) == mini(Staff.MAX_BOXES_PER_ORDER, (36 - 9) / box_size), "three shelves a quarter full: order %d boxes of %d (%s)" % [wants.get(S0, 0), box_size, wants])
+	for s in three:
+		s.stock = 5  # 15 of 36: still over a third
+	check(not store.reorder_list().has(S0), "not while they're over a third full")
+	for s in three:
+		s.stock = 3
+	store.drop_box(store.delivery_cells[1], S0, box_size)
+	check(not store.reorder_list().has(S0), "or when a box of it is already waiting")
+	for b: StockBox in store.boxes.values():
+		store.remove_box(b)
+	stocker.set_process(false)  # leave the shelves alone for a moment
+	var ordered_boxes := 0
+	for i in 3000:
+		await get_tree().physics_frame
+		ordered_boxes = store.pending_deliveries.filter(func(d): return d.id == S0).size()
+		if ordered_boxes > 0 and boss.job != Staff.Job.ORDERING:
+			break
+	check(ordered_boxes == wants.get(S0, 0), "the manager ordered all %d at once (%d)" % [wants.get(S0, 0), ordered_boxes])
+	stocker.set_process(true)
+	for s in dry:
+		s.product_id = S1
+		s.stock = Shelf.CAPACITY
+	target.product_id = S0
+	target.stock = Shelf.CAPACITY
+	for i in 3000:  # let the deliveries land and get put away
+		await get_tree().physics_frame
+		if store.pending_deliveries.is_empty() and stocker.job == Staff.Job.IDLE and stocker.carry_count == 0:
+			break
+
+	# ---- XP only for real work
+	stocker.nudged_by = -1
+	var boss_xp: float = Game.staff_entry(boss.id).xp
+	var looked := 0
+	for i in 900:
+		await get_tree().physics_frame
+		if boss.job == Staff.Job.CHECKING and boss._last_job != Staff.Job.CHECKING:
+			looked += 1
+	check(looked > 0 or boss.job in [Staff.Job.TO_CHECK, Staff.Job.CHECKING], "the manager walked around checking things")
+	check(is_equal_approx(Game.staff_entry(boss.id).xp, boss_xp), "with nothing to fix or order, that earns no XP (%.0f -> %.0f)" % [boss_xp, Game.staff_entry(boss.id).xp])
+	stocker._give_up()
+	stocker.job = Staff.Job.TO_BOX
+	stocker._job_time = 100.0
+	stocker._last_job = Staff.Job.TO_BOX
+	boss._nudge(stocker)
+	check(is_equal_approx(Game.staff_entry(boss.id).xp, boss_xp), "telling someone to get back to work earns nothing yet")
+	target.stock = Shelf.CAPACITY - 3
+	store.drop_box(store.delivery_cells[0], S0, 8)
+	var stocker_xp: float = Game.staff_entry(stocker.id).xp
+	for i in 2400:
+		await get_tree().physics_frame
+		if Game.staff_entry(stocker.id).xp > stocker_xp:
+			break
+	check(Game.staff_entry(stocker.id).xp > stocker_xp, "the stocker got back to work (+%.0f XP)" % (Game.staff_entry(stocker.id).xp - stocker_xp))
+	check(is_equal_approx(Game.staff_entry(boss.id).xp, boss_xp + Staff.NUDGE_XP), "and then the manager gets credit for it (+%.0f)" % (Game.staff_entry(boss.id).xp - boss_xp))
+	for i in 600:
+		await get_tree().physics_frame
+	for b: StockBox in store.boxes.values():
+		store.remove_box(b)
+	Game.hire("cashier")
+	await _frames(2)
+	var cashier: Staff = store.staff.filter(func(s): return s.role == "cashier")[0]
+	cashier.register = null
+	cashier.job = Staff.Job.NO_POST
+	cashier._job_time = 100.0
+	cashier._last_job = Staff.Job.NO_POST
+	check(not cashier.is_slacking(), "a cashier with no free register isn't slacking (so no XP for telling them off)")
+	var cashier_xp: float = Game.staff_entry(cashier.id).xp
+	for i in 300:
+		await get_tree().physics_frame
+	check(is_equal_approx(Game.staff_entry(cashier.id).xp, cashier_xp), "and standing at a register with nobody in line earns nothing")
+
 	# ---- end of the day: a prompt first, then the summary, then the next day
 	Game.open_store()
 	Game.end_day()
@@ -122,9 +207,20 @@ func _ready() -> void:
 	await _frames(3)
 	_press_space()
 	await _frames(2)
+	check(not hud.summary_panel.visible and hud.day_over_bar.visible, "a Space press right as the day ends is ignored (so mashing Space doesn't skip it)")
+	_press_key(KEY_E)
+	await _frames(2)
+	check(not hud.summary_panel.visible and hud.day_over_bar.visible, "and E never skips ahead")
+	hud._day_over_since = -10.0  # a moment later
+	_press_space()
+	await _frames(2)
 	check(hud.summary_panel.visible and not hud.day_over_bar.visible, "Space shows the day's summary")
 	check(not p.is_carrying(), "and doesn't pick anything up")
 	check(hud.summary_hint.text.contains("Space"), "the summary says how to go on: " + hud.summary_hint.text)
+	_press_space()
+	await _frames(2)
+	check(hud.summary_panel.visible and Game.day == day, "the summary doesn't vanish on an instant second press")
+	hud._day_over_since = -10.0
 	_press_space()
 	await _frames(2)
 	check(not hud.summary_panel.visible and Game.day == day + 1 and not Game.day_over, "Space again starts Day %d" % Game.day)
@@ -135,10 +231,14 @@ func _ready() -> void:
 
 
 func _press_space() -> void:
+	_press_key(KEY_SPACE)
+
+
+func _press_key(key: Key) -> void:
 	for pressed in [true, false]:
 		var e := InputEventKey.new()
-		e.keycode = KEY_SPACE
-		e.physical_keycode = KEY_SPACE
+		e.keycode = key
+		e.physical_keycode = key
 		e.pressed = pressed
 		get_viewport().push_input(e)
 

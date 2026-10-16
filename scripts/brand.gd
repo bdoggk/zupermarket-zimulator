@@ -52,6 +52,10 @@ const LAYOUT := [
 ##   #  its walls         b  its floor         e  its door
 ##   s  shelf             r  counter           m  where its owner stands
 ##   p  price board       k  skull pile        S  its sign out front
+## The market stalls down the path (see SHOPS):
+##   V  the vampire's curio stall       u  where the vampire stands
+##   W  the witch's brewery stall       y  where the witch stands
+##   Q  a coffin          K  the cauldron
 const TOWN := [
 	"@@@@@@@@@@@@@@@@111122223333,,##############;;;;",
 	"@@@@@@@@@@@@@@@@111122223333,,#kbbbbbbbbbbk#;;;;",
@@ -75,13 +79,13 @@ const TOWN := [
 	"________l_________l_________l_________l_________",
 	"______________h__________________h______________",
 	",,,,,,,,,,,,:,,,,,x,,,;;;;;,,,,,,,,,,,,,:,,,,B,,",
-	",T,www,,www,:,,,,,,,,,;;;;;,www,,wwww,,,:,,;;;;;",
-	",,,w,,,,,,w,:,,g,g,g,g;;v;;,w,,,,,,xw,,,:,,;;;;;",
-	";;;w;x,,,,w,:,,,,,,,,,;;;;;,w,B,,,,,,,,,:,,;T;;;",
-	";;;;;;,T,,w,:,,g,g,T,g;;;;;,w,,,,x,,w,v,:,,;;;;;",
-	";;;w;;,,x,w,:,v,,,,,,,;;;;;,w,,,,,,,w,,,:,,;;;;;",
-	";;;w;;,,,,w,:,,g,g,g,g,,,,,,wwwwww,ww,,,:,,;;;;;",
-	";;;wwwwww,w,:,,,,,,,,,,,,,,,,,,,,,,,,,,,:,v;;;;;",
+	",T,www,,ww,Q:,,,,,,,,,;;;;;,www,,wwww,,,:,,;;;;;",
+	",,,w,,,,,,uV:,,g,g,g,g;;v;;,w,,,,,,xw,,,:,,;;;;;",
+	";;;w;x,,,,,,:,,,,,,,,,;;;;;,w,B,,,,,,,,,:,,;T;;;",
+	";;;;;;,T,,,,:,,g,g,T,g;;;;;,w,,,,x,,w,v,:,,;;;;;",
+	";;;w;;,,x,yW:,v,,,,,,,;;;;;,w,,,,,,,w,,,:,,;;;;;",
+	";;;w;;,,,,,K:,,g,g,g,g,,,,,,wwwwww,ww,,,:,,;;;;;",
+	";;;wwwwww,,,:,,,,,,,,,,,,,,,,,,,,,,,,,,,:,v;;;;;",
 	";;v;;;,,,,,,:,,,v,,,,,,,,,T,,,;;;;;;;;;,:,,;;;;;",
 	";;;;;;,,T,,,:,,,,,,,,T,,,,,,,,;;;;;v;;;,:,,;;;T;",
 	";;;;;;,,,,,,:,,,,,,,,,,,,,,,,,;;;;;;;;;,:,,;;;;;",
@@ -123,6 +127,68 @@ const RIVAL := {
 	},
 }
 
+## Market stalls down the path across the street. Use the counter to buy
+## what they sell (BREWS): each one does something for a little while.
+##   map / keeper_map  their counter and their keeper in TOWN
+const SHOPS := {
+	"curios": {
+		"name": "Fangsworth's Curios", "keeper": "Count Fangsworth", "map": "V", "keeper_map": "u",
+		"hello": "Garlic? Crucifixes? Don't ask why a vampire sells them.",
+		"blurb": "Charms against all sorts of trouble. The Count doesn't touch the stock.",
+		"stall": preload("res://assets/sprites/stall_curios.png"),
+		"keeper_look": preload("res://assets/sprites/keeper_vampire.png"),
+		"light": Color(1.0, 0.72, 0.4),
+	},
+	"brewery": {
+		"name": "The Bubbling Cauldron", "keeper": "Old Hagatha", "map": "W", "keeper_map": "y",
+		"hello": "Potions and wine, dearie! Fresh from the cauldron.",
+		"blurb": "Brewed this morning. Drink it right here; it works straight away.",
+		"stall": preload("res://assets/sprites/stall_brewery.png"),
+		"keeper_look": preload("res://assets/sprites/keeper_witch.png"),
+		"light": Color(0.6, 1.0, 0.55),
+	},
+}
+
+## What the stalls sell. It works straight away, for `seconds` (real
+## seconds); buying another adds more time (see Game.buy_brew).
+const BREWS := {
+	"swift": {
+		"name": "Swift Potion", "shop": "brewery", "cost": 20.0, "seconds": 60.0,
+		"desc": "Run 50% faster for a minute.",
+		"icon": preload("res://assets/sprites/brew_swift.png"),
+	},
+	"quickhand": {
+		"name": "Quickhand Potion", "shop": "brewery", "cost": 35.0, "seconds": 60.0,
+		"desc": "Scan, stock and mop twice as fast for a minute.",
+		"icon": preload("res://assets/sprites/brew_quickhand.png"),
+	},
+	"charm": {
+		"name": "Charm Potion", "shop": "brewery", "cost": 50.0, "seconds": 90.0,
+		"desc": "Half again as many shoppers come in, for 90 seconds.",
+		"icon": preload("res://assets/sprites/brew_charm.png"),
+	},
+	"wine": {
+		"name": "Grave Wine", "shop": "brewery", "cost": 15.0, "seconds": 120.0,
+		"desc": "Everyone mellows out: shoppers wait in line twice as long, for 2 minutes.",
+		"icon": preload("res://assets/sprites/brew_wine.png"),
+	},
+	"garlic": {
+		"name": "Garlic", "shop": "curios", "cost": 10.0, "seconds": 90.0,
+		"desc": "Hang it by the door: nobody drips blood for 90 seconds.",
+		"icon": preload("res://assets/sprites/brew_garlic.png"),
+	},
+	"crucifix": {
+		"name": "Crucifix", "shop": "curios", "cost": 30.0, "seconds": 120.0,
+		"desc": "Blood on the floor doesn't scare shoppers off or cost you XP, for 2 minutes.",
+		"icon": preload("res://assets/sprites/brew_crucifix.png"),
+	},
+	"stake": {
+		"name": "Wooden Stake", "shop": "curios", "cost": 40.0, "seconds": 120.0,
+		"desc": "Hammer it into Bone Mart's door: nobody shops there for 2 minutes.",
+		"icon": preload("res://assets/sprites/brew_stake.png"),
+	},
+}
+
 ## Kinds of shoppers.
 ##   weight     how common they are       level  store level they start showing up
 ##   speed      walking speed (1 = normal)       patience  how long they'll wait in line
@@ -130,6 +196,8 @@ const RIVAL := {
 ##   qty        how many of each ([min, max])
 ##   tolerance  how far over the market price they'll still pay (1 = not at all)
 ##   leaky      chance they drip blood   rival  extra chance they shop at the rival
+##   night      (optional) this many times as common after 5 PM, and rarer by day
+##   plural     (optional) for "New shoppers: witches"
 const SHOPPERS := {
 	"zombie": {
 		"name": "Zombie", "weight": 10.0, "level": 1, "speed": 1.0, "patience": 1.0,
@@ -170,6 +238,16 @@ const SHOPPERS := {
 		"name": "Rich Zombie", "weight": 1.2, "level": 3, "speed": 0.9, "patience": 0.8,
 		"items": [2, 4], "qty": [1, 2], "tolerance": 1.5, "leaky": 0.0, "rival": -0.1,
 		"looks": [preload("res://assets/sprites/shopper_rich.png")],
+	},
+	"witch": {
+		"name": "Witch", "plural": "witches", "weight": 2.0, "level": 2, "speed": 1.1, "patience": 0.9,
+		"items": [1, 3], "qty": [1, 3], "tolerance": 0.95, "leaky": 0.0, "rival": 0.05,
+		"looks": [preload("res://assets/sprites/shopper_witch_0.png"), preload("res://assets/sprites/shopper_witch_1.png")],
+	},
+	"vampire": {
+		"name": "Vampire", "weight": 1.5, "level": 3, "speed": 1.25, "patience": 1.5,
+		"items": [2, 4], "qty": [1, 2], "tolerance": 1.3, "leaky": 0.0, "rival": -0.05, "night": 3.0,
+		"looks": [preload("res://assets/sprites/shopper_vampire_0.png"), preload("res://assets/sprites/shopper_vampire_1.png")],
 	},
 }
 
@@ -298,13 +376,15 @@ const UPGRADES := {
 }
 
 ## Furniture you can buy in build mode. kind is shelf, fridge, storage,
-## decor, register or selfcheckout. The ids stay the same in both games;
+## decor, register or selfcheckout ("light": a decoration that lights up,
+## see Lantern). The ids stay the same in both games;
 ## only names and art change.
 const FURNITURE := {
 	"shelf": {"name": "Rusty Shelf", "cost": 60.0, "kind": "shelf", "texture": preload("res://assets/sprites/shelf.png")},
 	"fridge": {"name": "Meat Cooler", "cost": 150.0, "kind": "fridge", "texture": preload("res://assets/sprites/fridge.png")},
 	"storage": {"name": "Storage Rack", "cost": 120.0, "kind": "storage", "texture": preload("res://assets/sprites/storage.png")},
 	"plant": {"name": "Gravestone", "cost": 25.0, "kind": "decor", "texture": preload("res://assets/sprites/plant.png")},
+	"lantern": {"name": "Lantern", "cost": 40.0, "kind": "decor", "light": true, "texture": preload("res://assets/sprites/lantern.png")},
 	"register": {"name": "Register", "cost": 250.0, "kind": "register", "texture": preload("res://assets/sprites/register.png")},
 	"selfcheckout": {"name": "Self-Checkout", "cost": 400.0, "kind": "selfcheckout", "texture": preload("res://assets/sprites/selfcheckout.png")},
 }
@@ -348,7 +428,7 @@ const STAFF := {
 	},
 	"manager": {
 		"name": "General Manager", "hire": 100.0, "wage": 45.0, "max": 1,
-		"desc": "Checks all the stock and orders more of anything down to 2 on the shelves. Keeps the other staff working (15% faster) and gets anyone who's stuck moving again.",
+		"desc": "Checks the stock and orders more boxes of anything whose shelves are down to a third full. Keeps the other staff working (15% faster) and gets anyone who's stuck moving again.",
 		"texture": preload("res://assets/sprites/staff_manager.png"),
 	},
 }
@@ -363,14 +443,17 @@ const SAY := {
 	"shopper": "zombie",
 	"shoppers": "zombies",
 	"no_product": "No %s?! Grrr",
+	"not_sold": "You don't sell %s?!",
 	"too_pricey": "Grrr... pricey!",
 	"sold_out": "Braaains... sold out?!",
 	"walkout": "Uuurrgh!",
 	"opened": "Doors open! The horde shambles in.",
 	"closing": "Closing time! Ring up the last of the horde.",
 	"morning": "Day %d. Get ready, then flip the OPEN sign by the door.",
-	"spill": "Blood on the floor! Grab the mop from the bucket. Even zombies hate a messy store.",
+	"spill": "Blood on the floor! Grab the mop from the bucket. Blood scares shoppers off and costs you XP.",
 	"jam": "Unexpected limb in the bagging area! Go fix the self-checkout.",
+	"brew_bought": "%s: %s",
+	"brew_done": "Your %s wore off.",
 }
 
 ## Lighting. day/night: how dark it is away from the ceiling lights.

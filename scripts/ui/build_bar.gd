@@ -52,19 +52,10 @@ func _ready() -> void:
 	top.add_child(status_label)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 6)
 	col.add_child(row)
 	for id: String in Game.FURNITURE:
-		var f: Dictionary = Game.FURNITURE[id]
-		var b := _tool_button("$%d" % int(f.cost), func(): _toggle_place(id))
-		b.custom_minimum_size = Vector2(76, 78)
-		b.icon = _cropped(f.texture)
-		b.expand_icon = true
-		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		b.tooltip_text = f.name
-		row.add_child(b)
-		tool_buttons[id] = b
+		row.add_child(_furniture_button(id))
 	row.add_child(VSeparator.new())
 	tool_buttons["move"] = _tool_button("Move", func(): _toggle_tool(BuildMode.Tool.MOVE))
 	row.add_child(tool_buttons["move"])
@@ -84,7 +75,7 @@ func _ready() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
-	row.add_child(UI.button("Done", build.exit, Vector2(104, 70)))
+	row.add_child(UI.button("Done", build.exit, Vector2(88, 70)))
 
 	build.changed.connect(_refresh)
 	Game.decor_changed.connect(_refresh)
@@ -102,8 +93,46 @@ static func _cropped(tex: Texture2D) -> Texture2D:
 	return a
 
 
+## A button to buy a piece of furniture: its name on top, its picture,
+## then the price.
+func _furniture_button(id: String) -> Button:
+	var f: Dictionary = Game.FURNITURE[id]
+	var b := _tool_button("", func(): _toggle_place(id))
+	b.custom_minimum_size = Vector2(84, 100)
+	b.tooltip_text = "%s  $%d" % [f.name, int(f.cost)]
+	var box := VBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 4)
+	box.add_theme_constant_override("separation", 0)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(box)
+	var name_label := UI.label(f.name)
+	name_label.add_theme_font_size_override("font_size", 13)
+	name_label.add_theme_constant_override("line_spacing", -3)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_label.custom_minimum_size = Vector2(76, 30)  # room for two lines, so every picture lines up
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(name_label)
+	var pic := TextureRect.new()
+	pic.texture = _cropped(f.texture)
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	pic.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(pic)
+	var price := UI.label("$%d" % int(f.cost), UI.WARN)
+	price.add_theme_font_size_override("font_size", 15)
+	price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	price.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(price)
+	tool_buttons[id] = b
+	return b
+
+
 func _tool_button(text: String, on_press: Callable) -> Button:
-	var b := UI.button(text, on_press, Vector2(94, 70))
+	var b := UI.button(text, on_press, Vector2(80, 70))
 	b.toggle_mode = true
 	return b
 
