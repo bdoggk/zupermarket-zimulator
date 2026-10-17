@@ -629,6 +629,8 @@ func _build_products() -> void:
 		var name_text: String = p.name
 		if p.cold:
 			name_text += "\nCold: needs a %s" % Game.FURNITURE.fridge.name.to_lower()
+		if Game.fans_text(id) != "":
+			name_text += "\n%s: stock it to bring more in" % Game.fans_text(id)
 		if not owned and int(wanted.get(id, 0)) > 0:
 			name_text += "\n%d %s asked for it today!" % [int(wanted[id]), Brand.SAY.shopper if int(wanted[id]) == 1 else Brand.SAY.shoppers]
 		var info := UI.label(name_text)

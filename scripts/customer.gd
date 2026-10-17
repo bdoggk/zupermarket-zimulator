@@ -84,6 +84,13 @@ func setup(s: Store, start: Vector2i, list: Array[Dictionary], shopper_kind := {
 		state = State.ARRIVING
 
 
+## However a shopper goes (even pulled out by a test or a reset), they're
+## out of line: a register never holds on to a freed shopper.
+func _exit_tree() -> void:
+	if is_instance_valid(register) and register.line.has(self):
+		register.line.erase(self)
+
+
 func _ready() -> void:
 	var looks: Array = kind.get("looks", LOOKS)
 	sprite.texture = looks.pick_random()
@@ -294,6 +301,9 @@ func describe() -> String:
 			lines.append("%s, heading home%s" % [who, " with a bag of stuff" if _bagged else ""])
 		_:
 			lines.append("%s, shopping" % who)
+	var likes: Array = kind.get("likes", [])
+	if not likes.is_empty():
+		lines.append("Loves %s" % " and ".join(likes.map(func(id): return Game.product_name(id))))
 	if basket.is_empty():
 		if not state in [State.LEAVING, State.WALKING_AWAY, State.EXITING]:
 			lines.append("Basket: empty")

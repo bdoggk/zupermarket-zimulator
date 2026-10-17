@@ -233,6 +233,9 @@ const BREWS := {
 ##   tolerance  how far over the market price they'll still pay (1 = not at all)
 ##   leaky      chance they drip blood   rival  extra chance they shop at the rival
 ##   night      (optional) this many times as common after 5 PM, and rarer by day
+##   likes      (optional) their favorite products: while those are on your
+##              shelves, they come much more often, want them most, and are
+##              less tempted by the rival (Game.shopper_weight, Game.favorites_on_shelves)
 ##   plural     (optional) for "New shoppers: witches"
 const SHOPPERS := {
 	"zombie": {
@@ -256,7 +259,7 @@ const SHOPPERS := {
 	},
 	"skeleton": {
 		"name": "Skeleton", "weight": 3.0, "level": 1, "speed": 1.15, "patience": 1.0,
-		"items": [1, 3], "qty": [1, 2], "tolerance": 0.9, "leaky": 0.0, "rival": 0.15,
+		"items": [1, 3], "qty": [1, 2], "tolerance": 0.9, "leaky": 0.0, "rival": 0.15, "likes": ["bonemeal", "calcium"],
 		"looks": [
 			preload("res://assets/sprites/shopper_skeleton_0.png"), preload("res://assets/sprites/shopper_skeleton_1.png"),
 			preload("res://assets/sprites/shopper_skeleton_2.png"), preload("res://assets/sprites/shopper_skeleton_3.png"),
@@ -277,12 +280,12 @@ const SHOPPERS := {
 	},
 	"witch": {
 		"name": "Witch", "plural": "witches", "weight": 2.0, "level": 2, "speed": 1.1, "patience": 0.9,
-		"items": [1, 3], "qty": [1, 3], "tolerance": 0.95, "leaky": 0.0, "rival": 0.05,
+		"items": [1, 3], "qty": [1, 3], "tolerance": 0.95, "leaky": 0.0, "rival": 0.05, "likes": ["newt", "mandrake"],
 		"looks": [preload("res://assets/sprites/shopper_witch_0.png"), preload("res://assets/sprites/shopper_witch_1.png")],
 	},
 	"vampire": {
 		"name": "Vampire", "weight": 1.5, "level": 3, "speed": 1.25, "patience": 1.5,
-		"items": [2, 4], "qty": [1, 2], "tolerance": 1.3, "leaky": 0.0, "rival": -0.05, "night": 3.0,
+		"items": [2, 4], "qty": [1, 2], "tolerance": 1.3, "leaky": 0.0, "rival": -0.05, "night": 3.0, "likes": ["batwings", "bloodbag"],
 		"looks": [preload("res://assets/sprites/shopper_vampire_0.png"), preload("res://assets/sprites/shopper_vampire_1.png")],
 	},
 }
@@ -319,6 +322,11 @@ const PRODUCTS := {
 		"level": 1, "license": 40.0, "cold": false,
 		"icon": preload("res://assets/sprites/item_eyeballs.png"),
 	},
+	"bonemeal": {
+		"name": "Bone Meal", "box_size": 10, "unit_cost": 0.8, "base_price": 1.75,
+		"level": 1, "license": 30.0, "cold": false,
+		"icon": preload("res://assets/sprites/item_bonemeal.png"),
+	},
 	"lungs": {
 		"name": "Lungs", "box_size": 6, "unit_cost": 2.0, "base_price": 4.25,
 		"level": 2, "license": 75.0, "cold": false,
@@ -328,6 +336,16 @@ const PRODUCTS := {
 		"name": "Fresh Hearts", "box_size": 6, "unit_cost": 1.5, "base_price": 3.25,
 		"level": 2, "license": 90.0, "cold": true,
 		"icon": preload("res://assets/sprites/item_hearts.png"),
+	},
+	"newt": {
+		"name": "Eye of Newt", "box_size": 8, "unit_cost": 1.25, "base_price": 3.0,
+		"level": 2, "license": 60.0, "cold": false,
+		"icon": preload("res://assets/sprites/item_newt.png"),
+	},
+	"calcium": {
+		"name": "Calcium Milk", "box_size": 6, "unit_cost": 1.5, "base_price": 3.5,
+		"level": 2, "license": 70.0, "cold": true,
+		"icon": preload("res://assets/sprites/item_calcium.png"),
 	},
 	"kidneys": {
 		"name": "Kidneys", "box_size": 12, "unit_cost": 0.5, "base_price": 1.25,
@@ -339,6 +357,16 @@ const PRODUCTS := {
 		"level": 3, "license": 120.0, "cold": false,
 		"icon": preload("res://assets/sprites/item_toes.png"),
 	},
+	"batwings": {
+		"name": "Bat Wing Crisps", "box_size": 8, "unit_cost": 1.75, "base_price": 4.0,
+		"level": 3, "license": 100.0, "cold": false,
+		"icon": preload("res://assets/sprites/item_batwings.png"),
+	},
+	"mandrake": {
+		"name": "Mandrake Root", "box_size": 6, "unit_cost": 2.5, "base_price": 5.5,
+		"level": 3, "license": 110.0, "cold": false,
+		"icon": preload("res://assets/sprites/item_mandrake.png"),
+	},
 	"liver": {
 		"name": "Liver", "box_size": 6, "unit_cost": 3.0, "base_price": 6.5,
 		"level": 4, "license": 160.0, "cold": true,
@@ -348,6 +376,11 @@ const PRODUCTS := {
 		"name": "Bone Marrow", "box_size": 6, "unit_cost": 2.5, "base_price": 5.75,
 		"level": 4, "license": 175.0, "cold": false,
 		"icon": preload("res://assets/sprites/item_marrow.png"),
+	},
+	"bloodbag": {
+		"name": "Type O Blood Bag", "box_size": 6, "unit_cost": 3.5, "base_price": 8.0,
+		"level": 4, "license": 150.0, "cold": true,
+		"icon": preload("res://assets/sprites/item_bloodbag.png"),
 	},
 	"brains": {
 		"name": "Fresh Brains", "box_size": 6, "unit_cost": 4.0, "base_price": 9.0,

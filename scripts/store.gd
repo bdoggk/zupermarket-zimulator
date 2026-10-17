@@ -1679,33 +1679,39 @@ func customer_left(c: Customer) -> void:
 
 ## What a shopper wants: a few different products you sell (how many
 ## depends on the kind of shopper; most want only one or two). Products in
-## the news ("Everyone wants...") get picked more often.
+## the news ("Everyone wants...") get picked more often, and so do the
+## shopper's favorites (Brand.SHOPPERS likes).
 func _make_shopping_list(kind := {}) -> Array[Dictionary]:
 	var pool := Game.unlocked_ids()
+	var likes: Array = kind.get("likes", [])
 	var items: Array = kind.get("items", [1, 4])
 	var qty: Array = kind.get("qty", [1, 2])
 	var n: int = items[0] + floori(pow(randf(), 1.6) * (items[1] - items[0] + 1))
 	var list: Array[Dictionary] = []
 	for i in mini(n, pool.size()):
-		var id := _weighted_pick(pool)
+		var id := _weighted_pick(pool, likes)
 		pool.erase(id)
 		list.append({"id": id, "qty": randi_range(qty[0], qty[1])})
-	# Now and then they also want something you could sell but don't yet.
+	# Now and then they also want something you could sell but don't yet
+	# (most often one of their favorites, if you don't sell that yet).
 	var unsold := Game.licensable_ids()
 	if not unsold.is_empty() and randf() < WANT_UNSOLD_CHANCE:
-		list.append({"id": unsold.pick_random(), "qty": 1})
+		var faves := unsold.filter(func(id): return likes.has(id))
+		list.append({"id": (faves if not faves.is_empty() and randf() < 0.7 else unsold).pick_random(), "qty": 1})
 	return list
 
 
-func _weighted_pick(ids: Array) -> String:
+func _weighted_pick(ids: Array, likes: Array = []) -> String:
+	var weights: Array[float] = []
 	var total := 0.0
 	for id in ids:
-		total += Game.market.demand[id]
+		weights.append(Game.market.demand[id] * (Game.FAVORITE_WANT if likes.has(id) else 1.0))
+		total += weights[-1]
 	var roll := randf() * total
-	for id in ids:
-		roll -= Game.market.demand[id]
+	for i in ids.size():
+		roll -= weights[i]
 		if roll <= 0.0:
-			return id
+			return ids[i]
 	return ids[-1]
 
 

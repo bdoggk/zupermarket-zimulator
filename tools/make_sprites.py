@@ -953,6 +953,73 @@ def spine(img):
     rect(img, 3, 8, 4, 8, BONE)
 
 
+# Favorites of the other kinds of shoppers (zombie game): skeletons, witches
+# and vampires shop more often when you sell these.
+def bone_meal(img):
+    sack = (206, 190, 150)
+    rect(img, 1, 3, 6, 8, sack)
+    rect(img, 5, 3, 6, 8, shade(sack, 0.82))
+    rect(img, 2, 1, 5, 2, shade(sack, 0.9))  # the tied top
+    dot(img, 3, 1, (150, 120, 80))
+    rect(img, 2, 5, 5, 5, (246, 244, 236))  # a bone on the front
+    dot(img, 2, 4, (246, 244, 236))
+    dot(img, 2, 6, (246, 244, 236))
+    dot(img, 5, 4, (246, 244, 236))
+    dot(img, 5, 6, (246, 244, 236))
+
+
+def calcium_milk(img):
+    rect(img, 1, 3, 6, 8, (240, 240, 236))
+    rect(img, 5, 3, 6, 8, (206, 206, 204))
+    rect(img, 2, 1, 5, 2, (220, 220, 216))  # the carton's peak
+    rect(img, 1, 5, 6, 6, (120, 150, 210))  # a blue band
+    dot(img, 3, 7, (70, 70, 80))  # a little skull stamp
+    dot(img, 4, 7, (70, 70, 80))
+
+
+def eye_of_newt(img):
+    glass = (150, 190, 170)
+    rect(img, 1, 2, 6, 8, glass)
+    rect(img, 2, 3, 5, 7, (110, 170, 70))  # green pickling juice
+    for x, y in ((2, 4), (4, 3), (3, 6), (5, 5)):
+        dot(img, x, y, (240, 220, 80))  # yellow eyes
+    rect(img, 1, 1, 6, 1, (120, 84, 56))  # cork lid
+
+
+def mandrake(img):
+    root = (176, 136, 96)
+    rect(img, 2, 4, 5, 8, root)
+    rect(img, 5, 4, 5, 8, shade(root, 0.8))
+    dot(img, 1, 6, root)  # little arms
+    dot(img, 6, 6, shade(root, 0.8))
+    dot(img, 3, 5, (40, 30, 24))  # a screaming face
+    dot(img, 4, 5, (40, 30, 24))
+    dot(img, 3, 7, (90, 40, 40))
+    for x, y in ((2, 3), (3, 2), (4, 1), (5, 2), (4, 3), (3, 1)):
+        dot(img, x, y, (90, 160, 70))  # leaves
+
+
+def bat_wings(img):
+    bag = (110, 60, 140)
+    rect(img, 1, 2, 6, 8, bag)
+    rect(img, 5, 2, 6, 8, shade(bag, 0.8))
+    rect(img, 1, 1, 6, 1, (200, 190, 210))  # crimped top
+    for x, y in ((2, 4), (3, 5), (4, 5), (5, 4), (3, 4), (4, 4), (1, 4), (6, 4)):
+        dot(img, x, y, (24, 20, 28))  # a bat
+    dot(img, 3, 6, (24, 20, 28))
+    dot(img, 4, 6, (24, 20, 28))
+
+
+def blood_bag(img):
+    red = (170, 24, 36)
+    rect(img, 1, 3, 6, 8, red)
+    rect(img, 1, 3, 6, 3, (226, 222, 220))  # the label strip
+    dot(img, 2, 5, (220, 80, 90))  # shine
+    dot(img, 2, 6, (220, 80, 90))
+    rect(img, 3, 1, 4, 2, (220, 220, 224))  # the tube on top
+    dot(img, 4, 4, (60, 50, 50))
+
+
 def scanner():
     """Handheld barcode scanner icon (12x12), shown in the UI."""
     img = new(12, 12)
@@ -2924,7 +2991,9 @@ def main():
         icons = [("guts", None), ("blood", blood_bottle), ("fingers", finger_chips),
                  ("eyeballs", eyeball_jar), ("lungs", lungs), ("hearts", heart),
                  ("kidneys", kidneys), ("toes", toe_jerky), ("liver", liver),
-                 ("marrow", marrow), ("brains", brains), ("spine", spine)]
+                 ("marrow", marrow), ("brains", brains), ("spine", spine),
+                 ("bonemeal", bone_meal), ("calcium", calcium_milk), ("newt", eye_of_newt),
+                 ("mandrake", mandrake), ("batwings", bat_wings), ("bloodbag", blood_bag)]
         for name, draw in icons:
             save(can((132, 52, 64), (214, 140, 150)) if draw is None else icon(draw), f"item_{name}")
         hero = icon(brains)

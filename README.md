@@ -36,6 +36,27 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.9.2
+
+- **Six new products that skeletons, witches and vampires love:**
+
+  | Product | Who loves it | Level | License |
+  |---|---|---|---|
+  | Bone Meal | Skeletons | 1 | $30 |
+  | Calcium Milk (cold) | Skeletons | 2 | $70 |
+  | Eye of Newt | Witches | 2 | $60 |
+  | Mandrake Root | Witches | 3 | $110 |
+  | Bat Wing Crisps | Vampires | 3 | $100 |
+  | Type O Blood Bag (cold) | Vampires | 4 | $150 |
+
+  Every favorite you have **on your shelves** brings 75% more of the shoppers who love
+  it (both: 2.5 times as many), they mostly come in for it, and fewer of them wander
+  off to Bone Mart. When it sells out, they go back to normal. If you don't sell a
+  favorite yet, those shoppers ask for it (the Products tab says
+  so). The Products tab says who loves what, and so does the shopper card when you
+  point at a skeleton, witch or vampire ("Loves Eye of Newt and Mandrake Root").
+- Fixed: a rare crash when a shopper standing in line was removed from the game.
+
 ## What's new in 0.9.1
 
 - **Shoppers no longer vanish into the shelves:** a shelf or storage rack with a
@@ -376,18 +397,19 @@ while you're open. When you level up, a panel lists everything the new level unl
 Leveling up your store (6 levels) lets you buy **licenses** for new products in the
 **Products** tab. Every product you add brings a few more shoppers (up to +50%), and
 shoppers ask for products you don't sell yet: the Products tab and the day summary
-say which. There are 12 products in total:
+say which. There are 18 products in total:
 
 | Level | Products |
 |---|---|
 | Start | Canned Guts, Blood Bottles, Finger Chips |
-| 1 | Eyeball Jars |
-| 2 | Lungs, Fresh Hearts (cold) |
-| 3 | Kidneys, Toe Jerky |
-| 4 | Liver (cold), Bone Marrow |
+| 1 | Eyeball Jars, Bone Meal (skeletons love it) |
+| 2 | Lungs, Fresh Hearts (cold), Eye of Newt (witches), Calcium Milk (cold, skeletons) |
+| 3 | Kidneys, Toe Jerky, Bat Wing Crisps (vampires), Mandrake Root (witches) |
+| 4 | Liver (cold), Bone Marrow, Type O Blood Bags (cold, vampires) |
 | 5 | Fresh Brains (cold), Spine Snacks |
 
-Cold products need a **Meat Cooler** (build mode).
+Cold products need a **Meat Cooler** (build mode). Keep the favorites of skeletons,
+witches and vampires on your shelves to bring more of them in (see Kinds of shoppers).
 
 ### The town and Bone Mart
 Walk out the front door and you're in town. The road runs past your store, with the
@@ -439,11 +461,17 @@ spies they throw out).
 | Zombie | The regular shopper |
 | Crawler | Drags itself along slowly but waits patiently. Drips a lot |
 | Runner | Fast, impatient. Shows up from store level 2 |
-| Skeleton | Comes over from Bone Mart's side of town. Fussy about prices. Some just wander around town |
+| Skeleton | Comes over from Bone Mart's side of town. Fussy about prices. Some just wander around town. Loves Bone Meal and Calcium Milk |
 | Brute | Big and slow, buys a cart full (4-6 different things). Growls. Level 3 |
 | Rich zombie | Doesn't mind paying 50% over market. Level 3 |
-| Witch | A bit fussy about prices, never drips. Level 2 |
-| Vampire | Comes out mostly after 5 PM, patient, pays up to 30% over market, never drips. Level 3 |
+| Witch | A bit fussy about prices, never drips. Loves Eye of Newt and Mandrake Root. Level 2 |
+| Vampire | Comes out mostly after 5 PM, patient, pays up to 30% over market, never drips. Loves Bat Wing Crisps and Type O Blood Bags. Level 3 |
+
+**Favorite products:** every favorite of theirs you have on your shelves (in stock)
+brings 75% more skeletons, witches or vampires (both favorites: 2.5 times as many).
+They're 4 times as likely to want it, and 5% less likely to go to Bone Mart for each
+one. If you don't sell it yet, they ask for it. Vampires with both their favorites
+stocked are the most common shoppers after dark.
 
 Out in town, a few skeletons and witches wander around all day, and a couple of
 vampires come out of the curio shop at dusk.
@@ -777,7 +805,7 @@ xvfb-run -s "-screen 0 1920x1080x24" godot --path . --rendering-driver opengl3 r
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn  # build mode view
 DAYS=5 godot --headless --path . --fixed-fps 60 res://tests/bot_test.tscn   # a bot plays 5 days
 STAFF=1 SHUFFLE=1 godot --headless --path . --fixed-fps 60 res://tests/stuck_test.tscn  # busy-store stress test
-godot --headless --path . --fixed-fps 60 res://tests/shops_test.tscn   # the little shops, brews, witches and vampires
+godot --headless --path . --fixed-fps 60 res://tests/shops_test.tscn   # the little shops, brews, witches and vampires, favorite products
 godot --headless --path . --fixed-fps 60 res://tests/spy_test.tscn     # Bone Mart's spies and yours
 godot --headless --path . --fixed-fps 60 res://tests/pad_test.tscn     # menus, the computer and build mode with a controller
 SEED=1 godot --headless --path . --fixed-fps 60 res://tests/walk_test.tscn  # walking between random spots in random layouts

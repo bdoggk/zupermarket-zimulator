@@ -2,7 +2,8 @@ extends Node
 # Checks the two little shops across the road (the witch's brewery and the
 # vampire's curio shop: walls, a door, shelves, a counter with its keeper
 # behind it), what their brews and charms do, the effects list, saving them,
-# the witch and vampire shoppers, and the witches and vampires in town.
+# the witch and vampire shoppers, the witches and vampires in town, and
+# the favorite products that bring skeletons, witches and vampires in.
 #   godot --headless --path . --fixed-fps 60 res://tests/shops_test.tscn
 
 var fails := 0
@@ -222,6 +223,90 @@ func _ready() -> void:
 	Game.minute = 8 * 60
 	await _frames(3)
 	check(town._vampires.is_empty() and bats.all(func(b): return not is_instance_valid(b) or not b.loop), "and in the morning they go home")
+
+	# ---- favorite products: stock what skeletons, witches and vampires love
+	var fav_kinds := Brand.SHOPPERS.values().filter(func(k): return k.has("likes"))
+	check(fav_kinds.size() == 3 and fav_kinds.all(func(k): return (k.likes as Array).size() >= 2 \
+		and k.likes.all(func(id): return Game.PRODUCTS.has(id) and Game.PRODUCTS[id].license > 0.0)),
+		"skeletons, witches and vampires each have favorite products: %s" % [fav_kinds.map(func(k): return "%s: %s" % [k.name, ", ".join(k.likes.map(func(id): return Game.product_name(id)))])])
+	check(fav_kinds.all(func(k): return k.likes.all(func(id): return Game.fans_of(id).size() == 1 and Game.fans_of(id)[0].name == k.name)), "(nobody shares a favorite)")
+	var newt: String = Brand.SHOPPERS.witch.likes[0]
+	check(Game.fans_text(newt) == "Witches love it" and Game.fans_text(TestIds.starter(0)) == "", "the Products app says who loves what: " + Game.fans_text(newt))
+	var lv := int(Game.PRODUCTS[newt].level)
+	check(Game.unlocks_at(lv).any(func(l): return l.contains("Witches love " + Game.product_name(newt))), "and so does the level-up list: %s" % [Game.unlocks_at(lv)])
+	var skel: Dictionary = Brand.SHOPPERS.skeleton
+	var witch: Dictionary = Brand.SHOPPERS.witch
+	var zombie: Dictionary = Brand.SHOPPERS.zombie
+	Game.minute = 11 * 60
+	Game.effects.erase("stake")
+	var was_licensed: Dictionary = Game.licensed.duplicate()
+	for id: String in Game.PRODUCTS:
+		Game.licensed[id] = true  # (selling everything, so the favorites don't win by default)
+		Game.prices[id] = Game.market_price(id)
+	for s in store.shelves:
+		if fav_kinds.any(func(k): return k.likes.has(s.product_id)):
+			s.stock = 0
+	var share := func(kind: Dictionary) -> float:
+		var n := 0
+		for i in 4000:
+			if Game.pick_shopper_kind().name == kind.name:
+				n += 1
+		return n / 4000.0
+	var list_rate := func(kind: Dictionary, ids: Array) -> float:
+		var n := 0
+		for i in 1500:
+			if store._make_shopping_list(kind).any(func(want): return ids.has(want.id)):
+				n += 1
+		return n / 1500.0
+	check(Game.favorites_on_shelves(witch) == 0, "with none of them on your shelves...")
+	var base_w := Game.shopper_weight(witch)
+	var before: float = share.call(witch)
+	var base_pull := Game.rival_pull([], witch)
+	var used: Array = []
+	for id: String in witch.likes:
+		var spots := store.shelves.filter(func(s): return s.holds_cold() == Game.is_cold(id) and not used.has(s) and s.stock == 0) \
+			+ store.shelves.filter(func(s): return s.holds_cold() == Game.is_cold(id) and not used.has(s))
+		if spots.is_empty():
+			check(false, "(no %s for %s)" % ["cooler" if Game.is_cold(id) else "shelf", Game.product_name(id)])
+			continue
+		var fave_shelf: Shelf = spots[0]
+		used.append(fave_shelf)
+		fave_shelf.product_id = id
+		fave_shelf.stock = 6
+		fave_shelf.queue_redraw()
+	check(Game.favorites_on_shelves(witch) == 2, "put %s on the shelves..." % " and ".join(witch.likes.map(func(id): return Game.product_name(id))))
+	check(is_equal_approx(Game.shopper_weight(witch), base_w * (1.0 + 2.0 * Game.FAVORITE_PULL)),
+		"and witches come %.1fx as often (weight %.1f -> %.1f)" % [Game.shopper_weight(witch) / base_w, base_w, Game.shopper_weight(witch)])
+	var after: float = share.call(witch)
+	check(after > before * 1.8, "(%d%% of shoppers were witches, now %d%%)" % [roundi(before * 100.0), roundi(after * 100.0)])
+	check(is_equal_approx(Game.rival_pull([], witch), base_pull - 2.0 * Game.FAVORITE_RIVAL),
+		"and fewer of them go to %s (%.2f -> %.2f)" % [Brand.RIVAL.name, base_pull, Game.rival_pull([], witch)])
+	var witch_rate: float = list_rate.call(witch, witch.likes)
+	var zombie_rate: float = list_rate.call(zombie, witch.likes)
+	check(witch_rate > zombie_rate * 1.8 and witch_rate > 0.4, "witches mostly come for them (%d%% want one, vs %d%% of zombies)" % [roundi(witch_rate * 100.0), roundi(zombie_rate * 100.0)])
+	var bones := store.spawn_customer(skel)
+	await _frames(2)
+	check(bones.describe().contains("Loves Bone Meal and Calcium Milk"), "the shopper card says what they love: " + bones.describe().split("\n")[1])
+	store.customer_left(bones)
+	bones.queue_free()
+	for s in used:
+		s.stock = 0
+	check(Game.favorites_on_shelves(witch) == 0 and is_equal_approx(Game.shopper_weight(witch), base_w), "sold out, and it's back to normal")
+	# Not selling a favorite yet: they ask for it.
+	var vamp: Dictionary = Brand.SHOPPERS.vampire
+	for id: String in vamp.likes:
+		Game.licensed.erase(id)
+	check(vamp.likes.all(func(id): return Game.can_license(id)), "(the vampire's favorites aren't licensed yet)")
+	var asked := 0
+	var asked_faves := 0
+	for i in 1500:
+		for want in store._make_shopping_list(vamp):
+			if not Game.is_licensed(want.id):
+				asked += 1
+				if vamp.likes.has(want.id):
+					asked_faves += 1
+	check(asked > 0 and asked_faves > asked * 0.6, "vampires ask for their favorites when you don't sell them (%d of %d asks)" % [asked_faves, asked])
+	Game.licensed = was_licensed
 
 	print("RESULT: %d failure%s" % [fails, "" if fails == 1 else "s"])
 	get_tree().quit(1 if fails > 0 else 0)

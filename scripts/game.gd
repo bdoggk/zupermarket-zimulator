@@ -46,6 +46,9 @@ const QUICKHAND_SPEED := 2.0  # Quickhand Potion: you work this much faster
 const CHARM_TRAFFIC := 1.5  # Charm Potion: this many more shoppers
 const WINE_PATIENCE := 0.5  # Grave Wine: shoppers lose patience this fast
 const RUMOR_PULL := 0.1  # a rumor from your spy sends this many fewer shoppers to the rival
+const FAVORITE_PULL := 0.75  # each favorite (Brand.SHOPPERS likes) on your shelves brings this many more of the kind that loves it
+const FAVORITE_WANT := 4.0  # ...they're this many times as likely to want it...
+const FAVORITE_RIVAL := 0.05  # ...and this much less likely to shop at the rival
 const SPY_EVERY_MINUTES := 120  # your spy goes back over this often (game minutes)
 const SPY_REPORT_XP := 6.0  # your spy, for each report
 const SPY_CATCH_XP := 6.0  # your spy, for throwing out one of the rival's
@@ -297,12 +300,45 @@ func pick_shopper_kind() -> Dictionary:
 	return pool[-1]
 
 
-## How common a kind of shopper is right now (night owls come out after 5 PM).
+## How common a kind of shopper is right now (night owls come out after
+## 5 PM, and every one of their favorite products on your shelves brings
+## more of them).
 func shopper_weight(k: Dictionary) -> float:
 	var w := float(k.weight)
 	if k.has("night"):
 		w *= float(k.night) if minute >= NIGHT_MINUTE else NIGHT_KIND_BY_DAY
-	return w
+	return w * (1.0 + FAVORITE_PULL * favorites_on_shelves(k))
+
+
+## How many of this kind of shopper's favorite products (Brand.SHOPPERS
+## "likes") are on your shelves right now.
+func favorites_on_shelves(k: Dictionary) -> int:
+	if not in_game() or not k.has("likes"):
+		return 0
+	var n := 0
+	for id: String in k.likes:
+		if not store.shelves_with(id).is_empty():
+			n += 1
+	return n
+
+
+## The kinds of shoppers whose favorite `id` is.
+func fans_of(id: String) -> Array:
+	return Brand.SHOPPERS.values().filter(func(k): return (k.get("likes", []) as Array).has(id))
+
+
+## "witches", "skeletons"...
+static func shopper_plural(k: Dictionary) -> String:
+	return str(k.get("plural", (k.name as String).to_lower() + "s"))
+
+
+## "Witches love it" (or "" if nobody has it as a favorite).
+func fans_text(id: String) -> String:
+	var fans := fans_of(id).map(func(k): return shopper_plural(k))
+	if fans.is_empty():
+		return ""
+	var s: String = " and ".join(fans)
+	return s.left(1).to_upper() + s.substr(1) + " love it"
 
 
 # ---------------------------------------------------------------- the rival store
@@ -343,6 +379,7 @@ func rival_pull(list: Array, kind: Dictionary) -> float:
 			if not is_licensed(item.id):
 				pull += 0.08  # you don't even sell it
 		pull += diff / list.size() * 1.2
+	pull -= FAVORITE_RIVAL * favorites_on_shelves(kind)  # you've got what they love
 	if in_game():
 		if not has_effect("crucifix"):  # a messy store sends a few to the rival (not a couple of puddles)
 			pull += minf(0.08, 0.01 * maxi(0, store.settled_spills() - Store.FREE_SPILLS))
@@ -647,7 +684,11 @@ func unlocks_at(lv: int) -> Array[String]:
 			lines.append("You can buy lot %d next door (Build > Expand) to make the store bigger" % (i + 1))
 	var kinds := Brand.SHOPPERS.values().filter(func(k): return int(k.get("level", 1)) == lv)
 	if not kinds.is_empty():
-		lines.append("New shoppers: %s" % ", ".join(kinds.map(func(k): return str(k.get("plural", (k.name as String).to_lower() + "s")))))
+		lines.append("New shoppers: %s" % ", ".join(kinds.map(func(k): return shopper_plural(k))))
+	var fans := products.filter(func(id): return not fans_of(id).is_empty())
+	if not fans.is_empty():
+		lines.append("; ".join(fans.map(func(id): return "%s love %s" % [fans_text(id).trim_suffix(" love it"), product_name(id)]))
+			+ (" (stock it to bring more of them in)" if fans.size() == 1 else " (stock them to bring more in)"))
 	if not Brand.RIVAL.is_empty() and int(Brand.RIVAL.get("buyout_level", 0)) == lv and not rival_owned:
 		lines.append("You can buy out %s ($%d)" % [Brand.RIVAL.name, int(Brand.RIVAL.buyout)])
 	lines.append("%d%% more shoppers come by" % roundi(Store.LEVEL_TRAFFIC * 100.0))
