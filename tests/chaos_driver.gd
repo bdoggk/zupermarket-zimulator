@@ -13,7 +13,8 @@ extends Node
 #     shoppers put in their baskets)
 #   - anyone stuck: shoppers standing still while they should walk, staff
 #     stuck on a job, you stuck inside furniture, a day that never ends,
-#     deliveries that never arrive although there's room
+#     deliveries that never arrive although there's room, the rival's spies
+#     hanging around or your spy never getting back
 #   - leaks: the number of nodes keeps growing
 
 const SLOT := 2
@@ -46,6 +47,7 @@ var _last_nonbasket := -1
 # Stuck watching
 var shopper_watch := {}  # instance id -> [position, still seconds, age seconds]
 var player_in_wall := 0.0
+var _stock_parts := {}  # where the stock was at the last check
 var _trace: Customer = null  # print what this shopper does for a few frames
 var _trace_frames := 0
 var _had_room := 0  # checks in a row (unpaused) the delivery zone had room
@@ -310,7 +312,7 @@ func _act() -> void:
 		"walk": 10.0, "tap": 14.0, "use": 10.0, "scan": 3.0, "stock": 8.0, "serve": 8.0,
 		"mop": 5.0, "computer": 3.0, "build": 1.5, "shop": 1.5, "rival": 0.5, "pause": 0.5,
 		"saveload": 0.5 if saveload else 0.0, "spawn": 2.0, "zoom": 1.0, "staff": 2.0, "teleport": 3.0,
-		"settings": 0.4, "wait": 6.0, "click": 4.0, "key": 4.0, "wheel": 0.5,
+		"settings": 0.4, "wait": 6.0, "click": 4.0, "key": 4.0, "wheel": 0.5, "spy": 1.0,
 	})
 	match what:
 		"walk":
@@ -353,6 +355,8 @@ func _act() -> void:
 				store.spawn_customer(kind)
 		"zoom":
 			p.zoom_by(1.25 if rng.randf() < 0.5 else 0.8)
+		"spy":
+			_spy()
 		"staff":
 			_staff()
 		"teleport":
@@ -644,6 +648,22 @@ func _shop() -> void:
 		Game.buy_brew(b)
 	hud._back()
 	await _frames(1)
+
+
+## The rival sends a spy over (if it's open), or you go throw one out.
+func _spy() -> void:
+	var spies := store.movers.filter(func(m): return m is RivalSpy and is_instance_valid(m) and m.can_be_caught())
+	if not spies.is_empty() and rng.randf() < 0.6:
+		var spy: RivalSpy = spies[rng.randi() % spies.size()]
+		var c := store.stand_cell_for(spy.cell, spy.cell)
+		_note("spy: go throw it out (%s, next to it %s)" % [spy.cell, c])
+		if c != Store.NO_CELL:
+			p.cancel_action()
+			p.path.clear()
+			p.position = Iso.cell_to_world(c)
+	elif Game.is_open and store.town:
+		_note("spy: the rival sends one")
+		store.town.send_rival_spy()
 
 
 func _rival() -> void:
@@ -959,6 +979,19 @@ func _check_people(dt: float, paused: bool) -> void:
 		if not paused and s.is_slacking(150.0):
 			_fail("staff stuck on a job", "%s %s %s at %s" % [s.role, s.staff_name, Staff.Job.keys()[s.job], s.current_cell()])
 			s._job_time = -10000.0
+		if not paused and s.role == "spy" and s.job in [Staff.Job.TO_RIVAL, Staff.Job.TO_REPORT, Staff.Job.CHASING] and s._job_time > 150.0:
+			_fail("spy never gets there", "%s %s at %s, path %d" % [s.staff_name, Staff.Job.keys()[s.job], s.current_cell(), s.path.size()])
+			s._job_time = -10000.0
+	# The rival's spies
+	for m in store.movers:
+		if not is_instance_valid(m):
+			_fail("freed spy in the list")
+			continue
+		var age: float = m.get_meta("age", 0.0) + (0.0 if paused else dt)
+		m.set_meta("age", age)
+		if age > 240.0:
+			_fail("rival spy hanging around", "%s at %s, inside %s, path %d, wait %.1f" % [RivalSpy.State.keys()[m.state], m.cell, m.is_inside(), m.path.size(), m.wait])
+			m.set_meta("age", -100000.0)
 	# The day has to end after closing.
 	if not paused and Game.opened and not Game.is_open and not Game.day_over:
 		closing_time += dt
@@ -972,30 +1005,34 @@ func _check_people(dt: float, paused: bool) -> void:
 ## Stock only appears when it's ordered and only leaves the shelves, boxes,
 ## racks and hands when a shopper takes it (into their basket).
 func _check_stock() -> void:
-	var total := 0
+	var parts := {"shelves": 0, "boxes": 0, "racks": 0, "you": p.carry_count, "staff": 0, "on the way": 0}
 	for s in store.shelves:
-		total += s.stock
+		parts.shelves += s.stock
 	for b: StockBox in store.boxes.values():
-		total += b.count
+		parts.boxes += b.count
 	for r in store.racks:
 		for b in r.boxes:
-			total += b.count
-	total += p.carry_count
+			parts.racks += b.count
 	for s in store.staff:
-		total += s.carry_count
+		parts.staff += s.carry_count
 	for d in store.pending_deliveries:
-		total += int(Game.PRODUCTS[d.id].box_size)
+		parts["on the way"] += int(Game.PRODUCTS[d.id].box_size)
+	var total := 0
+	for k in parts:
+		total += int(parts[k])
 	var taken := Customer.items_taken - _taken_seen
 	_taken_seen = Customer.items_taken
 	if baseline < 0:
 		baseline = total
 		ordered = 0
+		_stock_parts = parts
 		return
 	var expected := baseline + ordered - taken
 	if total != expected:
-		_fail("stock appeared or vanished", "expected %d, have %d (ordered %d, taken by shoppers %d)" % [expected, total, ordered, taken])
+		_fail("stock appeared or vanished", "expected %d, have %d (ordered %d, taken by shoppers %d), was %s, now %s" % [expected, total, ordered, taken, _stock_parts, parts])
 	baseline = total
 	ordered = 0
+	_stock_parts = parts
 
 
 func _check_nodes() -> void:

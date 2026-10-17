@@ -27,7 +27,8 @@ signal staff_leveled(id: int, level: int)
 signal store_expanded  # bought the next lot
 signal rival_requested  # open the rival's price list
 signal rival_bought
-signal shop_requested(shop: String)  # use a market stall's counter (Brand.SHOPS)
+signal rival_spy_sent  # Bone Mart sends a spy over to your store (the town does the walking)
+signal shop_requested(shop: String)  # use a little shop's counter (Brand.SHOPS)
 signal effects_changed  # a brew started or wore off
 signal tutorial_changed
 
@@ -44,6 +45,10 @@ const SWIFT_SPEED := 1.5  # Swift Potion: you run this much faster
 const QUICKHAND_SPEED := 2.0  # Quickhand Potion: you work this much faster
 const CHARM_TRAFFIC := 1.5  # Charm Potion: this many more shoppers
 const WINE_PATIENCE := 0.5  # Grave Wine: shoppers lose patience this fast
+const RUMOR_PULL := 0.1  # a rumor from your spy sends this many fewer shoppers to the rival
+const SPY_EVERY_MINUTES := 120  # your spy goes back over this often (game minutes)
+const SPY_REPORT_XP := 6.0  # your spy, for each report
+const SPY_CATCH_XP := 6.0  # your spy, for throwing out one of the rival's
 const MIN_PRICE := 0.05
 const MAX_PRICE := 999.99
 const STARTING_MONEY := 100.0
@@ -100,6 +105,7 @@ var rival_owned := false  # bought out the rival store
 var rival_factor := {}  # product id -> the rival's price today / market price
 var rival_deal := ""  # the rival's deal of the day
 var rival_seen := {}  # product id -> [price, day] when you last checked the rival
+var rival_spies: Array = []  # game minutes today when the rival sends a spy over (soonest first)
 var tutorial := {}  # first-day tips you've done (see ui/tutorial.gd)
 var tutorial_hidden := false  # you pressed "Hide tips"
 var effects := {}  # brew id -> seconds it still works for (Brand.BREWS)
@@ -141,6 +147,7 @@ func reset() -> void:
 	expansions = 0
 	rival_owned = false
 	rival_seen = {}
+	rival_spies = []
 	tutorial = {}
 	tutorial_hidden = false
 	effects = {}
@@ -173,6 +180,7 @@ func _process(delta: float) -> void:
 	if minute >= next_market_minute and next_market_minute < CLOSE_MINUTE:
 		next_market_minute += Market.UPDATE_EVERY_HOURS * 60
 		update_market(false)
+	check_rival_spies()
 	if minute >= CLOSE_MINUTE:
 		minute = CLOSE_MINUTE
 		is_open = false
@@ -338,6 +346,8 @@ func rival_pull(list: Array, kind: Dictionary) -> float:
 	if in_game():
 		pull += 0.025 * (0 if has_effect("crucifix") else store.spills.size())
 		pull -= 0.02 * mini(store.plant_count(), 6)
+	if has_effect("rumor"):
+		pull -= RUMOR_PULL
 	return clampf(pull, 0.05, 0.85)
 
 
@@ -360,6 +370,93 @@ func buy_out_rival() -> bool:
 	message.emit(Brand.RIVAL.bought)
 	rival_bought.emit()
 	return true
+
+
+# ---------------------------------------------------------------- spying
+
+## When the rival's spies come over today (none on the first days, none
+## once you own it). Called each morning.
+func roll_rival_spies() -> void:
+	rival_spies = []
+	if rival_owned or Brand.RIVAL.is_empty() or day < int(Brand.RIVAL.get("spy_from_day", 1 << 20)):
+		return
+	var per_day: Array = Brand.RIVAL.get("spies_per_day", [1, 1])
+	var count: int = per_day[1] if level >= 3 else per_day[0]
+	var span := (18 * 60 + 30) - (9 * 60)  # between 9 AM and 6:30 PM...
+	for i in count:  # ...spread out over the day
+		var lo := 9 * 60 + span * i / count
+		rival_spies.append(randi_range(lo + 15, lo + span / count - 15))
+
+
+## The rival's next spy is due: the town sends it over.
+func check_rival_spies() -> void:
+	if not is_open or rival_owned or rival_spies.is_empty() or minute < float(rival_spies[0]):
+		return
+	rival_spies.pop_front()
+	rival_spy_sent.emit()
+
+
+## The rival's spy got away after looking at your shelves of `seen`
+## products: the rival prices them just under yours for the rest of the
+## day (what's announced goes in your notes on its prices too).
+func rival_spy_got_away(seen: Array) -> void:
+	stats.spies_escaped = int(stats.get("spies_escaped", 0)) + 1
+	if rival_owned:
+		return
+	var cut: Array[String] = []
+	for id: String in seen:
+		if not PRODUCTS.has(id):
+			continue
+		var m := market_price(id)
+		var target := maxf(prices[id] * float(Brand.RIVAL.spy_undercut), m * float(Brand.RIVAL.spy_floor)) / m
+		if target < float(rival_factor.get(id, 1.0)) - 0.005:
+			rival_factor[id] = target
+			rival_seen[id] = [rival_price(id), day]
+			cut.append("%s $%.2f" % [product_name(id), rival_price(id)])
+	if cut.is_empty():
+		message.emit(Brand.RIVAL.spy_nothing)
+	else:
+		message.emit(Brand.RIVAL.spy_cheaper % Staff._list(cut))
+
+
+## You (or your spy, `by`: their name) threw the rival's spy out.
+func rival_spy_caught(by := "") -> void:
+	stats.spies_caught = int(stats.get("spies_caught", 0)) + 1
+	if by == "":
+		add_xp(float(Brand.RIVAL.get("spy_caught_xp", 0.0)))
+		message.emit(Brand.RIVAL.spy_caught)
+	else:
+		message.emit(Brand.RIVAL.spy_caught_by % by)
+
+
+## Your spy (`who`) is back from the rival with news: its whole price list
+## and deal of the day, when its next spy is coming, and a rumor that keeps
+## shoppers away from it for a while.
+func spy_report(who: String) -> void:
+	if rival_owned:
+		return
+	stats.spy_reports = int(stats.get("spy_reports", 0)) + 1
+	scout_rival(PRODUCTS.keys())
+	var news: Array[String] = ["%s is back from %s. All its prices are in Stock & Prices now" % [who, Brand.RIVAL.name]]
+	if rival_deal != "":
+		news[0] += " (deal of the day: %s, $%.2f)" % [product_name(rival_deal), rival_price(rival_deal)]
+	news[0] += "."
+	if not rival_spies.is_empty():
+		news.append("It's sending a spy over at about %s." % time_text(roundi(float(rival_spies[0]) / 30.0) * 30))
+	elif day >= int(Brand.RIVAL.get("spy_from_day", 1 << 20)):
+		news.append("No more spies coming from it today.")
+	var had_rumor := has_effect("rumor")
+	effects["rumor"] = maxf(float(effects.get("rumor", 0.0)), float(Brand.BREWS.rumor.seconds))
+	news.append("%s spread a rumor about it: fewer %s will go there for a while." % [who, Brand.SAY.shoppers])
+	message.emit(" ".join(news))
+	if not had_rumor:
+		effects_changed.emit()
+
+
+## "2:30 PM" for a time of day in minutes.
+static func time_text(m: int) -> String:
+	var h := (m / 60) % 24
+	return "%d:%02d %s" % [12 if h % 12 == 0 else h % 12, m % 60, "AM" if h < 12 else "PM"]
 
 
 # ---------------------------------------------------------------- the lots next door
@@ -573,6 +670,8 @@ func staff_limit(role: String) -> int:
 
 ## Why you can't hire a `role` right now ("" means you can).
 func hire_problem(role: String) -> String:
+	if role == "spy" and rival_owned:
+		return "%s is yours: nobody to spy on" % Brand.RIVAL.name
 	if staff_count(role) >= staff_limit(role):
 		if role == "cashier" and staff_count(role) < STAFF[role].max:
 			return "Buy another register first (Build mode)"
@@ -752,7 +851,7 @@ func to_dict() -> Dictionary:
 		"floor_style": floor_style, "wall_color": wall_color, "stats": stats,
 		"play_time": play_time,
 		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
-		"rival": {"owned": rival_owned, "factor": rival_factor, "deal": rival_deal, "seen": rival_seen},
+		"rival": {"owned": rival_owned, "factor": rival_factor, "deal": rival_deal, "seen": rival_seen, "spies": rival_spies},
 		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden, "effects": effects,
 		"market": {"factor": market.factor, "previous": market.previous, "demand": market.demand, "news": market.news},
 	}
@@ -829,6 +928,13 @@ func from_dict(d: Dictionary) -> void:
 			rival_seen[id] = [float(seen[id][0]), int(seen[id][1])]
 	for entry in staff:
 		_next_staff_id = maxi(_next_staff_id, entry.id + 1)
+	if r.get("spies") is Array:
+		rival_spies = []
+		for at in r.spies:
+			rival_spies.append(int(at))
+	else:  # a save from before the rival had spies
+		roll_rival_spies()
+		rival_spies = rival_spies.filter(func(at): return at > minute)
 
 
 # ---------------------------------------------------------------- day cycle
@@ -839,13 +945,15 @@ func show_popup(world_pos: Vector2, text: String, color := Color.WHITE) -> void:
 
 # ---------------------------------------------------------------- brews
 
-## A brew (or charm) from a market stall is working right now.
+## A brew (or charm) from one of the little shops is working right now.
 func has_effect(id: String) -> bool:
 	return float(effects.get(id, 0.0)) > 0.0
 
 
 ## Why you can't buy brew `id` right now ("" if you can).
 func brew_problem(id: String) -> String:
+	if str(Brand.BREWS[id].get("shop", "")) == "":
+		return "Not for sale"
 	if id == "stake" and rival_owned:
 		return "%s is yours already" % Brand.RIVAL.name
 	if float(effects.get(id, 0.0)) + float(Brand.BREWS[id].seconds) > MAX_EFFECT_SECONDS + 0.01:
@@ -855,7 +963,7 @@ func brew_problem(id: String) -> String:
 	return ""
 
 
-## Buys brew `id` from its stall. It works straight away; another one
+## Buys brew `id` from its shop. It works straight away; another one
 ## adds more time.
 func buy_brew(id: String) -> bool:
 	if not Brand.BREWS.has(id) or brew_problem(id) != "":
@@ -875,10 +983,13 @@ func _tick_effects(delta: float) -> void:
 	if effects.is_empty():
 		return
 	for id: String in effects.keys():
+		var b: Dictionary = Brand.BREWS[id]
+		if b.get("open_only", false) and not is_open:
+			continue
 		effects[id] = float(effects[id]) - delta
 		if effects[id] <= 0.0:
 			effects.erase(id)
-			message.emit(Brand.SAY.brew_done % Brand.BREWS[id].name)
+			message.emit(str(b.done) if b.has("done") else Brand.SAY.brew_done % b.name)
 			effects_changed.emit()
 
 
@@ -922,6 +1033,7 @@ func start_next_day() -> void:
 	is_open = false
 	day_over = false
 	roll_rival_prices()
+	roll_rival_spies()
 	day_started.emit(day)
 	message.emit(Brand.SAY.morning % day)
 	update_market(true)
@@ -951,4 +1063,5 @@ func clock_text() -> String:
 
 
 func _reset_stats() -> void:
-	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0, "wanted": {}, "xp_lost": 0.0, "brews": 0}
+	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0, "wanted": {}, "xp_lost": 0.0, "brews": 0,
+		"spies_caught": 0, "spies_escaped": 0, "spy_reports": 0}

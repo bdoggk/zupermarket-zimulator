@@ -85,6 +85,9 @@ var sign: OpenSign
 var mop_bucket: MopBucket
 var player: Player
 var customers: Array[Customer] = []
+## Things you can walk up to and use that walk around themselves (the
+## rival's spies, see RivalSpy). Their `cell` is wherever they are now.
+var movers: Array[Interactable] = []
 var pending_deliveries: Array[Dictionary] = []
 var spawn_timer := FIRST_CUSTOMER_DELAY
 var reachable := {}  # every cell you can walk to from the door
@@ -676,6 +679,7 @@ func remove_furniture(obj: Interactable) -> void:
 		shelves.erase(obj)
 		if obj.stock > 0:
 			_create_box(obj.cell, obj.product_id, obj.stock)
+			obj.stock = 0  # it's in the box now (nobody can take it off the shelf this frame)
 	if obj is StorageRack:
 		racks.erase(obj)
 		var first := true
@@ -685,6 +689,7 @@ func remove_furniture(obj: Interactable) -> void:
 			first = false
 			if c != NO_CELL:
 				_create_box(c, b.product_id, b.count)
+		obj.boxes.clear()
 	if obj is Register:
 		registers.erase(obj)
 		obj.release_all()
@@ -852,6 +857,9 @@ func placement_error(cell: Vector2i, furniture_id: String, moving: Interactable 
 	for s in staff:
 		if s.current_cell() == cell or s.next_cell() == cell:
 			return "%s is in the way" % s.staff_name
+	for m in movers:
+		if is_instance_valid(m) and (m.cell == cell or (m is RivalSpy and not m.path.is_empty() and m.path[0] == cell)):
+			return "%s's spy is in the way" % Brand.RIVAL.name
 	var needs_access := true
 	if moving:
 		needs_access = not moving is Decoration
@@ -929,6 +937,9 @@ func layout_changed() -> void:
 		c.on_layout_changed()
 	for s in staff:
 		s.on_layout_changed()
+	for m in movers:
+		if is_instance_valid(m) and m.has_method("on_layout_changed"):
+			m.on_layout_changed()
 	if player:
 		player.on_layout_changed()
 
@@ -1058,6 +1069,9 @@ func interactables_near(cell: Vector2i) -> Array[Interactable]:
 				found.append(spills[c])
 			if town and town.objects.has(c):
 				found.append(town.objects[c])
+	for m in movers:
+		if is_instance_valid(m) and Iso.chebyshev(m.cell, cell) <= 1:
+			found.append(m)
 	return found
 
 
@@ -1073,6 +1087,9 @@ func interactable_at_point(p: Vector2, prefer_spills := false) -> Interactable:
 	var all: Array = objects.values() + boxes.values()
 	if town:
 		all.append_array(town.objects.values())
+	for m in movers:
+		if is_instance_valid(m):
+			all.append(m)
 	for obj: Interactable in all:
 		if obj.get_pick_rect().has_point(p - obj.position):
 			if best == null or obj.position.y > best.position.y:
@@ -1417,6 +1434,8 @@ func _staff_start(role: String) -> Vector2i:
 		spot = mop_bucket.cell
 	elif role == "manager" and computer:
 		spot = computer.cell
+	elif role == "spy":
+		spot = door_cell
 	if spot != NO_CELL:
 		var c := stand_cell_for(spot, spot)
 		if c != NO_CELL:
@@ -1541,8 +1560,8 @@ func _update_customers(delta: float) -> void:
 			if town:
 				spawn_timer /= TOWN_TRAFFIC
 			_new_shopper()
-	elif Game.opened and not Game.day_over and customers.is_empty():
-		Game.end_day()  # closing time and the last customer has left
+	elif Game.opened and not Game.day_over and customers.is_empty() and not movers.any(func(m): return is_instance_valid(m) and floor_cells.has(m.cell)):
+		Game.end_day()  # closing time and the last customer (and any spy) has left
 
 
 ## Someone in town wants to go shopping. With a rival in town they might go

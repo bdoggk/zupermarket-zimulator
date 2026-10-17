@@ -696,6 +696,7 @@ func _build_staff() -> void:
 		team.add_child(label)
 		var status := UI.label("", UI.INFO)
 		status.custom_minimum_size.x = 300
+		status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # a long one wraps instead of widening the window
 		team.add_child(status)
 		_updaters.append(func():
 			status.text = who.status_text() if is_instance_valid(who) else ""

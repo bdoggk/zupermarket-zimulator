@@ -1845,7 +1845,8 @@ def rival_sign(sold=False):
 # --------------------------------------------------------------------------
 # Skeletons and the other kinds of zombie shoppers
 # --------------------------------------------------------------------------
-def skeleton(seed, hat=None, bowtie=None, vest=None, bag=False, cap=None, apron=None):
+def skeleton(seed, hat=None, bowtie=None, vest=None, bag=False, cap=None, apron=None,
+             coat=None, fedora=None, shades=False, notepad=False):
     random.seed(seed)
     body = new(16, 36)
     B, D = BONE_WHITE, BONE_DARK
@@ -1866,11 +1867,32 @@ def skeleton(seed, hat=None, bowtie=None, vest=None, bag=False, cap=None, apron=
     if apron:
         rect(body, 5, 15, 10, 25, apron)
         rect(body, 9, 15, 10, 25, shade(apron, 0.85))
+    if coat:  # a trench coat down to the knees, collar up, belted
+        coat_d = shade(coat, 0.8)
+        rect(body, 4, 12, 11, 28, coat)
+        rect(body, 10, 12, 11, 28, coat_d)
+        rect(body, 3, 22, 12, 28, coat)  # flaring out at the bottom
+        rect(body, 11, 22, 12, 28, coat_d)
+        for y in range(14, 29):
+            dot(body, 7, y, shade(coat, 0.7))  # where it buttons up
+        rect(body, 4, 20, 11, 20, shade(coat, 0.55))  # belt
+        dot(body, 8, 20, (200, 180, 110))
+        rect(body, 4, 11, 5, 13, coat)  # turned-up collar
+        rect(body, 10, 11, 11, 13, coat_d)
     for y in range(14, 23):  # arms
         dot(body, 3, y, B)
         dot(body, 12, y, D)
     dot(body, 3, 23, B)
     dot(body, 12, 23, D)
+    if coat:  # sleeves over the arm bones, just the hands showing
+        rect(body, 2, 14, 3, 21, coat)
+        rect(body, 12, 14, 13, 21, shade(coat, 0.8))
+    if notepad:  # a little notebook and a pencil, for taking down your prices
+        rect(body, 12, 17, 14, 21, (234, 230, 214))
+        rect(body, 12, 17, 14, 17, (170, 60, 50))
+        dot(body, 13, 19, (120, 120, 130))
+        dot(body, 1, 20, (230, 190, 70))
+        dot(body, 1, 21, (230, 190, 70))
     rect(body, 7, 11, 8, 12, D)  # neck
     rect(body, 5, 3, 10, 9, B)  # skull
     rect(body, 4, 4, 4, 8, B)
@@ -1895,6 +1917,15 @@ def skeleton(seed, hat=None, bowtie=None, vest=None, bag=False, cap=None, apron=
     if cap:
         rect(body, 4, 1, 11, 3, cap)
         rect(body, 9, 3, 12, 3, shade(cap, 0.75))
+    if fedora:  # pulled down low
+        rect(body, 3, 3, 12, 3, fedora)
+        rect(body, 5, 0, 10, 2, fedora)
+        rect(body, 5, 2, 10, 2, shade(fedora, 0.55))  # the band
+        dot(body, 7, 0, shade(fedora, 1.3))
+    if shades:  # dark glasses over the eye sockets
+        rect(body, 5, 5, 10, 6, (18, 18, 24))
+        dot(body, 6, 5, (90, 100, 120))
+        dot(body, 9, 5, (90, 100, 120))
     if bag:  # a shopping bag
         rect(body, 12, 19, 14, 24, (196, 172, 120))
         dot(body, 13, 18, (120, 100, 70))
@@ -2232,7 +2263,7 @@ def lantern(view="front"):
 
 # --------------------------------------------------------------------------
 # Witches, vampires, and their shops in town (zombie game): the brewery and
-# the curio stall, the cauldron and the coffin, and what they sell
+# the curio shop, the cauldron and the coffin, and what they sell
 # --------------------------------------------------------------------------
 SIGN_GLYPHS.update({
     "W": ["#...#", "#...#", "#.#.#", "#.#.#", ".#.#."],  # 5 wide (only _slant_word spaces it right)
@@ -2392,84 +2423,289 @@ def _bottle(img, x, y, liquid, h=6):
     dot(img, x + 1, y - h - 2, (140, 96, 56))  # cork
 
 
-def stall(kind):
-    """A market stall in town (64x124), its counter facing the bottom right
-    of the screen (that's the path its customers walk up). A striped awning
-    on four posts and a name board on the roof."""
-    img = new(64, 124)
-    cy = img.height - 16
-    if kind == "brewery":
-        wood, cloth, cloth2, word, ink = (96, 72, 58), (104, 58, 146), (70, 150, 92), "BREWERY", (150, 236, 140)
-    else:
-        wood, cloth, cloth2, word, ink = (78, 46, 46), (150, 26, 38), (34, 28, 36), "CURIOS", (236, 90, 96)
-    post = shade(wood, 0.7)
-    tall = 54  # from the floor to the awning
-    hw = 28
-    left, right, top, bottom = (32 - hw, cy), (32 + hw - 1, cy), (32, cy - hw // 2), (32, cy + hw // 2 - 1)
+SHOP_LOOKS = {
+    "curios": {"wall": (74, 54, 70), "top": (50, 38, 50), "seam": (42, 32, 42), "trim": (124, 30, 42),
+               "floor": (86, 50, 52), "word": "CURIOS", "ink": (236, 92, 98), "board": (40, 28, 36),
+               "wood": (78, 44, 48), "cloth": (124, 26, 38)},
+    "brewery": {"wall": (104, 84, 58), "top": (84, 98, 60), "seam": (66, 52, 38), "moss": (72, 102, 54),
+                "floor": (100, 104, 92), "word": "BREWERY", "ink": (150, 236, 140), "board": (44, 36, 32),
+                "wood": (98, 74, 54), "cloth": (92, 54, 124)},
+}
 
-    def post_at(p, light=False):
-        x, y = p
-        c = shade(post, 1.2) if light else post
-        rect(img, x - 1 if x > 32 else x, y - tall, x if x > 32 else x + 1, y - 1, c)
 
-    post_at(top)  # the back posts, behind the counter
-    post_at(left, True)
+def shop_wall(height, kind):
+    """The walls of the little shops across the road: the vampire's dark
+    stone with a blood-red trim, the witch's crooked mossy planks."""
+    look = SHOP_LOOKS[kind]
+    img = new(64, 32 + height)
 
-    def planks(x, y, h, side, c):
-        if side == "right":
-            if (x - 32) % 7 == 0:
-                return shade(c, 0.8)
-            if 6 <= h <= 11:  # a cloth draped over the front
-                return cloth if (x // 3) % 2 else shade(cloth, 0.85)
+    def face(x, y, h, side, c):
+        dark = 1.0 if side == "left" else 0.85
+        if h < 3:
+            return shade(c, 0.6)  # the bottom row
+        if kind == "curios":
+            course = (h - 3) // 5
+            if (h - 3) % 5 == 4 or (x + (4 if course % 2 else 0)) % 9 == 0:
+                return shade(look["seam"], dark)
+            if height > 20 and height - 6 <= h <= height - 4:
+                return shade(look["trim"], dark)
+            if (x * 13 + h * 7) % 23 == 0:
+                return shade(c, 1.12)  # a lighter stone here and there
+            return c
+        lean = (h // 9) % 2 if (x // 6) % 3 == 0 else 0  # planks on end, a bit crooked
+        if (x + lean) % 6 == 0:
+            return shade(look["seam"], dark)
+        if h < 4 + (x * 5) % 7 and (x * 11 + h) % 3 != 0:
+            return shade(look["moss"], dark)  # moss creeping up
+        if (x * 7 + h * 3) % 41 == 0:
+            return (40, 34, 30)  # a nail
+        if h > height - 3:
+            return shade(c, 0.85)
         return c
 
-    prism(img, 32, cy, hw, 18, shade(wood, 1.25), shade(wood, 0.78), wood, planks)
-    ty = cy - 18  # the counter top
-    random.seed(7 if kind == "brewery" else 8)
-    if kind == "brewery":
-        for x, y, c in ((22, ty - 1, (150, 80, 200)), (27, ty + 2, (90, 220, 110)), (33, ty - 3, (90, 180, 250)),
-                        (37, ty + 1, (240, 150, 50)), (42, ty - 1, (240, 90, 150)), (30, ty - 5, (70, 20, 32))):
-            _bottle(img, x, y, c, 6 if c != (70, 20, 32) else 8)
-    else:
-        for x, y in ((22, ty - 1), (26, ty + 2), (24, ty - 3)):  # a heap of garlic
-            rect(img, x, y - 2, x + 3, y, (236, 230, 214))
-            dot(img, x + 1, y - 3, (200, 196, 160))
-            dot(img, x + 3, y, (196, 190, 170))
-        gold = (226, 190, 76)
-        for x, y in ((34, ty - 2), (40, ty + 1)):  # crucifixes
-            rect(img, x + 1, y - 7, x + 1, y, gold)
-            rect(img, x - 1, y - 5, x + 3, y - 5, gold)
-            dot(img, x + 1, y - 7, shade(gold, 1.2))
-        stake = (160, 112, 64)
-        for x, y in ((44, ty - 3), (47, ty - 2)):  # stakes in a bucket
-            for i in range(9):
-                dot(img, x + i // 4, y - i, stake if i < 7 else shade(stake, 1.3))
-        rect(img, 43, ty - 2, 49, ty + 2, (70, 70, 76))
-    post_at(right)  # the front posts, in front of the counter
-    post_at(bottom, True)
-    ry = cy - tall  # the awning, striped
-    prism(img, 32, ry, hw + 2, 3, cloth, shade(cloth, 0.75), shade(cloth, 0.9))
-    for x, y in diamond(32, ry - 3, hw + 2):
-        if ((x + 2 * y) // 8) % 2:
-            dot(img, x, y, cloth2)
+    prism(img, 32, img.height - 16, 32, height, look["top"], look["wall"], shade(look["wall"], 0.82), face)
+    outline_object(img, 0.7)
+    return img
+
+
+def shop_floor(kind, seed):
+    """Inside the shops: the vampire's dark red boards, the witch's mossy
+    flagstones."""
+    look = SHOP_LOOKS[kind]
+    if kind == "curios":
+        return floor_tile(look["floor"], seed, pattern="wood")
+    random.seed(seed)
+    img = new(64, 32)
     px = img.load()
-    for x in range(32, 32 + hw + 2):  # a scalloped edge hanging off the front
-        edge_y = ry + 14 - (x - 32) // 2 + 1
-        if (x // 3) % 2 and 0 <= edge_y + 1 < img.height:
-            dot(img, x, edge_y, cloth)
-            dot(img, x, edge_y + 1, shade(cloth, 0.8))
-    lx, ly = 46, ry + 12  # a lantern hanging under the front of the awning
-    rect(img, lx + 1, ly - 3, lx + 1, ly - 1, (40, 38, 42))
-    rect(img, lx, ly, lx + 3, ly + 4, (40, 38, 42))
-    rect(img, lx + 1, ly + 1, lx + 2, ly + 3, (255, 214, 120) if kind == "curios" else (170, 255, 150))
-    by = ry - 3 - 10  # the name board on the roof
-    width = _word_width(word) + 6
-    for x in (32 - width // 2 + 3, 32 + width // 2 - 4):
-        rect(img, x, by + 10, x + 1, ry - 4, post)
-    rect(img, 32 - width // 2, by, 32 + width // 2, by + 10, (30, 26, 32))
-    rect(img, 32 - width // 2 + 1, by + 1, 32 + width // 2 - 1, by + 9, (52, 44, 50))
-    _slant_word(img, word, 33, by + 3, ink)
+    base = look["floor"]
+    tones = {}
+    for x, y in diamond(32, 16, 32):
+        u = y + (x - 32) * 0.5  # along +x
+        su = int(u // 11)
+        v = y - (x - 32) * 0.5 + (5 if su % 2 else 0)  # along +y, every other row shifted
+        sv = int(v // 11)
+        if (su, sv) not in tones:
+            tones[(su, sv)] = random.choice((0.84, 0.92, 1.0, 1.07))
+        gap = (u % 11) < 1.0 or (v % 11) < 1.0
+        if gap:
+            c = look["moss"] if random.random() < 0.4 else shade(base, 0.6)
+        else:
+            c = shade(base, tones[(su, sv)])
+            if random.random() < 0.06:
+                c = shade(c, 0.9)
+        px[x, y] = solid(c)
+    return img
+
+
+def shop_mat(kind):
+    """The mat inside each shop's door."""
+    img = shop_floor(kind, 77)
+    inner = set(diamond(32, 16, 18))
+    for x, y in diamond(32, 16, 24):
+        if kind == "curios":  # a red runner with a gold edge
+            c = (128, 24, 34) if (x, y) in inner else (190, 154, 68)
+        else:  # a woven green mat
+            c = (70, 98, 56) if (x // 2) % 2 == 0 else (56, 80, 46)
+        dot(img, x, y, c)
+    return img
+
+
+def _face_floor(cx, cy, hw):
+    """For each column of a box's left face: the y of its bottom edge."""
+    lowest = {}
+    for x, y in diamond(cx, cy, hw):
+        lowest[x] = max(lowest.get(x, -1), y)
+    return lowest
+
+
+def _garlic(img, x, y):
+    """A garlic bulb standing at (x, y) (its bottom left)."""
+    rect(img, x, y - 2, x + 3, y, (236, 230, 214))
+    dot(img, x + 1, y - 3, (200, 196, 160))
+    dot(img, x + 3, y, (196, 190, 170))
+
+
+def _cross(img, x, y):
+    """A little gold crucifix standing at (x, y) (its bottom left)."""
+    gold = (226, 190, 76)
+    rect(img, x + 2, y - 7, x + 2, y, gold)
+    rect(img, x, y - 5, x + 4, y - 5, gold)
+    dot(img, x + 2, y - 7, shade(gold, 1.2))
+
+
+def _candle(img, x, y):
+    rect(img, x, y - 4, x + 1, y, (236, 230, 214))
+    dot(img, x, y - 5, (255, 220, 110))
+    dot(img, x, y - 6, (255, 170, 60))
+
+
+def shop_shelf(kind):
+    """A wooden shelf in the little shops, open on its front (the left face)
+    and full of what the shop sells (just for show: you buy at the counter)."""
+    look = SHOP_LOOKS[kind]
+    wood = look["wood"]
+    frame, back, board = shade(wood, 1.1), shade(wood, 0.55), shade(wood, 1.45)
+    img = new(64, 32 + SHELF_HEIGHT)
+    cx, cy, hw = 32, img.height - 16, 28
+
+    def face(x, y, h, side, c):
+        if side == "right":
+            return shade(frame, 0.8) if (h >= SHELF_HEIGHT - 2 or h < 2 or x in POSTS) else shade(back, 1.1)
+        for lv in SHELF_LEVELS:
+            if lv - 2 <= h <= lv:
+                return board if h == lv else shade(board, 0.8)
+        if h >= SHELF_HEIGHT - 2 or x in POSTS:
+            return frame
+        return back
+
+    prism(img, cx, cy, hw, SHELF_HEIGHT, shade(frame, 1.15), back, shade(back, 0.85), face)
+    outline_object(img)
+    low = _face_floor(cx, cy, hw)
+
+    def on(x, lv, w=3):
+        return low[min(x + w - 1, cx - 1)] - lv - 1  # standing on board `lv`
+
+    if kind == "brewery":
+        random.seed(91)
+        colors = [(150, 80, 200), (90, 220, 110), (90, 180, 250), (240, 150, 50), (240, 90, 150),
+                  (200, 60, 60), (230, 220, 90), (70, 20, 32)]
+        for lv in SHELF_LEVELS:
+            for x in range(7, 28, 4):
+                if random.random() < 0.15:
+                    continue  # one's been sold
+                _bottle(img, x, on(x, lv), random.choice(colors), random.choice((4, 5, 6, 7)))
+    else:
+        skull_pixels(img, 8, on(8, 28, 5) - 4)
+        _candle(img, 15, on(15, 28, 2))
+        skull_pixels(img, 19, on(19, 28, 5) - 4)
+        _candle(img, 26, on(26, 28, 2))
+        _garlic(img, 7, on(7, 15, 4))
+        _garlic(img, 12, on(12, 15, 4))
+        _cross(img, 18, on(18, 15, 5))
+        _cross(img, 24, on(24, 15, 5))
+        stake = (160, 112, 64)
+        for sx in (8, 11, 14):  # wooden stakes leaning against the side
+            y0 = on(sx, 2, 4)
+            for i in range(10):
+                dot(img, sx + i // 4, y0 - i, stake if i < 8 else shade(stake, 1.3))
+        for jx in (20, 25):  # jars of something
+            jy = on(jx, 2)
+            rect(img, jx, jy - 5, jx + 2, jy, (58, 72, 60))
+            dot(img, jx + 1, jy - 3, (220, 214, 190))
+            dot(img, jx + 1, jy - 6, (110, 84, 60))
+    return img
+
+
+def shop_counter(kind):
+    """The counter you buy at (64x70), its front on the left face; the game
+    turns it to face the door."""
+    look = SHOP_LOOKS[kind]
+    img = new(64, 70)
+    cx, cy, hw = 32, img.height - 16, 26
+    wood, cloth = look["wood"], look["cloth"]
+
+    def face(x, y, h, side, c):
+        if side == "left":
+            if 5 <= h <= 13:  # a cloth draped over the front
+                return cloth if (x // 3) % 2 else shade(cloth, 0.86)
+            if (x - (cx - hw)) % 7 == 0:
+                return shade(c, 0.8)
+        return c
+
+    prism(img, cx, cy, hw, 18, shade(wood, 1.3), wood, shade(wood, 0.78), face)
     outline_object(img, 0.6)
+    ty = cy - 18  # the middle of the counter top
+    if kind == "brewery":
+        _bottle(img, 22, ty + 1, (150, 80, 200), 6)
+        _bottle(img, 28, ty - 3, (90, 220, 110), 7)
+        _bottle(img, 34, ty + 3, (90, 180, 250), 5)
+        rect(img, 39, ty - 2, 44, ty, (140, 136, 130))  # a mortar and pestle
+        rect(img, 40, ty - 3, 43, ty - 3, (110, 106, 100))
+        for i in range(5):
+            dot(img, 43 + i // 2, ty - 4 - i, (170, 160, 140))
+    else:
+        _candle(img, 21, ty + 1)
+        skull_pixels(img, 26, ty - 5, big=True)
+        _garlic(img, 35, ty + 2)
+        _cross(img, 40, ty)
+    return img
+
+
+def shop_sign(kind):
+    """The name board over a shop's door, hung from a beam between two posts
+    (128x112). The game draws it with the door's floor at (64, 88). The curio
+    shop's door is in a wall running along +y and the brewery's in one
+    running along +x, so their posts stand on opposite sides."""
+    look = SHOP_LOOKS[kind]
+    img = new(128, 112)
+    fx, fy = 64, 88
+    if kind == "curios":
+        far, near = (fx + 32, fy - 16), (fx - 32, fy + 16)
+    else:
+        far, near = (fx - 32, fy - 16), (fx + 32, fy + 16)
+    post = shade(look["wood"], 0.8)
+    rise = 68  # from a post's floor up to the beam
+    for (x, y), lit in ((far, False), (near, True)):
+        rect(img, x - 1, y - rise, x, y - 9, shade(post, 1.25) if lit else post)
+
+    def beam_y(x):
+        return far[1] - rise + (near[1] - far[1]) * (x - far[0]) // (near[0] - far[0])
+
+    for x in range(min(far[0], near[0]), max(far[0], near[0]) + 1):
+        rect(img, x, beam_y(x) - 1, x, beam_y(x), shade(post, 0.9))
+    word = look["word"]
+    w = _word_width(word) + 8
+    left, top = fx - w // 2, beam_y(fx) + 5
+    for x in (left + 3, left + w - 4):  # chains
+        for y in range(beam_y(x) + 1, top):
+            if y % 2 == 0:
+                dot(img, x, y, (90, 88, 92))
+    rect(img, left, top, left + w, top + 10, shade(look["board"], 0.7))
+    rect(img, left + 1, top + 1, left + w - 1, top + 9, look["board"])
+    _slant_word(img, word, fx + 1, top + 3, look["ink"])
+    if kind == "curios":  # fangs
+        for x in (fx - 4, fx + 3):
+            rect(img, x, top + 11, x + 1, top + 11, (240, 240, 236))
+            dot(img, x if x < fx else x + 1, top + 12, (240, 240, 236))
+    else:  # a bottle hanging under it
+        rect(img, fx, top + 11, fx, top + 13, (90, 88, 92))
+        _bottle(img, fx - 1, top + 20, (90, 220, 110), 4)
+    outline_object(img, 0.6)
+    return img
+
+
+def zombie_spy():
+    """Your spy: a zombie all in black with a beanie, dark glasses and a
+    pair of binoculars."""
+    img = zombie((140, 160, 128), (40, 34, 30), (34, 34, 42), (28, 28, 34), seed=64, reaching=False,
+                 shoes=(24, 24, 28))
+    beanie = (30, 30, 38)
+    rect(img, 4, 1, 11, 3, beanie)
+    rect(img, 4, 3, 11, 3, shade(beanie, 1.5))  # the fold
+    rect(img, 5, 6, 10, 7, (14, 14, 18))  # shades
+    dot(img, 6, 6, (80, 90, 110))
+    dot(img, 9, 6, (80, 90, 110))
+    for x, y in ((5, 13), (5, 14), (10, 13), (10, 14)):
+        dot(img, x, y, (60, 60, 66))  # the strap
+    rect(img, 5, 15, 10, 16, (60, 60, 66))  # binoculars
+    dot(img, 6, 16, (120, 160, 200))
+    dot(img, 9, 16, (120, 160, 200))
+    return img
+
+
+def rumor_icon():
+    """A speech bubble: your spy is spreading a rumor about the rival (16x16)."""
+    img = new(16, 16)
+    paper = (236, 232, 220)
+    rect(img, 2, 2, 13, 10, paper)
+    rect(img, 3, 1, 12, 1, paper)
+    rect(img, 3, 11, 12, 11, paper)
+    for x, y in ((4, 12), (3, 13), (2, 14)):
+        dot(img, x, y, paper)  # the tail
+    for x in (6, 10):  # "!!"
+        rect(img, x, 3, x + 1, 7, (196, 40, 44))
+        rect(img, x, 9, x + 1, 9, (196, 40, 44))
+    outline_outside(img)
     return img
 
 
@@ -2746,8 +2982,18 @@ def main():
         save(vampire(), "shopper_vampire_0")
         save(vampire(cape=(30, 26, 44), lining=(70, 40, 130), vest=(60, 30, 110), hair=(60, 40, 30)), "shopper_vampire_1")
         save(vampire(grey=True, bowtie=(150, 24, 36)), "keeper_vampire")
-        save(stall("brewery"), "stall_brewery")
-        save(stall("curios"), "stall_curios")
+        for i, kind in enumerate(("curios", "brewery")):
+            save(shop_wall(56, kind), f"wall_{kind}_tall")
+            save(shop_wall(10, kind), f"wall_{kind}_low")
+            for j, v in enumerate("ab"):
+                save(shop_floor(kind, 400 + 10 * i + j), f"ground_{kind}_{v}")
+            save(shop_mat(kind), f"ground_{kind}_mat")
+            save(shop_shelf(kind), f"shop_shelf_{kind}")
+            save(shop_counter(kind), f"shop_counter_{kind}")
+            save(shop_sign(kind), f"shop_sign_{kind}")
+        save(skeleton(76, coat=(150, 124, 82), fedora=(58, 50, 44), shades=True, notepad=True), "skeleton_spy")
+        save(zombie_spy(), "staff_spy")
+        save(rumor_icon(), "brew_rumor")
         save(cauldron(), "prop_cauldron")
         save(coffin(), "prop_coffin")
         for kind in ("swift", "quickhand", "charm", "wine", "garlic", "crucifix", "stake"):

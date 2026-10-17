@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://6po6vyq4y32u"
-path="res://.godot/imported/stall_curios.png-44ae7a8e7dcc1127ea0a999dbb73840e.ctex"
+uid="uid://xwbb4f37hsmk"
+path="res://.godot/imported/shop_shelf_curios.png-a8bc2dc699f0c3fa30756d8dd4e83479.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/stall_curios.png"
-dest_files=["res://.godot/imported/stall_curios.png-44ae7a8e7dcc1127ea0a999dbb73840e.ctex"]
+source_file="res://assets/sprites/shop_shelf_curios.png"
+dest_files=["res://.godot/imported/shop_shelf_curios.png-a8bc2dc699f0c3fa30756d8dd4e83479.ctex"]
 
 [params]
 

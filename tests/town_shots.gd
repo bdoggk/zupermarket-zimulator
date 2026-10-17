@@ -1,6 +1,7 @@
 extends Node
 # Screenshots of the town around the store (zombie game): the street out
-# front, the lots for sale, Bone Mart, the ruins, at day and at night.
+# front, the lots for sale, Bone Mart, the little shops across the road, at
+# day and at night.
 #   SHOT_DIR=/some/dir godot --path . --rendering-driver opengl3 res://tests/town_shots.tscn
 
 var shot_dir := OS.get_environment("SHOT_DIR")
@@ -19,7 +20,7 @@ func _ready() -> void:
 		store._new_shopper()
 	await _seconds(6.0)
 	for spot in [["street", Vector2i(10, 15), 1.0], ["lots", Vector2i(21, 13), 1.0], ["bonemart", Vector2i(36, 9), 1.0],
-			["ruins", Vector2i(12, 24), 0.8], ["wide", Vector2i(22, 14), 0.5]]:
+			["shops", Vector2i(12, 25), 1.0], ["shops_far", Vector2i(12, 24), 0.6], ["wide", Vector2i(22, 14), 0.5]]:
 		p.position = Iso.cell_to_world(spot[1])
 		p.camera.zoom = Vector2(2.5, 2.5) * spot[2]
 		p.camera.reset_smoothing()

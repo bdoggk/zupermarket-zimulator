@@ -1,5 +1,5 @@
 extends PanelContainer
-## A market stall's wares (use its counter in town): the witch's potions
+## A little shop's wares (use its counter, across the road): the witch's potions
 ## and wine, the vampire's garlic, crucifixes and stakes (Brand.SHOPS and
 ## Brand.BREWS). Each one works straight away for a little while; buying
 ## another adds more time. What's working right now shows by the clock

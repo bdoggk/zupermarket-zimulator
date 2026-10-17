@@ -29,7 +29,7 @@ func _ready() -> void:
 	# ---- skeletons around town
 	var skeleton_locals := 0
 	for n in store.world.get_children():
-		if n is Wanderer and n.has_meta("local"):
+		if n is Wanderer and n.has_meta("local") and n.sprite.texture in Brand.SHOPPERS.skeleton.looks:
 			skeleton_locals += 1
 	check(skeleton_locals == store.town.LOCALS, "%d skeletons hang around town" % skeleton_locals)
 	check(Brand.SHOPPERS.skeleton.level == 1, "skeleton shoppers come from day one")

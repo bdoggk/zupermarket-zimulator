@@ -52,9 +52,12 @@ const LAYOUT := [
 ##   #  its walls         b  its floor         e  its door
 ##   s  shelf             r  counter           m  where its owner stands
 ##   p  price board       k  skull pile        S  its sign out front
-## The market stalls down the path (see SHOPS):
-##   V  the vampire's curio stall       u  where the vampire stands
-##   W  the witch's brewery stall       y  where the witch stands
+## The two little shops across the road (see SHOPS), each with its own
+## letters for its walls, floor, door, shelves, counter and keeper:
+##   D f d j  the vampire's curio shop: walls, floor, door, shelf
+##   V u      its counter, and where the vampire stands behind it
+##   H o n z  the witch's brewery: walls, floor, door, shelf
+##   W y      its counter, and where the witch stands behind it
 ##   Q  a coffin          K  the cauldron
 const TOWN := [
 	"@@@@@@@@@@@@@@@@111122223333,,##############;;;;",
@@ -78,14 +81,14 @@ const TOWN := [
 	"================================================",
 	"________l_________l_________l_________l_________",
 	"______________h__________________h______________",
-	",,,,,,,,,,,,:,,,,,x,,,;;;;;,,,,,,,,,,,,,:,,,,B,,",
-	",T,www,,ww,Q:,,,,,,,,,;;;;;,www,,wwww,,,:,,;;;;;",
-	",,,w,,,,,,uV:,,g,g,g,g;;v;;,w,,,,,,xw,,,:,,;;;;;",
-	";;;w;x,,,,,,:,,,,,,,,,;;;;;,w,B,,,,,,,,,:,,;T;;;",
-	";;;;;;,T,,,,:,,g,g,T,g;;;;;,w,,,,x,,w,v,:,,;;;;;",
-	";;;w;;,,x,yW:,v,,,,,,,;;;;;,w,,,,,,,w,,,:,,;;;;;",
-	";;;w;;,,,,,K:,,g,g,g,g,,,,,,wwwwww,ww,,,:,,;;;;;",
-	";;;wwwwww,,,:,,,,,,,,,,,,,,,,,,,,,,,,,,,:,v;;;;;",
+	",,,,,,,,,,,,:,,,,,,,x,;;;;T,,,,,,,,,,,,,:,,,,B,,",
+	",,T,,DDDDDDD:HHHHHHH,,;;;;;,www,,wwww,,,:,,;;;;;",
+	",,,,,DjQjfjD:HzKyzzH,,g;g;;,w,,,,,,xw,,,:,,;;;;;",
+	";v;,;DuVfffd:HooWozH,,;;;;;,w,B,,,,,,,,,:,,;T;;;",
+	";;;;;DfffjjD:HzooooH,g;g;g;,w,,,,x,,w,v,:,,;;;;;",
+	";B;,;DDDDDDD:HHHnHHH,,;;;;;,w,,,,,,,w,,,:,,;;;;;",
+	";;;w;;,,,,,,:,,,,,,,,,g,g,,,wwwwww,ww,,,:,,;;;;;",
+	";;;www,,x,,,:,,,,,v,,,,,,,,,,,,,,,,,,,,,:,v;;;;;",
 	";;v;;;,,,,,,:,,,v,,,,,,,,,T,,,;;;;;;;;;,:,,;;;;;",
 	";;;;;;,,T,,,:,,,,,,,,T,,,,,,,,;;;;;v;;;,:,,;;;T;",
 	";;;;;;,,,,,,:,,,,,,,,,,,,,,,,,;;;;;;;;;,:,,;;;;;",
@@ -119,38 +122,65 @@ const RIVAL := {
 	"hello": "Welcome to Bone Mart! Bare bones prices!",
 	"deal_news": "Bone Mart has a deal on %s today.",
 	"bought": "You bought out Bone Mart! Every zombie in town shops with you now.",
+	# Its spies: from this day on, a skeleton in a trench coat sneaks into
+	# your store now and then while you're open and looks at your shelves.
+	# If it gets away, Bone Mart prices what it saw `spy_undercut` of yours
+	# for the rest of the day (never under `spy_floor` of the market price).
+	# Walk up to it and use it to throw it out.
+	"spy_from_day": 2,
+	"spies_per_day": [1, 2],  # visits a day: before store level 3, and from level 3
+	"spy_undercut": 0.92,
+	"spy_floor": 0.5,
+	"spy_caught_xp": 10.0,
+	"spy_in": "A spy from Bone Mart just snuck in! Catch it before it gets away with your prices.",
+	"spy_notes": ["*scribble scribble*", "Hmm... noted.", "Interesting prices...", "*writes it down*"],
+	"spy_caught": "You threw Bone Mart's spy out! It didn't get away with a thing.",
+	"spy_caught_by": "%s threw Bone Mart's spy out! It didn't get away with a thing.",
+	"spy_cheaper": "Bone Mart's spy got away! Bone Mart cut its prices to beat yours: %s.",
+	"spy_nothing": "Bone Mart's spy got away, but Bone Mart already beats your prices on what it saw.",
 	"textures": {
 		"owner": preload("res://assets/sprites/skeleton_owner.png"),
 		"stocker": preload("res://assets/sprites/skeleton_stocker.png"),
 		"sign": preload("res://assets/sprites/rival_sign.png"),
 		"sign_sold": preload("res://assets/sprites/rival_sign_sold.png"),
+		"spy": preload("res://assets/sprites/skeleton_spy.png"),
 	},
 }
 
-## Market stalls down the path across the street. Use the counter to buy
+## The two little shops across the road. Walk in and use the counter to buy
 ## what they sell (BREWS): each one does something for a little while.
-##   map / keeper_map  their counter and their keeper in TOWN
+##   map / keeper_map  the counter and where the keeper stands, in TOWN
+##   wall / floor / door / shelf  the shop's other letters in TOWN
+##   look  its sprites: wall_<look>_tall/_low, ground_<look>_a/_b/_mat,
+##         shop_shelf_<look>, shop_counter_<look>, shop_sign_<look>
+##   tall_left  its left wall is tall like the back one (the brewery's is
+##         low, so it doesn't hide the path next to it)
+## The counter faces away from its keeper.
 const SHOPS := {
 	"curios": {
 		"name": "Fangsworth's Curios", "keeper": "Count Fangsworth", "map": "V", "keeper_map": "u",
+		"wall": "D", "floor": "f", "door": "d", "shelf": "j", "look": "curios", "tall_left": true,
 		"hello": "Garlic? Crucifixes? Don't ask why a vampire sells them.",
 		"blurb": "Charms against all sorts of trouble. The Count doesn't touch the stock.",
-		"stall": preload("res://assets/sprites/stall_curios.png"),
+		"shelf_text": "Skulls, candles, crucifixes, garlic and stakes. The Count sells them at the counter.",
 		"keeper_look": preload("res://assets/sprites/keeper_vampire.png"),
 		"light": Color(1.0, 0.72, 0.4),
 	},
 	"brewery": {
 		"name": "The Bubbling Cauldron", "keeper": "Old Hagatha", "map": "W", "keeper_map": "y",
+		"wall": "H", "floor": "o", "door": "n", "shelf": "z", "look": "brewery", "tall_left": false,
 		"hello": "Potions and wine, dearie! Fresh from the cauldron.",
 		"blurb": "Brewed this morning. Drink it right here; it works straight away.",
-		"stall": preload("res://assets/sprites/stall_brewery.png"),
+		"shelf_text": "Bottles of every color. Something in one of them is blinking. Buy at the counter.",
 		"keeper_look": preload("res://assets/sprites/keeper_witch.png"),
 		"light": Color(0.6, 1.0, 0.55),
 	},
 }
 
-## What the stalls sell. It works straight away, for `seconds` (real
-## seconds); buying another adds more time (see Game.buy_brew).
+## What the shops sell. It works straight away, for `seconds` (real
+## seconds); buying another adds more time (see Game.buy_brew). An entry
+## with no `shop` isn't for sale: it's something else that wears off
+## (`open_only`: it only counts down while the store is open).
 const BREWS := {
 	"swift": {
 		"name": "Swift Potion", "shop": "brewery", "cost": 20.0, "seconds": 60.0,
@@ -186,6 +216,12 @@ const BREWS := {
 		"name": "Wooden Stake", "shop": "curios", "cost": 40.0, "seconds": 120.0,
 		"desc": "Hammer it into Bone Mart's door: nobody shops there for 2 minutes.",
 		"icon": preload("res://assets/sprites/brew_stake.png"),
+	},
+	"rumor": {
+		"name": "Rumor about Bone Mart", "shop": "", "cost": 0.0, "seconds": 60.0, "open_only": true,
+		"done": "The rumor about Bone Mart died down.",
+		"desc": "Your spy is spreading a rumor about Bone Mart: fewer shoppers go there for a while.",
+		"icon": preload("res://assets/sprites/brew_rumor.png"),
 	},
 }
 
@@ -430,6 +466,11 @@ const STAFF := {
 		"name": "General Manager", "hire": 100.0, "wage": 45.0, "max": 1,
 		"desc": "Checks the stock and orders more boxes of anything whose shelves are down to a third full. Keeps the other staff working (15% faster) and gets anyone who's stuck moving again.",
 		"texture": preload("res://assets/sprites/staff_manager.png"),
+	},
+	"spy": {
+		"name": "Spy", "hire": 80.0, "wage": 35.0, "max": 1,
+		"desc": "Sneaks over to Bone Mart and comes back with its prices, its deal of the day and when its next spy is coming, and spreads rumors that keep shoppers away from it. Throws out Bone Mart's spies too.",
+		"texture": preload("res://assets/sprites/staff_spy.png"),
 	},
 }
 const STAFF_NAMES := [

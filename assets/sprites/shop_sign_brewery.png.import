@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c84cebocvm5ih"
-path="res://.godot/imported/stall_brewery.png-30de24a9a081e3dca6eedc8914496e77.ctex"
+uid="uid://b3vdm3qc61lkx"
+path="res://.godot/imported/shop_sign_brewery.png-f22b7a903ca3a432d93c2d07b50ce810.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/stall_brewery.png"
-dest_files=["res://.godot/imported/stall_brewery.png-30de24a9a081e3dca6eedc8914496e77.ctex"]
+source_file="res://assets/sprites/shop_sign_brewery.png"
+dest_files=["res://.godot/imported/shop_sign_brewery.png-f22b7a903ca3a432d93c2d07b50ce810.ctex"]
 
 [params]
 

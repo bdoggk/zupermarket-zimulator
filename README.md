@@ -36,6 +36,28 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.9
+
+- **The witch and the vampire have real shops now:** the market stalls across the road
+  are two little buildings with walls, a door and a sign over it, shelves full of
+  potions or curios, the cauldron or the coffin, and the keeper behind a counter. Walk
+  in and buy at the counter.
+- **Bone Mart spies on you:** from day 2, a skeleton in a trench coat sneaks into your
+  store now and then while you're open and takes notes at your shelves. If it gets away,
+  Bone Mart prices what it saw just under yours for the rest of the day. Walk up to it
+  and press **E** (A, or tap it) to throw it out (+10 XP).
+- **Spy on Bone Mart:** hire a zombie **Spy** in the Staff app ($80, $35 a day). Every
+  couple of game hours they sneak over to Bone Mart, snoop around, and come back to the
+  computer with its whole price list and deal of the day, when its next spy is coming,
+  and a rumor that keeps shoppers away from Bone Mart for a while. In between they wait
+  by the front door and throw out Bone Mart's spies.
+- **Witches and vampires in town:** a couple of witches wander around all day, and
+  vampires come out of the curio shop at dusk.
+- The day summary says how many of Bone Mart's spies you threw out and how many got
+  away, and how many reports your spy brought back.
+- Fixed: selling a shelf right as a shopper took its last item could duplicate that
+  item. A long status in the Staff app no longer stretches the computer window.
+
 ## What's new in 0.8.8
 
 A bug hunt: hours of automated play (chaos play over more than 100 game days, a staff
@@ -64,7 +86,7 @@ pass over every screen size and input. Fixed:
   straight away for a minute or two (Swift Potion: run 50% faster; Quickhand Potion:
   scan, stock and mop twice as fast; Garlic: nobody drips blood; Wooden Stake: nobody
   shops at Bone Mart...). What's working shows under the corner buttons with the time
-  left. See "The market stalls" below.
+  left. See "The little shops across the road" below.
 - **Witches and vampires** shop with you: witches from store level 2, vampires from
   level 3 (mostly after dark, and they don't mind paying more).
 - **See what shoppers are buying:** they carry a basket with their stuff sticking out,
@@ -293,7 +315,7 @@ About a third of the zombies drip blood as they walk around, leaving puddles on 
 floor. **Every puddle keeps some shoppers away** (even zombies hate a messy store) and
 **slowly costs you XP** while you're open, so the status bar shows how many there are
 and how many shoppers they're costing you ("Blood: 3 (-24% shoppers)"). Garlic from
-the vampire's stall stops the dripping for a bit, and a crucifix makes everyone ignore
+the vampire's shop stops the dripping for a bit, and a crucifix makes everyone ignore
 the blood for a while.
 1. Walk to the **mop bucket** (the yellow bucket near the computer) and press E (or
    tap it) to grab the mop.
@@ -360,7 +382,30 @@ summary tells you how many shoppers went there instead of you.
 
 **Buy Bone Mart out** ($3000, store level 5) from its price list. Its staff leave,
 Mr. Bones throws in his leftover stock, and every shopper in town comes to you from
-then on.
+then on (and no more spies).
+
+### Spies
+**Bone Mart's spies:** from day 2, Bone Mart sends a spy over once a day (twice from
+store level 3), at some time between 9 AM and 6:30 PM while you're open: a skeleton in
+a trench coat and dark glasses, with a red **!** over its head once it's inside. It
+stops at up to 3 of your shelves to take notes. If it gets away, Bone Mart prices
+everything it saw 8% under your price for the rest of the day (never below half the
+market price), and the message tells you its new prices. Walk up to it and press **E**
+(A on a controller, or tap it) to throw it out: it runs off without telling Bone Mart
+anything, and you get 10 XP.
+
+**Your spy** (Staff app, $80 to hire, $35 a day, one): every 2 game hours (and first
+thing in the morning) they sneak over to Bone Mart, snoop at a couple of its shelves
+and its counter, and come back to the computer with a report:
+- Bone Mart's whole price list goes in the Bone Mart column of Stock & Prices, with its
+  deal of the day
+- when Bone Mart's next spy is coming
+- a **rumor** about Bone Mart: 10% fewer shoppers go there for a minute of open time
+  (it shows under the corner buttons with the time left)
+
+In between trips they wait by the front door, and if one of Bone Mart's spies comes in
+they go and throw it out. Spies level up like the other staff (for reports and for
+spies they throw out).
 
 ### Kinds of shoppers
 | | |
@@ -374,16 +419,20 @@ then on.
 | Witch | A bit fussy about prices, never drips. Level 2 |
 | Vampire | Comes out mostly after 5 PM, patient, pays up to 30% over market, never drips. Level 3 |
 
+Out in town, a few skeletons and witches wander around all day, and a couple of
+vampires come out of the curio shop at dusk.
+
 **What are they buying?** The bubble over a shopper's head is what they're looking
 for, "+2 Canned Guts" pops up when they take something, and it goes in the basket they
 carry. Point the mouse at a shopper (or stand next to one) to see what's in their
 basket, the total, and what's still on their list.
 
-### The market stalls
-Across the road from your store, a dirt path leads to two market stalls. Walk up to a
-counter and press E (or tap it):
+### The little shops across the road
+Across the road from your store, along the dirt path, are two little shops: a witch's
+brewery and a vampire's curio shop. Walk in the door and press E at the counter (or tap
+it):
 
-| Stall | Sells | What it does | Lasts |
+| Shop | Sells | What it does | Lasts |
 |---|---|---|---|
 | The Bubbling Cauldron (Old Hagatha, a witch) | Swift Potion, $20 | Run 50% faster | 1 minute |
 | | Quickhand Potion, $35 | Scan, stock and mop twice as fast | 1 minute |
@@ -412,6 +461,8 @@ you in the red).
   cashier goes to a free register or takes a break, and comes back once you've
   walked away.
 - **Janitor** ($20/day, up to 2): brings their own mop and cleans up the blood.
+- **Spy** ($80 to hire, $35/day, one): spies on Bone Mart and throws out its spies (see
+  "Spies" above).
 - **General Manager** ($100 to hire, $45/day, one): walks around checking the shelves
   and the staff. When a product's shelves are down to a third full (counting boxes
   that are already around or on the way), they walk to the computer and order enough
@@ -520,7 +571,7 @@ computer. A scanner icon appears next to your money once you own it.
 |---|---|---|
 | Move | WASD / arrow keys, or click a spot | Tap a spot |
 | Sprint | Hold Shift | RUN button (tap again to stop) |
-| Interact: pick up / drop boxes, stock or empty shelves, ring up shoppers, take over a register, racks, the computer, the OPEN sign, the mop, a jammed self-checkout, Bone Mart's prices, the market stalls | E (or click the thing) | Tap it, or the big button |
+| Interact: pick up / drop boxes, stock or empty shelves, ring up shoppers, take over a register, racks, the computer, the OPEN sign, the mop, a jammed self-checkout, Bone Mart's prices, the shop counters across the road, throwing out Bone Mart's spies | E (or click the thing) | Tap it, or the big button |
 | Scan a shelf | Q | SCAN button |
 | Next day (end of the day) | Space (only Space: you can keep working after closing) | Tap the bar at the bottom |
 | Build mode | B | Build button |
@@ -569,12 +620,15 @@ scripts/
   prop.gd              Town scenery (trees, cars, lamps, ruins, fences...)
   rival_shelf.gd       Bone Mart's shelves (check its prices)
   rival_desk.gd        Bone Mart's counter and price board
+  rival_spy.gd         Bone Mart's spies (sneak in, take notes, get thrown out)
+  shop_counter.gd      The counters in the little shops across the road
   build_mode.gd        Build mode: place / move / sell furniture and registers
   iso.gd               Isometric grid math (cell <-> screen)
   player.gd            Movement, tap-to-walk, carrying boxes, timed actions, scanning
   customer.gd          Customer AI (walk in -> shop -> pick a line -> pay -> leave),
                        kinds of shoppers
-  staff.gd             Staff AI: stockers, cashiers and janitors, staff levels
+  staff.gd             Staff AI: stockers, cashiers, janitors, the manager and the
+                       spy, staff levels
   interactable.gd      Base class for anything the player can use
   shelf.gd             Shelves (the items drawn on them, labels, taking items
                        off), scanner support
@@ -627,7 +681,9 @@ which only moves if you edit the map.
 above it). The store sits where the `@`s are, `1`-`3` are the lots for sale, and the
 `#` box is Bone Mart. `TOWN_SPAWNS` is where shoppers walk in from, `EXPANSIONS` the
 lot prices, `RIVAL` everything about Bone Mart (name, how many shoppers it gets, its
-prices, the buyout price) and `SHOPPERS` the kinds of shoppers.
+prices, the buyout price, its spies), `SHOPS` the two little shops (each has its own
+letters in the map for its walls, floor, door, shelves, counter and keeper) and
+`SHOPPERS` the kinds of shoppers.
 
 **Saving new things:** if you add new game state, add it to `to_dict()` / `from_dict()`
 in `game.gd` (or `store.gd` for things in the store). Missing values fall back to
@@ -695,7 +751,8 @@ xvfb-run -s "-screen 0 1920x1080x24" godot --path . --rendering-driver opengl3 r
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn  # build mode view
 DAYS=5 godot --headless --path . --fixed-fps 60 res://tests/bot_test.tscn   # a bot plays 5 days
 STAFF=1 SHUFFLE=1 godot --headless --path . --fixed-fps 60 res://tests/stuck_test.tscn  # busy-store stress test
-godot --headless --path . --fixed-fps 60 res://tests/shops_test.tscn   # market stalls, brews, witches and vampires
+godot --headless --path . --fixed-fps 60 res://tests/shops_test.tscn   # the little shops, brews, witches and vampires
+godot --headless --path . --fixed-fps 60 res://tests/spy_test.tscn     # Bone Mart's spies and yours
 godot --headless --path . --fixed-fps 60 res://tests/pad_test.tscn     # menus, the computer and build mode with a controller
 SEED=1 godot --headless --path . --fixed-fps 60 res://tests/walk_test.tscn  # walking between random spots in random layouts
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below)
@@ -705,7 +762,7 @@ The flow and chaos tests back up your real saves and settings first and put them
 afterwards.
 
 **Chaos play** (`tests/chaos_test.gd`) plays for hours of game time doing random things a
-player could do (walking, using things, the computer, build mode, the market stalls,
+player could do (walking, using things, the computer, build mode, the shops, spies,
 clicking and pressing keys anywhere, saving and loading, settings, letting days go by)
 and checks every few frames that the game still makes sense: no script errors, nothing
 in the wrong place, no stock appearing or vanishing, nobody stuck, no day that never

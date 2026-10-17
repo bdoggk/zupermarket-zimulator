@@ -10,7 +10,9 @@ static func rows() -> Array:
 	if Brand.SPILLS:
 		does += ", the mop"
 	if not Brand.SHOPS.is_empty():
-		does += ", the market stalls"
+		does += ", the shop counters across the road"
+	if Brand.RIVAL.has("spy_in"):
+		does += ", throwing out %s's spies" % Brand.RIVAL.name
 	return [
 		["Move", "WASD or arrow keys, or click a spot", "Left stick", "Tap a spot"],
 		["Sprint", "Hold Shift", "Hold LT, or click the left stick", "RUN button"],

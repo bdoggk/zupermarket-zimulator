@@ -182,6 +182,7 @@ func _town(floor_layer: FloorLayer, world: Node2D, expansions: int, rival_owned:
 	var front := 0
 	var right := 0
 	var rival_min := Vector2i(1 << 20, 1 << 20)
+	var shops := Town.shop_layout(rows)
 	var lot_x0 := {}
 	for y in rows.size():
 		var row: String = rows[y]
@@ -211,8 +212,12 @@ func _town(floor_layer: FloorLayer, world: Node2D, expansions: int, rival_owned:
 				if y == front and x == int(lot_x0[int(ch)]) + 1:
 					_sprite(world, Town.FOR_SALE, cell)
 				continue
-			if ch != "#":
+			var part := Town.shop_part(ch)
+			if ch != "#" and not (not part.is_empty() and part[1] == "wall"):
 				floor_layer.add_tile(Town.ground_texture(Town.under(ch, cell, rows), cell), cell)
+			if not part.is_empty():
+				_shop_piece(world, part[0], part[1], cell, shops[part[0]])
+				continue
 			var prop := Town.prop_sprite(ch, cell)
 			if prop != "":
 				_sprite(world, load("res://assets/sprites/%s.png" % prop), cell)
@@ -238,12 +243,27 @@ func _town(floor_layer: FloorLayer, world: Node2D, expansions: int, rival_owned:
 					_sprite(world, load("res://assets/sprites/prop_coffin.png"), cell)
 				"K":
 					_sprite(world, load("res://assets/sprites/prop_cauldron.png"), cell)
-				_:
-					for shop: Dictionary in Brand.SHOPS.values():
-						if ch == shop.map:
-							_sprite(world, shop.stall, cell)
-						elif ch == shop.keeper_map:
-							_sprite(world, shop.keeper_look, cell, true)
+
+
+## A piece of one of the little shops (see Town._shop_piece).
+func _shop_piece(world: Node2D, id: String, part: String, cell: Vector2i, info: Dictionary) -> void:
+	var shop: Dictionary = Brand.SHOPS[id]
+	var look: String = shop.look
+	match part:
+		"wall":
+			_sprite(world, load("res://assets/sprites/wall_%s_%s.png" % [look, "tall" if Town.shop_wall_tall(id, info, cell) else "low"]), cell)
+		"door":
+			world.add_child(Town.shop_sign(id, cell))
+		"shelf":
+			_sprite(world, load("res://assets/sprites/shop_shelf_%s.png" % look), cell)
+		"map":
+			var counter := ShopCounter.new()
+			counter.shop = id
+			counter.texture = load("res://assets/sprites/shop_counter_%s.png" % look)
+			counter.rotation_step = Town.counter_step(info)
+			_place(world, counter, cell)
+		"keeper_map":
+			_sprite(world, shop.keeper_look, cell, true)
 
 
 func _sprite(world: Node2D, tex: Texture2D, cell: Vector2i, person := false) -> Sprite2D:

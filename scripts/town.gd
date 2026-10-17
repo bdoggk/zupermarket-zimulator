@@ -2,11 +2,12 @@ class_name Town
 extends Node2D
 ## The barren town around the store, built from Brand.TOWN: the road and
 ## sidewalks, wrecked cars, ruins, street lamps, the lots next door (buy
-## them in Build mode to make the store bigger) and the rival store down the
-## street (Brand.RIVAL), and the market stalls down the path across the
-## street (Brand.SHOPS: a witch's brewery and a vampire's curios). It also
+## them in Build mode to make the store bigger), the rival store down the
+## street (Brand.RIVAL), and the two little shops across the road
+## (Brand.SHOPS: a witch's brewery and a vampire's curio shop). It also
 ## sends townsfolk walking around: shoppers who picked the rival over you,
-## the rival's skeleton staff, and zombies shambling through.
+## the rival's skeleton staff and its spies (RivalSpy), zombies shambling
+## through, skeletons and witches who live here, and vampires after dark.
 ##
 ## The town shares the store's grid (Store.astar), so everyone can walk
 ## between the two. Store cells are marked @ in the map.
@@ -16,7 +17,11 @@ const SHAMBLE_MIN := 10.0  # seconds between townsfolk wandering through town
 const SHAMBLE_MAX := 24.0
 const MAX_SHAMBLERS := 4
 const LOCALS := 3  # skeletons who hang around town all the time
-const SKELETON_CHANCE := 0.5  # how many of the passers-by are skeletons
+const WITCHES := 2  # witches who wander around town all day
+const VAMPIRES := 2  # vampires who come out at dusk (Game.NIGHT_MINUTE)
+const SKELETON_CHANCE := 0.4  # how many of the passers-by are skeletons...
+const WITCH_CHANCE := 0.15  # ...witches...
+const VAMPIRE_CHANCE := 0.15  # ...and, after dusk, vampires
 const LAMP_DAY := 0.14
 const LAMP_NIGHT := 0.8
 const GROUND := {
@@ -60,8 +65,12 @@ var _shamble_timer := 6.0
 var _player_in_rival := false
 var shop_counters := {}  # shop id -> ShopCounter
 var shop_keepers := {}  # shop id -> Wanderer
+var shop_floor := {}  # cell -> shop id: inside the little shops (their doors too)
+var shop_doors := {}  # shop id -> its door
 var _keeper_cells := {}  # shop id -> where its keeper stands
-var _near_shop := ""  # the stall you're standing at (they say hello once)
+var _in_shop := ""  # the shop you're in (its keeper says hello as you walk in)
+var _vampires: Array[Wanderer] = []  # out for the night
+var _vampires_out := false
 
 
 ## Builds everything outside the store. Called by the store while it
@@ -77,6 +86,7 @@ func build(s: Store) -> void:
 		for x in size.x:
 			if (rows[y] as String)[x] == "#":
 				rival_min = Vector2i(mini(rival_min.x, x), mini(rival_min.y, y))
+	var shops := shop_layout(rows)
 	for y in size.y:
 		var row: String = rows[y]
 		assert(row.length() == size.x, "Every TOWN row must be the same length (row %d)" % y)
@@ -91,8 +101,12 @@ func build(s: Store) -> void:
 					lots.append([])
 				lots[k].append(cell)
 				continue
-			if ch != "#":
+			var part := shop_part(ch)
+			if ch != "#" and not (not part.is_empty() and part[1] == "wall"):
 				ground[cell] = ground_texture(under(ch, cell, rows), cell)
+			if not part.is_empty():
+				_shop_piece(part[0], part[1], cell, shops[part[0]])
+				continue
 			match ch:
 				"#":
 					_wall(cell, cell.x == rival_min.x or cell.y == rival_min.y)
@@ -141,40 +155,114 @@ func build(s: Store) -> void:
 					var pot := _prop(cell, ["prop_cauldron"], "Something green is bubbling in the cauldron.")
 					fires.append(pot.add_light(Color(0.45, 1.0, 0.4), Vector2(0, -14), 0.8, 1.6))
 					pot.flicker = true
-				_:
-					_market_stall(ch, cell)
 	_build_lots()
 
 
-## A market stall's counter, or where its keeper stands (Brand.SHOPS).
-func _market_stall(ch: String, cell: Vector2i) -> void:
-	for id: String in Brand.SHOPS:
-		var shop: Dictionary = Brand.SHOPS[id]
-		if ch == shop.map:
+## One piece of a little shop (Brand.SHOPS): `part` is which of its map
+## letters this is. `info` is where its pieces are (shop_layout).
+func _shop_piece(id: String, part: String, cell: Vector2i, info: Dictionary) -> void:
+	var shop: Dictionary = Brand.SHOPS[id]
+	var look: String = shop.look
+	match part:
+		"wall":
+			var tall := shop_wall_tall(id, info, cell)
+			_prop(cell, ["wall_%s_%s" % [look, "tall" if tall else "low"]], "", tall)  # tall ones fade when you're behind them
+		"floor":
+			shop_floor[cell] = id
+		"door":
+			shop_floor[cell] = id
+			shop_doors[id] = cell
+			store.world.add_child(shop_sign(id, cell))
+		"shelf":
+			_prop(cell, ["shop_shelf_" + look], str(shop.get("shelf_text", "")), true)
+		"map":
 			var counter := ShopCounter.new()
 			counter.shop = id
-			counter.texture = shop.stall
-			_place(counter, cell, true)
+			counter.texture = load("res://assets/sprites/shop_counter_%s.png" % look)
+			counter.rotation_step = counter_step(info)
+			_place(counter, cell, false)
 			shop_counters[id] = counter
-			var glow := PointLight2D.new()  # its lantern
+			var glow := PointLight2D.new()  # a warm light over the counter
 			glow.texture = StoreLights.glow_texture()
-			glow.texture_scale = 1.4
+			glow.texture_scale = 2.2
 			glow.scale = Vector2(1.0, 0.6)
 			glow.color = shop.light
-			glow.energy = 0.7
+			glow.energy = 0.75
 			glow.blend_mode = Light2D.BLEND_MODE_ADD
-			glow.position = Vector2(14, -30)
+			glow.position = Vector2(0, -26)
 			counter.add_child(glow)
 			fires.append(glow)
-		elif ch == shop.keeper_map:
+		"keeper_map":
 			_keeper_cells[id] = cell
 			store._make_solid(cell)
+
+
+## The name board over shop `id`'s door at `door`.
+static func shop_sign(id: String, door: Vector2i) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = load("res://assets/sprites/shop_sign_%s.png" % Brand.SHOPS[id].look)
+	s.centered = false
+	s.offset = Vector2(-64, -88)
+	s.position = Iso.cell_to_world(door)
+	return s
+
+
+## Which shop map letter `ch` is (Brand.SHOPS) and what it is there:
+## ["curios", "wall"], ["brewery", "map"] (its counter)... [] if none.
+static func shop_part(ch: String) -> Array:
+	for id: String in Brand.SHOPS:
+		var shop: Dictionary = Brand.SHOPS[id]
+		for part: String in ["wall", "floor", "door", "shelf", "map", "keeper_map"]:
+			if str(shop.get(part, "")) == ch:
+				return [id, part]
+	return []
+
+
+## Where each shop's pieces are in `rows` (Brand.TOWN): the corner of its
+## walls (smallest x and y), its door, its counter and its keeper.
+static func shop_layout(rows: Array) -> Dictionary:
+	var out := {}
+	for id: String in Brand.SHOPS:
+		out[id] = {"min": Vector2i(1 << 20, 1 << 20), "door": NO_CELL, "counter": NO_CELL, "keeper": NO_CELL}
+	for y in rows.size():
+		var row: String = rows[y]
+		for x in row.length():
+			var part := shop_part(row[x])
+			if part.is_empty():
+				continue
+			var info: Dictionary = out[part[0]]
+			var c := Vector2i(x, y)
+			match part[1]:
+				"wall":
+					info.min = Vector2i(mini(info.min.x, x), mini(info.min.y, y))
+				"door":
+					info.door = c
+				"map":
+					info.counter = c
+				"keeper_map":
+					info.keeper = c
+	return out
+
+
+## A shop's back walls are tall (its top row, and its left side unless
+## `tall_left` is off); the ones facing you are low, so you can see in.
+static func shop_wall_tall(id: String, info: Dictionary, cell: Vector2i) -> bool:
+	var corner: Vector2i = info.min
+	return cell.y == corner.y or (cell.x == corner.x and bool(Brand.SHOPS[id].get("tall_left", true)))
+
+
+## Which way a shop's counter faces: away from its keeper (Interactable.FACINGS).
+static func counter_step(info: Dictionary) -> int:
+	var counter: Vector2i = info.counter
+	var keeper: Vector2i = info.keeper
+	return maxi(0, Interactable.FACINGS.find(counter - keeper))
 
 
 ## Once the store is built: staff the rival and stock its shelves.
 func start() -> void:
 	Game.day_started.connect(func(_d): refresh_rival_stock())
 	Game.rival_bought.connect(_on_rival_bought)
+	Game.rival_spy_sent.connect(send_rival_spy)
 	Settings.changed.connect(_apply_settings)
 	refresh_rival_stock()
 	if not Game.rival_owned:
@@ -184,7 +272,7 @@ func start() -> void:
 		keeper.stay = true
 		keeper.modulate.a = 1.0
 		if shop_counters.has(id):
-			keeper.face(shop_counters[id].position + Vector2(40, 0))
+			keeper.face(shop_counters[id].position)
 		shop_keepers[id] = keeper
 	_add_locals()
 	_apply_settings()
@@ -209,13 +297,20 @@ func _process(delta: float) -> void:
 	if inside and not _player_in_rival and not Game.rival_owned and owner_cell != NO_CELL:
 		Game.show_popup(Iso.cell_to_world(owner_cell) + Vector2(0, -46), Brand.RIVAL.hello, Color(0.92, 0.9, 0.82))
 	_player_in_rival = inside
-	var near := ""
-	for id: String in shop_counters:
-		if Iso.chebyshev(p.current_cell(), shop_counters[id].cell) <= 1:
-			near = id
-	if near != "" and near != _near_shop and shop_keepers.has(near):
-		Game.show_popup(shop_keepers[near].position + Vector2(0, -50), Brand.SHOPS[near].hello, Color(0.92, 0.86, 1.0))
-	_near_shop = near
+	var in_shop: String = shop_floor.get(p.current_cell(), "")
+	if in_shop != "" and in_shop != _in_shop and shop_keepers.has(in_shop):
+		Game.show_popup(shop_keepers[in_shop].position + Vector2(0, -50), Brand.SHOPS[in_shop].hello, Color(0.92, 0.86, 1.0))
+	_in_shop = in_shop
+	var night := Game.minute >= Game.NIGHT_MINUTE
+	if night != _vampires_out:
+		_vampires_out = night
+		if night:
+			_vampires_come_out()
+		else:  # morning: back to their coffins
+			for w in _vampires:
+				if is_instance_valid(w) and not w.is_leaving():
+					w.leave(spawns.pick_random() if not spawns.is_empty() else Store.NO_CELL)
+			_vampires.clear()
 
 
 func _apply_settings() -> void:
@@ -228,6 +323,12 @@ func _apply_settings() -> void:
 ## The tile for ground `ch` (a key of GROUND) at `cell`. Also used by the
 ## main menu's background.
 static func ground_texture(ch: String, cell: Vector2i) -> Texture2D:
+	var part := shop_part(ch)
+	if not part.is_empty():
+		var look: String = Brand.SHOPS[part[0]].look
+		if part[1] == "door":
+			return load("res://assets/sprites/ground_%s_mat.png" % look)
+		return load("res://assets/sprites/ground_%s_%s.png" % [look, "ab"[_hash(cell) % 2]])
 	var names: Array = GROUND.get(ch, GROUND[","])
 	return load("res://assets/sprites/%s.png" % names[_hash(cell) % names.size()])
 
@@ -239,12 +340,21 @@ static func under(ch: String, cell: Vector2i, rows: Array) -> String:
 		return ch
 	if UNDER.has(ch):
 		return UNDER[ch]
+	var part := shop_part(ch)
+	if not part.is_empty():  # in a shop: its floor (its door has a mat)
+		return ch if part[1] in ["floor", "door"] else str(Brand.SHOPS[part[0]].floor)
+	var near_shop := ""
 	for d: Vector2i in Store.SIDES:
 		var n := cell + d
 		if n.x >= 0 and n.y >= 0 and n.y < rows.size() and n.x < (rows[n.y] as String).length():
 			var nch: String = (rows[n.y] as String)[n.x]
 			if nch in [",", ";", ":"]:
 				return nch
+			var np := shop_part(nch)
+			if not np.is_empty() and np[1] != "wall":
+				near_shop = np[0]
+	if near_shop != "":  # something standing inside a shop (the coffin, the cauldron)
+		return str(Brand.SHOPS[near_shop].floor)
 	return ","
 
 
@@ -465,7 +575,14 @@ func _send_shambler() -> void:
 	var to: Vector2i = spawns.pick_random()
 	while to == from:
 		to = spawns.pick_random()
-	var kind: Dictionary = Brand.SHOPPERS.skeleton if randf() < SKELETON_CHANCE else Game.pick_shopper_kind()
+	var kind := Game.pick_shopper_kind()
+	var r := randf()
+	if r < SKELETON_CHANCE:
+		kind = Brand.SHOPPERS.skeleton
+	elif r < SKELETON_CHANCE + WITCH_CHANCE and Brand.SHOPPERS.has("witch"):
+		kind = Brand.SHOPPERS.witch
+	elif r < SKELETON_CHANCE + WITCH_CHANCE + VAMPIRE_CHANCE and Brand.SHOPPERS.has("vampire") and Game.minute >= Game.NIGHT_MINUTE:
+		kind = Brand.SHOPPERS.vampire
 	var stops := [[to, 0.0]]
 	for i in randi_range(1, 2):
 		var middle := _random_street_cell()
@@ -476,11 +593,19 @@ func _send_shambler() -> void:
 	walkers.append(w)
 
 
-## A few skeletons who live in town: they stroll around between spots on
-## the street, the cemetery and the ruins, all day and all night.
+## A few skeletons and witches who live in town: they stroll around between
+## spots on the street, the cemetery and the ruins, all day and all night.
 func _add_locals() -> void:
-	var looks: Array = Brand.SHOPPERS.skeleton.looks
-	for i in LOCALS:
+	_add_strollers(Brand.SHOPPERS.skeleton.looks, LOCALS, 1.3)
+	if Brand.SHOPPERS.has("witch"):
+		_add_strollers(Brand.SHOPPERS.witch.looks, WITCHES, 1.2)
+
+
+## `count` townsfolk who loop around town (starting somewhere along the way
+## unless `from` says where).
+func _add_strollers(looks: Array, count: int, speed: float, from := NO_CELL) -> Array[Wanderer]:
+	var out: Array[Wanderer] = []
+	for i in count:
 		var stops := []
 		for j in 4:
 			var c := _random_town_cell()
@@ -488,17 +613,39 @@ func _add_locals() -> void:
 				stops.append([c, randf_range(3.0, 9.0)])
 		if stops.size() < 2:
 			continue
-		var w := _walker(looks[i % looks.size()], stops[0][0], stops, 1.3)
+		var w := _walker(looks[i % looks.size()], from if from != NO_CELL else stops[0][0], stops, speed)
 		w.loop = true
-		w.modulate.a = 1.0
+		if from == NO_CELL:
+			w.modulate.a = 1.0
 		w.set_meta("local", true)
+		out.append(w)
+	return out
+
+
+## Dusk: a couple of vampires come out of the curio shop for the night.
+func _vampires_come_out() -> void:
+	if not Brand.SHOPPERS.has("vampire"):
+		return
+	var from: Vector2i = shop_doors.get("curios", spawns.pick_random() if not spawns.is_empty() else NO_CELL)
+	_vampires = _add_strollers(Brand.SHOPPERS.vampire.looks, VAMPIRES, 1.4, from)
+
+
+## The rival sends a spy over to your store (Game.rival_spies).
+func send_rival_spy() -> RivalSpy:
+	if rival_door == NO_CELL or Game.rival_owned or not Brand.RIVAL.textures.has("spy"):
+		return null
+	var spy := RivalSpy.new()
+	spy.setup(store, rival_door)
+	store.world.add_child(spy)
+	store.movers.append(spy)
+	return spy
 
 
 ## Somewhere outdoors anyone can walk to (not in either store, not on a lot).
 func _random_town_cell() -> Vector2i:
 	for i in 40:
 		var c := Vector2i(randi_range(1, size.x - 2), randi_range(12, size.y - 2))
-		if ground.has(c) and not rival_floor.has(c) and store.is_walkable(c) and store.reachable.has(c):
+		if ground.has(c) and not rival_floor.has(c) and not shop_floor.has(c) and store.is_walkable(c) and store.reachable.has(c):
 			return c
 	return NO_CELL
 

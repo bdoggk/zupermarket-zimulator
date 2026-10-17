@@ -55,7 +55,7 @@ var run_button: Button  # touch screens: sprint on/off
 var message_box: VBoxContainer
 var computer: PanelContainer
 var rival_panel: PanelContainer
-var shop_panel: PanelContainer  # a market stall's wares (the witch's, the vampire's)
+var shop_panel: PanelContainer  # a little shop's wares (the witch's, the vampire's)
 var effects_box: VBoxContainer  # brews working right now, under the corner buttons
 var _effect_rows := {}  # brew id -> its Label in effects_box
 var build_bar: PanelContainer
@@ -712,6 +712,8 @@ func _show_summary(s: Dictionary) -> void:
 		"Walked out: %d" % s.walkouts,
 		"Went to %s instead: %d" % [Brand.RIVAL.name, s.get("lost", 0)],
 		_wanted_line(s.get("wanted", {})),
+		_spies_line(s),
+		"Your spy's reports: %d" % int(s.get("spy_reports", 0)) if int(s.get("spy_reports", 0)) > 0 else "--",
 		"Blood mopped up: %d" % s.cleaned,
 		"XP lost to blood on the floor: %d" % roundi(float(s.get("xp_lost", 0.0))),
 		"",
@@ -724,6 +726,20 @@ func _show_summary(s: Dictionary) -> void:
 	summary_hint.text = "" if is_touch and Input.get_connected_joypads().is_empty() else "%s to go to Day %d" % [_key_hint("the button"), s.day + 1]
 	summary_hint.visible = summary_hint.text != ""
 	summary_panel.visible = true
+
+
+## "Bone Mart's spies: 1 thrown out, 1 got away", or "--" if none came.
+static func _spies_line(s: Dictionary) -> String:
+	var caught := int(s.get("spies_caught", 0))
+	var away := int(s.get("spies_escaped", 0))
+	if caught + away == 0:
+		return "--"
+	var parts: Array[String] = []
+	if caught > 0:
+		parts.append("%d thrown out" % caught)
+	if away > 0:
+		parts.append("%d got away" % away)
+	return "%s's spies: %s" % [Brand.RIVAL.name, ", ".join(parts)]
 
 
 ## "Asked for things you don't sell: 5 (Brains x3, Lungs x2)", or "--"

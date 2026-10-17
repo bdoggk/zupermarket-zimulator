@@ -16,13 +16,22 @@ extends Node2D
 ##            (Store.reorder_list: enough boxes to fill them back up), gets
 ##            anyone who's stuck or slacking back to work, and while they're
 ##            on the payroll everyone else works MANAGED_BOOST faster.
+##   Spy      (zombie game) sneaks over to the rival store every couple of
+##            game hours, snoops around its shelves and counter, and comes
+##            back to the computer with a report (Game.spy_report: its
+##            prices, its deal of the day, when its next spy is coming, and
+##            a rumor that keeps shoppers away from it for a while). In
+##            between, waits by the front door and throws out the rival's
+##            spies (RivalSpy).
 ##
 ## XP only comes from real work (_earn): items stocked, items scanned, spills
-## mopped, boxes ordered, jams fixed. Walking around doesn't count. A manager
+## mopped, boxes ordered, jams fixed, reports made, spies thrown out.
+## Walking around doesn't count. A manager
 ## who tells someone to get back to work gets NUDGE_XP once that person
 ## actually gets something done.
 
-enum Job { IDLE, TO_BOX, PICKING_UP, TO_SHELF, STOCKING, TO_DROP, TO_RACK, STORING, TO_POST, AT_POST, SCANNING, NO_POST, TO_SPILL, MOPPING, TO_CHECK, CHECKING, TO_COMPUTER, ORDERING }
+enum Job { IDLE, TO_BOX, PICKING_UP, TO_SHELF, STOCKING, TO_DROP, TO_RACK, STORING, TO_POST, AT_POST, SCANNING, NO_POST, TO_SPILL, MOPPING, TO_CHECK, CHECKING, TO_COMPUTER, ORDERING,
+	TO_RIVAL, SNOOPING, TO_REPORT, REPORTING, CHASING }
 
 const SPEED := 2.8  # cells per second
 const PICKUP_SECONDS := 0.4
@@ -43,6 +52,9 @@ const CHECK_SECONDS := 1.5  # the manager looking over a shelf or a worker
 const ORDER_SECONDS := 1.5  # the manager placing orders at the computer
 const SLACK_SECONDS := 20.0  # on the same job this long = stuck or slacking
 const SHOUT_EVERY := 12.0  # the manager checks on everyone from afar this often
+const SNOOP_SECONDS := 1.6  # the spy, at each of the rival's shelves
+const REPORT_SECONDS := 1.5  # the spy, writing it up at the computer
+const CHASE_REPATH := 0.4  # the spy, chasing a rival spy: look where it went this often
 ## Jobs that mean you're getting something done (waiting for work isn't slacking).
 const BUSY_JOBS := [Job.TO_BOX, Job.PICKING_UP, Job.TO_SHELF, Job.STOCKING, Job.TO_DROP, Job.TO_RACK,
 	Job.STORING, Job.TO_POST, Job.NO_POST, Job.TO_SPILL, Job.MOPPING]
@@ -83,6 +95,13 @@ var watching: Staff = null  # who they're checking on
 var fixing: SelfCheckout = null  # a jammed self-checkout they're going to fix
 var _shout_timer := SHOUT_EVERY
 var _broke_timer := 0.0  # don't keep saying we can't afford something
+
+# Spy
+var snoop_stops: Array[Vector2i] = []  # where they're still going to snoop at the rival
+var snooping_at := Store.NO_CELL  # what they're looking at there
+var chasing: RivalSpy = null  # a rival spy they're throwing out
+var last_trip := -1.0  # game minute of their last report...
+var _trip_day := 0  # ...on this day
 
 var nudged_by := -1  # the manager who told them to get back to work
 var _nudge_credit := 0.0  # seconds left for that manager to get credit for it
@@ -140,6 +159,8 @@ func _process(delta: float) -> void:
 			_janitor(delta)
 		"manager":
 			_manager(delta)
+		"spy":
+			_spy(delta)
 		_:
 			_cashier(delta)
 	_nudge_credit -= delta
@@ -226,7 +247,7 @@ func _draw() -> void:
 	if carry_count > 0:
 		draw_texture(BOX_SMALL, Vector2(-10, -24 + sprite.position.y))
 		draw_texture(Game.icon(carry_product), Vector2(-4, -56))
-	if job in [Job.PICKING_UP, Job.STOCKING, Job.STORING, Job.SCANNING, Job.MOPPING, Job.CHECKING, Job.ORDERING] and duration > 0.0:
+	if job in [Job.PICKING_UP, Job.STOCKING, Job.STORING, Job.SCANNING, Job.MOPPING, Job.CHECKING, Job.ORDERING, Job.SNOOPING, Job.REPORTING] and duration > 0.0:
 		var f := clampf(1.0 - timer / duration, 0.0, 1.0)
 		draw_rect(Rect2(-11, -44, 22, 5), Color(0.08, 0.08, 0.1, 0.9))
 		draw_rect(Rect2(-10, -43, 20 * f, 3), Color(0.45, 0.75, 0.95))
@@ -267,6 +288,22 @@ func status_text() -> String:
 			return "Going to order more stock"
 		Job.ORDERING:
 			return "Ordering stock"
+		Job.TO_RIVAL:
+			return "Sneaking over to %s" % Brand.RIVAL.name
+		Job.SNOOPING:
+			return "Snooping around %s" % Brand.RIVAL.name
+		Job.TO_REPORT:
+			return "Coming back with news"
+		Job.REPORTING:
+			return "Writing a report at the computer"
+		Job.CHASING:
+			return "Throwing out %s's spy!" % Brand.RIVAL.name
+	if role == "spy":
+		if Game.rival_owned:
+			return "%s is yours: nothing to spy on" % Brand.RIVAL.name
+		if Game.day_over:
+			return "Off duty for the night"
+		return "Keeping watch by the door (next trip about %s)" % Game.time_text(roundi(next_trip() / 30.0) * 30)
 	if role == "stocker":
 		return "Waiting for deliveries"
 	if role == "janitor":
@@ -557,6 +594,9 @@ func _give_up() -> void:
 	target_spill = null
 	watching = null
 	fixing = null
+	chasing = null
+	snoop_stops.clear()
+	snooping_at = Store.NO_CELL
 	path.clear()
 	job = Job.IDLE
 	timer = 0.3
@@ -568,6 +608,8 @@ func _go_home() -> void:
 	var spot := store.delivery_cells[-1] if not store.delivery_cells.is_empty() else Store.NO_CELL
 	if role == "janitor" and store.mop_bucket:
 		spot = store.mop_bucket.cell
+	elif role == "spy":
+		spot = store.door_cell
 	if spot == Store.NO_CELL or Iso.chebyshev(current_cell(), spot) <= 3:
 		return
 	var home := store.stand_cell_for(spot, current_cell(), 2.0)
@@ -841,6 +883,148 @@ func _nudge(s: Staff) -> void:
 	Game.show_popup(s.position + Vector2(0, -52), "Back to work, %s!" % s.staff_name, Color(1.0, 0.75, 0.4))
 
 
+# ---------------------------------------------------------------- spy
+
+func _spy(delta: float) -> void:
+	match job:
+		Job.IDLE:
+			if not path.is_empty():
+				_walk(delta)  # wandering back to the door
+			timer -= delta
+			if timer > 0.0:
+				return
+			timer = LOOK_FOR_WORK
+			if not _plan_chase() and not _plan_trip() and path.is_empty():
+				_go_home()
+		Job.CHASING:
+			if not is_instance_valid(chasing) or not chasing.can_be_caught():
+				_give_up()
+				return
+			if Iso.chebyshev(current_cell(), chasing.cell) <= 1:
+				chasing.caught(staff_name)
+				Game.show_popup(position + Vector2(0, -52), "Out you go!", Color(1.0, 0.75, 0.4))
+				_earn(Game.SPY_CATCH_XP)
+				_give_up()
+				return
+			timer -= delta
+			if timer <= 0.0 or path.is_empty():  # it keeps moving: keep after it
+				timer = CHASE_REPATH
+				_go_to(chasing.current_cell())
+			_walk(delta)
+		Job.TO_RIVAL:
+			if Game.rival_owned or Game.day_over:
+				_give_up()
+			elif _walk(delta):
+				_start(Job.SNOOPING, SNOOP_SECONDS / speed)
+				if snooping_at != Store.NO_CELL:
+					_face(Iso.cell_to_world(snooping_at))
+		Job.SNOOPING:
+			timer -= delta
+			if timer > 0.0:
+				return
+			if randf() < 0.4:
+				Game.show_popup(position + Vector2(0, -50), ["*peeks*", "Psst...", "Hmm!"].pick_random(), Color(0.75, 0.85, 0.75))
+			_next_snoop()
+		Job.TO_REPORT:
+			if not is_instance_valid(store.computer):
+				_give_up()
+			elif _walk(delta):
+				_start(Job.REPORTING, REPORT_SECONDS / speed)
+				_face(store.computer.position)
+		Job.REPORTING:
+			timer -= delta
+			if timer <= 0.0:
+				Game.spy_report(staff_name)
+				Game.show_popup(position + Vector2(0, -50), "Report's in!", Color(0.7, 0.9, 1.0))
+				_earn(Game.SPY_REPORT_XP)
+				_trip_day = Game.day
+				last_trip = Game.minute
+				job = Job.IDLE
+				timer = 1.0
+
+
+## The game minute their next trip to the rival is due.
+func next_trip() -> float:
+	if _trip_day != Game.day:
+		return Game.minute
+	return last_trip + Game.SPY_EVERY_MINUTES
+
+
+func _trip_due() -> bool:
+	if Game.rival_owned or Game.day_over or store.town == null or store.computer == null:
+		return false
+	return Game.minute >= next_trip() and Game.minute < Game.CLOSE_MINUTE
+
+
+## Off to the rival: a couple of its shelves, then its counter.
+func _plan_trip() -> bool:
+	if not _trip_due():
+		return false
+	var t: Town = store.town
+	var stops: Array[Vector2i] = []
+	var spots: Array = []
+	spots.assign(t.rival_shelves)
+	spots.shuffle()
+	spots = spots.slice(0, 2)
+	if t.rival_desk:
+		spots.append(t.rival_desk)
+	for obj in spots:
+		var c := store.stand_cell_for(obj.cell, t.rival_door, 1.5)
+		if c != Store.NO_CELL and c != t.owner_cell:
+			stops.append(c)
+	snoop_stops = stops
+	if stops.is_empty():
+		_trip_day = Game.day  # can't get in there: try again later
+		last_trip = Game.minute
+		return false
+	_next_snoop()
+	return job != Job.IDLE
+
+
+## On to the next spot at the rival, or back to the computer with the news.
+func _next_snoop() -> void:
+	while not snoop_stops.is_empty():
+		var c: Vector2i = snoop_stops.pop_front()
+		if _go_to(c):
+			snooping_at = _nearest_rival_thing(c)
+			job = Job.TO_RIVAL
+			return
+	snooping_at = Store.NO_CELL
+	if Game.rival_owned or not is_instance_valid(store.computer):
+		_give_up()
+		return
+	var stand := store.stand_cell_for(store.computer.cell, current_cell())
+	if stand != Store.NO_CELL and _go_to(stand):
+		job = Job.TO_REPORT
+	else:
+		_give_up()
+
+
+func _nearest_rival_thing(c: Vector2i) -> Vector2i:
+	var t: Town = store.town
+	var things: Array = []
+	things.assign(t.rival_shelves)
+	if t.rival_desk:
+		things.append(t.rival_desk)
+	for obj: Interactable in things:
+		if Iso.chebyshev(obj.cell, c) <= 1:
+			return obj.cell
+	return Store.NO_CELL
+
+
+## One of the rival's spies is in the store: go throw it out.
+func _plan_chase() -> bool:
+	for m in store.movers:
+		if m is RivalSpy and is_instance_valid(m) and m.can_be_caught() and m.is_inside() and not store.is_claimed(m, self):
+			if _go_to(m.current_cell()) or Iso.chebyshev(current_cell(), m.cell) <= 1:
+				chasing = m
+				store.claim(m, self)
+				job = Job.CHASING
+				timer = CHASE_REPATH
+				return true
+	return false
+
+
 # ---------------------------------------------------------------- both
 
 ## Shelves or registers moved in build mode: find new routes.
@@ -854,8 +1038,11 @@ func on_layout_changed() -> void:
 		Job.TO_DROP:
 			path.clear()
 			job = Job.IDLE
-		Job.TO_SPILL, Job.MOPPING, Job.TO_RACK, Job.STORING, Job.TO_CHECK, Job.CHECKING, Job.TO_COMPUTER:
+		Job.TO_SPILL, Job.MOPPING, Job.TO_RACK, Job.STORING, Job.TO_CHECK, Job.CHECKING, Job.TO_COMPUTER, Job.TO_REPORT, Job.CHASING:
 			_give_up()
+		Job.TO_RIVAL:
+			if not path.is_empty():
+				_go_to(path[-1])  # the way out might have changed
 		Job.TO_POST, Job.AT_POST, Job.SCANNING, Job.NO_POST:
 			if is_instance_valid(register) and register in store.registers:
 				if job in [Job.AT_POST, Job.SCANNING] and _post_still_ok():

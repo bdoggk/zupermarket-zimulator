@@ -149,28 +149,70 @@ func _ready() -> void:
 		await _frames(4)
 		await _shot("rival_prices")
 		hud.rival_panel.close()
-		# The market stalls across the street.
-		var counter: ShopCounter = store.town.shop_counters.brewery
-		p.position = Iso.cell_to_world(counter.cell + Vector2i(1, -1))
-		p.camera.reset_smoothing()
-		await _seconds(1.0)
-		Game.shop_requested.emit("brewery")
-		await _frames(4)
-		await _shot("shop_brewery")
+		# The little shops across the road.
+		for id: String in ["brewery", "curios"]:
+			var counter: ShopCounter = store.town.shop_counters[id]
+			p.position = Iso.cell_to_world(counter.cell + Interactable.FACINGS[counter.rotation_step])
+			p.camera.reset_smoothing()
+			await _seconds(1.2)
+			await _shot("shop_%s_inside" % id)
+			Game.shop_requested.emit(id)
+			await _frames(4)
+			await _shot("shop_" + id)
+			hud.shop_panel.close()
 		Game.buy_brew("swift")
 		Game.buy_brew("wine")
-		Game.shop_requested.emit("curios")
-		await _frames(4)
-		await _shot("shop_curios")
 		Game.buy_brew("garlic")
-		hud.shop_panel.close()
-		await _seconds(0.5)
-		await _shot("stalls")
+		p.position = Iso.cell_to_world(Vector2i(12, 27))
+		p.camera.reset_smoothing()
+		await _seconds(1.0)
+		await _shot("shops")
 		var at_night := Game.minute
 		Game.minute = 19 * 60 + 50
-		await _seconds(0.6)
-		await _shot("stalls_night")
+		await _seconds(2.5)
+		await _shot("shops_night")
 		Game.minute = at_night
+		await _seconds(0.5)
+		# Bone Mart's spy, then yours.
+		if Game.is_open:
+			var spy := store.town.send_rival_spy()
+			var t := 0.0
+			while is_instance_valid(spy) and not (spy.is_inside() and spy.wait > 0.0) and t < 40.0:
+				await _seconds(0.25)
+				t += 0.25
+			if is_instance_valid(spy):
+				p.position = Iso.cell_to_world(store.stand_cell_for(spy.cell, spy.cell))
+				p.camera.reset_smoothing()
+				await _seconds(0.4)
+				await _shot("rival_spy")
+				p.try_interact()
+				await _seconds(0.5)
+				await _shot("rival_spy_caught")
+		Game.money += 500.0
+		Game.hire("spy")
+		await _frames(2)
+		var agent: Staff = store.staff.filter(func(s): return s.role == "spy")[0]
+		var waited := 0.0
+		while agent.job != Staff.Job.SNOOPING and waited < 40.0:
+			await _seconds(0.25)
+			waited += 0.25
+		p.position = agent.position + Vector2(-40, 30)
+		p.camera.reset_smoothing()
+		await _seconds(0.5)
+		await _shot("your_spy")
+		while int(Game.stats.get("spy_reports", 0)) == 0 and waited < 90.0:
+			await _seconds(0.25)
+			waited += 0.25
+		hud.open_computer()
+		hud.computer.show_tab(2)
+		await _frames(4)
+		hud.computer.scroll.scroll_vertical = 100000  # down to the spy
+		await _frames(2)
+		await _shot("computer_staff_spy")
+		hud.computer.show_tab(0)
+		await _frames(4)
+		await _shot("computer_stock_spied")
+		hud.computer.close()
 		p.position = Iso.cell_to_world(Vector2i(8, 7))
 		p.camera.reset_smoothing()
 		b.enter()

@@ -108,7 +108,7 @@ func _text(step: String) -> String:
 		"town":
 			var tip := "Some %s shop at %s down the street. Walk out the front door to check its prices, then beat them!" % [Brand.SAY.shoppers, Brand.RIVAL.name]
 			if not Brand.SHOPS.is_empty():
-				tip += " Across the road, down the dirt path, a witch and a vampire sell potions and charms that help for a minute or two."
+				tip += " Across the road, a witch and a vampire have little shops that sell potions and charms that help for a minute or two."
 			return tip
 	return ""
 
