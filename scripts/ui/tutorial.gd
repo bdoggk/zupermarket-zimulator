@@ -96,7 +96,7 @@ func _text(step: String) -> String:
 		"register":
 			return "%s line up at the register with what they grabbed. %s the register to scan their items and get paid. Don't keep them waiting!" % [Brand.SAY.shoppers.capitalize(), use_cap]
 		"mop":
-			return "Blood on the floor keeps shoppers away! Grab the mop from the yellow bucket, %s the puddles to mop them up, then put the mop back." % use
+			return "Blood on the floor costs you XP, and lots of it keeps shoppers away! Grab the mop from the yellow bucket, %s the puddles to mop them up, then put the mop back." % use
 		"order":
 			return "Shelves running low? %s the computer in the back, open Stock & Prices on its desktop and order more boxes." % use_cap
 		"labels":

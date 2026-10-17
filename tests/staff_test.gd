@@ -185,9 +185,39 @@ func _ready() -> void:
 		for old: Spill in store.spills.values():
 			store.remove_spill(old)  # start clean (shoppers drip during the test)
 		var traffic := store.traffic_multiplier()
+		var pull := Game.rival_pull([], {})
 		store.add_spill(spill_cell)
 		check(store.spills.has(spill_cell), "a spill appears on the floor")
-		check(store.traffic_multiplier() < traffic, "spills keep shoppers away")
+		check(is_equal_approx(store.traffic_multiplier(), traffic) and is_equal_approx(Game.rival_pull([], {}), pull),
+			"a puddle or two doesn't scare anyone off")
+		var extra: Array[Vector2i] = []
+		for c: Vector2i in spots:
+			if c != spill_cell and store.is_walkable(c) and not store.spills.has(c) and not store.boxes.has(c) \
+					and not store.is_line_spot(c) and c != store.door_cell and extra.size() < 4:
+				store.add_spill(c)
+				extra.append(c)
+		check(is_equal_approx(store.mess_multiplier(), 1.0), "fresh blood doesn't put anyone off yet (%d wet puddles)" % store.spills.size())
+		var sp1: Spill = store.spills[spill_cell]
+		Game.open_store()
+		var wet_age := sp1.age
+		await _seconds(0.5)
+		check(sp1.age > wet_age and not sp1.is_settled(), "puddles dry out while you're open (%.1fs of %.0fs)" % [sp1.age, Store.spill_settle_seconds()])
+		for s2: Spill in store.spills.values():
+			s2.age = Store.spill_settle_seconds()  # an hour later...
+		check(sp1.is_settled() and store.settled_spills() == store.spills.size(), "after an hour on the floor they've dried")
+		var few := store.mess_multiplier()
+		check(few < 1.0 and few >= 1.0 - Store.SPILL_PENALTY * 3.0 - 0.001, "more puddles keep a few shoppers away (%d puddles: -%d%%)" % [store.spills.size(), roundi((1.0 - few) * 100.0)])
+		for c: Vector2i in spots:
+			if store.spills.size() >= Store.MAX_SPILLS:
+				break
+			if store.is_walkable(c) and not store.spills.has(c) and not store.boxes.has(c) and not store.is_line_spot(c) and c != store.door_cell:
+				store.add_spill(c, -1, false, Store.spill_settle_seconds())
+				extra.append(c)
+		check(store.mess_multiplier() >= Store.MIN_SPILL_TRAFFIC - 0.001 and Game.rival_pull([], {}) <= pull + 0.081,
+			"even a floor full of blood (%d puddles) keeps at most %d%% away: -%d%%" % [store.spills.size(), roundi((1.0 - Store.MIN_SPILL_TRAFFIC) * 100.0), roundi((1.0 - store.mess_multiplier()) * 100.0)])
+		for c in extra:
+			if store.spills.has(c):
+				store.remove_spill(store.spills[c])
 		var sp: Spill = store.spills[spill_cell]
 		check(not sp.can_interact(p), "you need the mop to clean it")
 		p.carry_product = ""
@@ -223,6 +253,42 @@ func _ready() -> void:
 			leaky = leaky or store.spawn_customer().leaky
 		check(not leaky, "shoppers don't drip in this game")
 
+	# ---- shoppers stand in front of shelves, and shelves fade when someone's behind them
+	for c in store.customers.duplicate():
+		store.customer_left(c)
+		c.queue_free()
+	await _frames(2)
+	var shelf: Shelf = null
+	for sh in store.shelves:
+		var f := sh.cell + sh.facing_dir()
+		if store.is_walkable(f) and store.reachable.has(f) and store.is_walkable(sh.cell - sh.facing_dir()):
+			shelf = sh
+			break
+	check(shelf != null, "(a shelf with room in front and behind)")
+	if shelf:
+		var front := shelf.cell + shelf.facing_dir()
+		var stand := store.shelf_stand_cell(shelf, shelf.cell - shelf.facing_dir() * 3)
+		var out := stand - shelf.cell
+		check(Iso.chebyshev(stand, front) <= 1 and out.x * shelf.facing_dir().x + out.y * shelf.facing_dir().y == 1,
+			"shoppers take things from the front of a shelf, even coming from behind it (%s, front %s)" % [stand, front])
+		var who := store.spawn_customer()
+		await _frames(2)
+		who.state = Customer.State.IN_LINE  # (stand still)
+		who.path.clear()
+		who.position = Iso.cell_to_world(Vector2i(shelf.cell.x - 1, shelf.cell.y - 1))
+		who.modulate.a = 1.0
+		p.position = Iso.cell_to_world(store.door_cell)
+		await _frames(3)
+		check(shelf.see_through and shelf.modulate.a < 0.9, "a shopper behind a shelf: the shelf fades so you can see them (%.2f)" % shelf.modulate.a)
+		who.position = Iso.cell_to_world(front)
+		await _frames(3)
+		var others := store.staff.filter(func(st): return Store._hides(shelf.position, st.position)).size() \
+			+ store.customers.filter(func(c): return c != who and Store._hides(shelf.position, c.position)).size()
+		check(shelf.see_through == (others > 0) and (others > 0 or is_equal_approx(shelf.modulate.a, 1.0)),
+			"and comes back once they've moved on (%d others behind it)" % others)
+		store.customer_left(who)
+		who.queue_free()
+
 	print("RESULT: %d failure%s" % [fails, "" if fails == 1 else "s"])
 	get_tree().quit(1 if fails > 0 else 0)
 
@@ -249,3 +315,7 @@ func _stock_all(store: Store) -> void:
 func _frames(n: int) -> void:
 	for i in n:
 		await get_tree().process_frame
+
+
+func _seconds(t: float) -> void:
+	await get_tree().create_timer(t).timeout

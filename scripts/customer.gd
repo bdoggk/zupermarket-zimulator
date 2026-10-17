@@ -325,7 +325,7 @@ func _next_item() -> void:
 				Game.record_wanted(want.id)
 			shopping_list.pop_front()
 			continue
-		var stand := store.stand_cell_for(shelf.cell, current_cell(), 1.5)
+		var stand := store.shelf_stand_cell(shelf, current_cell(), 1.5)
 		if stand == Store.NO_CELL or not _go_to(stand):
 			shopping_list.pop_front()
 			continue

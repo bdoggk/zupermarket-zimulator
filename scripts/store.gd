@@ -41,8 +41,13 @@ const PLANT_APPEAL := 0.08  # each plant brings 8% more customers...
 const MAX_PLANTS_COUNTED := 6  # ...up to this many plants
 const LEVEL_TRAFFIC := 0.1  # each store level brings 10% more customers
 const MAX_SPILLS := 14
-const SPILL_PENALTY := 0.08  # each spill keeps 8% of customers away...
-const MIN_SPILL_TRAFFIC := 0.4  # ...but never more than 60%
+## Where something tall can stand, from someone's cell, to hide them (see _hides).
+const HIDE_OFFSETS := [Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 0), Vector2i(0, 2), Vector2i(2, 1),
+	Vector2i(1, 2), Vector2i(2, 2), Vector2i(3, 1), Vector2i(1, 3), Vector2i(3, 2), Vector2i(2, 3), Vector2i(3, 3)]
+const SPILL_SETTLE_MINUTES := 60  # a fresh puddle puts nobody off for an hour (game time)...
+const FREE_SPILLS := 2  # ...and nobody minds a couple of old ones (it's a zombie store)...
+const SPILL_PENALTY := 0.03  # ...each one after that keeps 3% of customers away...
+const MIN_SPILL_TRAFFIC := 0.75  # ...but never more than 25%
 ## With a town, more shoppers come by, since some of them go to the rival.
 ## Buy the rival out and they all come to you.
 const TOWN_TRAFFIC := 1.5
@@ -404,7 +409,7 @@ func to_dict() -> Dictionary:
 		deliveries.append({"id": d.id, "time": d.time})
 	var spill_list := []
 	for sp: Spill in spills.values():
-		spill_list.append([sp.cell.x, sp.cell.y, sp.variant])
+		spill_list.append([sp.cell.x, sp.cell.y, sp.variant, snappedf(sp.age, 0.1)])
 	var regs := []
 	for r in registers:
 		var line := []
@@ -462,7 +467,8 @@ func _load_saved(d: Dictionary) -> void:
 			_create_box(c, product, maxi(1, int(b.get("count", 1))))
 	for v in d.get("spills", []):
 		if v is Array and v.size() >= 2:
-			add_spill(Vector2i(int(v[0]), int(v[1])), int(v[2]) if v.size() > 2 else -1, false)
+			add_spill(Vector2i(int(v[0]), int(v[1])), int(v[2]) if v.size() > 2 else -1, false,
+				float(v[3]) if v.size() > 3 else spill_settle_seconds())  # (older saves: an old puddle)
 	for del: Dictionary in d.get("deliveries", []):
 		if Game.PRODUCTS.has(str(del.get("id", ""))):
 			pending_deliveries.append({"id": str(del.id), "time": float(del.get("time", 0.0)), "warned": false})
@@ -683,13 +689,15 @@ func remove_furniture(obj: Interactable) -> void:
 	if obj is StorageRack:
 		racks.erase(obj)
 		var first := true
-		for b: StorageRack.Box in obj.boxes:
+		var left: Array = obj.boxes.duplicate()
+		obj.boxes.clear()  # (so stashing doesn't put them back on this rack)
+		for b: StorageRack.Box in left:
 			release(b)
-			var c := obj.cell if first else nearest_drop_cell(obj.cell)
-			first = false
-			if c != NO_CELL:
-				_create_box(c, b.product_id, b.count)
-		obj.boxes.clear()
+			if first:
+				_create_box(obj.cell, b.product_id, b.count)
+				first = false
+			else:
+				stash_box(obj.cell, b.product_id, b.count)
 	if obj is Register:
 		registers.erase(obj)
 		obj.release_all()
@@ -890,6 +898,9 @@ func _layout_ok(cell: Vector2i, needs_access: bool, moving: Interactable, lines:
 		must.append(c.current_cell())
 	for s in staff:
 		must.append(s.current_cell())
+	for m in movers:
+		if is_instance_valid(m):
+			must.append(m.cell)
 	for c in must:
 		if not reach.has(c):
 			return false
@@ -1013,7 +1024,21 @@ func traffic_multiplier() -> float:
 func mess_multiplier() -> float:
 	if Game.has_effect("crucifix"):
 		return 1.0  # nobody minds the blood for now
-	return maxf(MIN_SPILL_TRAFFIC, 1.0 - SPILL_PENALTY * spills.size())
+	return maxf(MIN_SPILL_TRAFFIC, 1.0 - SPILL_PENALTY * maxi(0, settled_spills() - FREE_SPILLS))
+
+
+## Puddles that have been on the floor long enough to put shoppers off.
+func settled_spills() -> int:
+	var n := 0
+	for sp: Spill in spills.values():
+		if sp.is_settled():
+			n += 1
+	return n
+
+
+## Real seconds of open time before a puddle starts putting shoppers off.
+static func spill_settle_seconds() -> float:
+	return SPILL_SETTLE_MINUTES * Game.SECONDS_PER_GAME_MINUTE
 
 
 ## Extra shoppers for selling lots of different things (0.15 = 15% more).
@@ -1466,7 +1491,7 @@ func is_claimed(obj: Object, who: Staff) -> bool:
 
 ## A shopper left a puddle on `cell` (zombie game only). `variant` picks the
 ## puddle sprite (-1 = random).
-func add_spill(cell: Vector2i, variant := -1, announce := true) -> void:
+func add_spill(cell: Vector2i, variant := -1, announce := true, age := 0.0) -> void:
 	if not Brand.SPILLS or spills.size() >= MAX_SPILLS or spills.has(cell):
 		return
 	if not floor_cells.has(cell) or astar.is_point_solid(cell) or cell == door_cell or cell in delivery_cells:
@@ -1475,6 +1500,7 @@ func add_spill(cell: Vector2i, variant := -1, announce := true) -> void:
 	sp.cell = cell
 	sp.position = Iso.cell_to_world(cell)
 	sp.variant = variant if variant >= 0 and variant < Spill.TEXTURES.size() else randi() % Spill.TEXTURES.size()
+	sp.age = age
 	decals.add_child(sp)
 	spills[cell] = sp
 	if announce and not _warned_spill:
@@ -1508,6 +1534,36 @@ func drop_box(cell: Vector2i, product_id: String, count: int) -> bool:
 		return false
 	_create_box(cell, product_id, count)
 	return true
+
+
+## Puts a box down somewhere, whatever it takes, so its stock is never lost
+## (someone you fire, a rack you sell): the nearest free spot on the floor,
+## else a storage rack with room, else on top of a box of the same thing.
+## False only if there's truly nowhere.
+func stash_box(near: Vector2i, product_id: String, count: int) -> bool:
+	if count <= 0:
+		return true
+	var c := nearest_drop_cell(near)
+	if c != NO_CELL:
+		return drop_box(c, product_id, count)
+	for r in racks:
+		if r.store_box(product_id, count):
+			return true
+	var best: StockBox = null
+	for b: StockBox in boxes.values():
+		if b.product_id == product_id and (best == null or Vector2(b.cell - near).length() < Vector2(best.cell - near).length()):
+			best = b
+	if best:
+		best.count += count
+		best.queue_redraw()
+		return true
+	for r in racks:
+		for rb in r.boxes:
+			if rb.product_id == product_id:
+				rb.count += count
+				r.queue_redraw()
+				return true
+	return false
 
 
 func remove_box(box: StockBox) -> void:
@@ -1671,10 +1727,55 @@ func _on_rival_bought() -> void:
 
 # ---------------------------------------------------------------- visuals
 
-## Fade shelves out when the player walks behind them (Project Zomboid style).
+## Fade shelves (and racks) out when someone walks behind them, Project
+## Zomboid style: a lot for you, a little for shoppers, staff and spies, so
+## nobody seems to vanish into the shelves.
 func _update_cutaways() -> void:
 	if player == null:
 		return
 	var p := player.position
+	var people: Array[Vector2] = []
+	for c in customers:
+		if c.modulate.a > 0.2:
+			people.append(c.position)
+	for s in staff:
+		people.append(s.position)
+	for m in movers:
+		if is_instance_valid(m):
+			people.append(m.position)
+	var hidden := {}  # shelves and racks someone is behind
+	for q in people:
+		var c := Iso.world_to_cell(q)
+		for o: Vector2i in HIDE_OFFSETS:  # only what could be in front of them
+			var obj: Interactable = objects.get(c + o)
+			if (obj is Shelf or obj is StorageRack) and _hides(obj.position, q):
+				hidden[obj] = true
 	for s in shelves:
-		s.cutaway = p.y < s.position.y and p.y > s.position.y - 74 and absf(p.x - s.position.x) < 36
+		s.cutaway = _hides(s.position, p)
+		s.see_through = not s.cutaway and hidden.has(s)
+	for r in racks:
+		r.cutaway = _hides(r.position, p)
+		r.see_through = not r.cutaway and hidden.has(r)
+
+
+## Something tall standing at `at` covers someone standing at `who`.
+static func _hides(at: Vector2, who: Vector2) -> bool:
+	return who.y < at.y and who.y > at.y - 74 and absf(who.x - at.x) < 36
+
+
+## Where a shopper stands to take something off `shelf`: in front of it,
+## where its stock is, if there's room there (beside its front corners
+## counts too); otherwise beside or behind it.
+func shelf_stand_cell(shelf: Shelf, near: Vector2i, jitter := 0.0) -> Vector2i:
+	var front := shelf.facing_dir()
+	var along := Vector2i(absi(front.y), absi(front.x))
+	var best := NO_CELL
+	var best_d := INF
+	for c: Vector2i in [shelf.cell + front, shelf.cell + front + along, shelf.cell + front - along]:
+		if not is_walkable(c) or not reachable.has(c):
+			continue
+		var d := Vector2(c - near).length() + randf() * jitter
+		if d < best_d:
+			best_d = d
+			best = c
+	return best if best != NO_CELL else stand_cell_for(shelf.cell, near, jitter)

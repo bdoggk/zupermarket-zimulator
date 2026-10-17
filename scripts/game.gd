@@ -344,7 +344,8 @@ func rival_pull(list: Array, kind: Dictionary) -> float:
 				pull += 0.08  # you don't even sell it
 		pull += diff / list.size() * 1.2
 	if in_game():
-		pull += 0.025 * (0 if has_effect("crucifix") else store.spills.size())
+		if not has_effect("crucifix"):  # a messy store sends a few to the rival (not a couple of puddles)
+			pull += minf(0.08, 0.01 * maxi(0, store.settled_spills() - Store.FREE_SPILLS))
 		pull -= 0.02 * mini(store.plant_count(), 6)
 	if has_effect("rumor"):
 		pull -= RUMOR_PULL

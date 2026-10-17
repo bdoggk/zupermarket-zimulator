@@ -36,6 +36,28 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.9.1
+
+- **Shoppers no longer vanish into the shelves:** a shelf or storage rack with a
+  shopper, a member of staff or a spy behind it fades a little so you can see them
+  (more when it's you behind it). Shoppers also take things from the **front** of a
+  shelf, where its stock is, so they stand in the aisle it faces instead of behind it.
+- **You move as fast up and down the screen as left and right** (walking, running and
+  walking to a spot you tapped). It used to be half the speed going up or down.
+- **Blood is gentler on business:** a fresh puddle (wet and shiny) doesn't put anyone
+  off for an hour of game time, so you have time to mop it; then it dries darker. A
+  couple of dried puddles don't bother anyone either. After that each one keeps 3% of
+  shoppers away (it was 8% from the moment it appeared), and never more than 25% (it was
+  60%). A messy store sends at most 8% more shoppers to Bone Mart. Every puddle still
+  costs a little XP while you're open, so keep mopping.
+- **Moving the OPEN sign** (or anything else) with a controller in build mode: A on the
+  Move tool now always picks up what's on the tile under the cursor, even when
+  something else is drawn over it. (Build mode > Move > tap or click the sign, then
+  where it should go.)
+- Fixed: firing a stocker who was carrying a box, or selling a full storage rack, when
+  the floor had no room left could make those boxes disappear. Now they go on a rack or
+  on top of a box of the same thing.
+
 ## What's new in 0.9
 
 - **The witch and the vampire have real shops now:** the market stalls across the road
@@ -312,9 +334,13 @@ If a box is on the floor right there too, using picks up the box first.
 
 ### Blood and the mop
 About a third of the zombies drip blood as they walk around, leaving puddles on the
-floor. **Every puddle keeps some shoppers away** (even zombies hate a messy store) and
-**slowly costs you XP** while you're open, so the status bar shows how many there are
-and how many shoppers they're costing you ("Blood: 3 (-24% shoppers)"). Garlic from
+floor. A fresh puddle is wet and shiny and doesn't put anyone off yet; after an hour of
+game time (30 seconds while you're open) it dries darker. A couple of dried puddles
+don't bother anyone (it's a zombie store), but **after that each dried puddle keeps 3%
+of shoppers away**, up to 25% for a floor covered in blood, and a messy store sends a
+few more to Bone Mart. **Every puddle slowly costs you XP** while
+you're open. The status bar shows how many there are and how many shoppers they're
+costing you ("Blood: 5 (-9% shoppers)"). Garlic from
 the vampire's shop stops the dripping for a bit, and a crucifix makes everyone ignore
 the blood for a while.
 1. Walk to the **mop bucket** (the yellow bucket near the computer) and press E (or

@@ -36,6 +36,16 @@ static func velocity_toward(dir: Vector2, cells_per_second: float) -> Vector2:
 	return n * (cells_per_second / cell_length(n))
 
 
+## Screen-space velocity in screen direction `dir` that's as fast on screen
+## whichever way you go: walking up or down the screen is as quick as
+## walking left or right (`cells_per_second` is the left/right speed). The
+## player moves like this; everyone else keeps to velocity_toward.
+static func even_velocity(dir: Vector2, cells_per_second: float) -> Vector2:
+	if dir.is_zero_approx():
+		return Vector2.ZERO
+	return dir.normalized() * (cells_per_second / cell_length(Vector2.RIGHT))
+
+
 ## Grid distance between two cells (diagonal steps count as one).
 static func chebyshev(a: Vector2i, b: Vector2i) -> int:
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))

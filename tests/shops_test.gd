@@ -150,7 +150,7 @@ func _ready() -> void:
 	c.queue_free()
 
 	for cell in [Vector2i(5, 8), Vector2i(6, 8), Vector2i(7, 8)]:
-		store.add_spill(cell)
+		store.add_spill(cell, -1, false, Store.spill_settle_seconds())  # old puddles
 	check(store.mess_multiplier() < 1.0, "blood scares shoppers off...")
 	var pull := Game.rival_pull([], {})
 	Game.buy_brew("crucifix")

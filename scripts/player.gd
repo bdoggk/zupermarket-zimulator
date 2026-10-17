@@ -14,7 +14,7 @@ extends CharacterBody2D
 
 enum Action { USE, DROP, SCAN }
 
-const WALK_SPEED := 3.2  # cells per second
+const WALK_SPEED := 3.2  # cells per second going left or right (up and down is as fast on screen)
 const SPRINT_SPEED := 5.2  # holding Shift (or the RUN button)
 const DROP_SECONDS := 0.25
 const DEFAULT_ZOOM := 2.5  # before rounding to whole screen pixels
@@ -81,7 +81,7 @@ func _process(delta: float) -> void:
 	elif input != Vector2.ZERO:
 		path.clear()
 		tap_target = null
-		velocity = Iso.velocity_toward(input, speed) * minf(input.length(), 1.0)
+		velocity = Iso.even_velocity(input, speed) * minf(input.length(), 1.0)  # as fast up/down as left/right
 	elif not path.is_empty():
 		_follow_path(delta, speed)
 	else:
@@ -362,7 +362,7 @@ func _follow_path(delta: float, speed := WALK_SPEED) -> void:
 			_arrived()
 			return
 		to_target = Iso.cell_to_world(path[0]) - position
-	var v := Iso.velocity_toward(to_target, speed)
+	var v := Iso.even_velocity(to_target, speed)
 	if v.length() * delta > to_target.length():
 		v = to_target / delta  # don't overshoot the cell center
 	velocity = v

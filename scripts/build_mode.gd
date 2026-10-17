@@ -52,6 +52,7 @@ var _dragging := false
 var _press_pos := Vector2.ZERO
 var _hover_pos := Vector2.INF  # where the mouse is in the world (for R with nothing in hand)
 var _pad_cell := Store.NO_CELL  # with a controller: the tile in the middle of the screen
+var _pad_tap := false  # A was pressed: pick what's on that tile, not what's drawn over it
 
 @onready var store: Store = get_parent()
 
@@ -187,7 +188,9 @@ func _pad_button(b: JoyButton) -> bool:
 		JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_LEFT_SHOULDER:
 			_pad_cycle(-1)
 		JOY_BUTTON_A:
+			_pad_tap = true  # what's on the tile under the cursor comes first
 			tap(_screen_center(), true)
+			_pad_tap = false
 		_:
 			return false
 	return true
@@ -360,6 +363,10 @@ func movable_at(world_pos: Vector2) -> Interactable:
 
 
 func _object_at(world_pos: Vector2, ok: Callable) -> Interactable:
+	if _pad_tap:
+		var on_tile: Interactable = store.objects.get(Iso.world_to_cell(world_pos))
+		if on_tile and ok.call(on_tile):
+			return on_tile
 	var obj := store.interactable_at_point(world_pos)
 	if obj == null or not ok.call(obj):
 		obj = store.objects.get(Iso.world_to_cell(world_pos))

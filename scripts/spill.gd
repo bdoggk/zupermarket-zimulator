@@ -1,8 +1,10 @@
 class_name Spill
 extends Interactable
 ## A puddle of blood a zombie left on the floor (only in the zombie game,
-## see Brand.SPILLS). Every spill makes the store a bit less appealing, so
-## fewer shoppers come in. Grab the mop from the mop bucket and mop it up.
+## see Brand.SPILLS). A fresh one (wet and shiny) doesn't bother anyone yet;
+## once it's been there for Store.SPILL_SETTLE_MINUTES of open time it puts
+## shoppers off (Store.mess_multiplier). Every puddle costs XP while you're
+## open. Grab the mop from the mop bucket and mop it up.
 
 const TEXTURES := [
 	preload("res://assets/sprites/spill_0.png"),
@@ -12,6 +14,7 @@ const TEXTURES := [
 const MOP_SECONDS := 1.0
 
 var variant := 0
+var age := 0.0  # seconds it's been on the floor while the store was open
 
 
 func _draw() -> void:
@@ -47,5 +50,14 @@ func get_pick_rect() -> Rect2:
 	return Rect2(-22, -11, 44, 22)
 
 
-func _process(_delta: float) -> void:
-	modulate = Color(1.25, 1.25, 1.25) if highlighted else Color.WHITE
+## Been there long enough to put shoppers off.
+func is_settled() -> bool:
+	return age >= Store.spill_settle_seconds()
+
+
+func _process(delta: float) -> void:
+	if Game.is_open:
+		age += delta
+	var wet := 1.0 - clampf(age / Store.spill_settle_seconds(), 0.0, 1.0)  # fresh blood shines, then dries darker
+	var b := 1.25 if highlighted else 1.0
+	modulate = Color(b * (1.0 + 0.45 * wet), b * (1.0 + 0.15 * wet), b * (1.0 + 0.15 * wet))

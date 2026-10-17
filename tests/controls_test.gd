@@ -36,6 +36,11 @@ func _ready() -> void:
 	check(walked > 10.0, "walking moves you (%.0f px in a second)" % walked)
 	check(ran > walked * 1.4, "sprinting is faster (%.0f px vs %.0f)" % [ran, walked])
 	check(absf(ran / walked - Player.SPRINT_SPEED / Player.WALK_SPEED) < 0.3, "by about %.1fx" % (Player.SPRINT_SPEED / Player.WALK_SPEED))
+	var open := Vector2i(11, 4)  # room to move every way
+	var across := await _walk_for(p, open, 0.3, true)
+	var up := await _walk_for(p, open, 0.3, true, "move_up")
+	var down := await _walk_for(p, open, 0.3, true, "move_down")
+	check(up > across * 0.9 and down > across * 0.9, "running up and down the screen is as fast as left and right (%.0f / %.0f px vs %.0f)" % [up, down, across])
 	p.position = Iso.cell_to_world(start)
 	await _frames(2)
 	var target := start + Vector2i(4, 0)
@@ -185,18 +190,18 @@ func _ready() -> void:
 
 ## Walks to the right for `seconds` (holding sprint or not) and returns how
 ## far the player went.
-func _walk_for(p: Player, cell: Vector2i, seconds: float, sprint: bool) -> float:
+func _walk_for(p: Player, cell: Vector2i, seconds: float, sprint: bool, way := "move_right") -> float:
 	p.position = Iso.cell_to_world(cell)
 	await _frames(2)
 	var from := p.position
 	if sprint:
 		Input.action_press("sprint")
-	Input.action_press("move_right")
+	Input.action_press(way)
 	var t := 0.0
 	while t < seconds:
 		await get_tree().process_frame
 		t += get_process_delta_time()
-	Input.action_release("move_right")
+	Input.action_release(way)
 	Input.action_release("sprint")
 	await _frames(1)
 	return p.position.distance_to(from)

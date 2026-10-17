@@ -9,6 +9,7 @@ var cell := Vector2i.ZERO
 var furniture_id := ""
 var highlighted := false  # the player is close and this is what E will use
 var cutaway := false  # the player is hidden behind this, so fade it out
+var see_through := false  # someone else is behind it: fade it a little
 ## Which way it faces; build mode turns it a quarter turn at a time (R).
 ## 0 = its front faces the bottom left of the screen, 1 = bottom right,
 ## 2 = top right (you see its back), 3 = top left. See FACINGS.
@@ -123,7 +124,7 @@ func get_pick_rect() -> Rect2:
 
 func _process(_delta: float) -> void:
 	var b := 1.3 if highlighted else 1.0
-	var a := 0.4 if cutaway else 1.0
+	var a := 0.4 if cutaway else (0.6 if see_through else 1.0)
 	modulate = Color(b, b, b, a)
 
 

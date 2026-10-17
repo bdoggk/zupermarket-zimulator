@@ -491,7 +491,7 @@ const SAY := {
 	"opened": "Doors open! The horde shambles in.",
 	"closing": "Closing time! Ring up the last of the horde.",
 	"morning": "Day %d. Get ready, then flip the OPEN sign by the door.",
-	"spill": "Blood on the floor! Grab the mop from the bucket. Blood scares shoppers off and costs you XP.",
+	"spill": "Blood on the floor! A little is fine, but lots of it scares shoppers off, and every puddle costs you XP. Grab the mop from the bucket.",
 	"jam": "Unexpected limb in the bagging area! Go fix the self-checkout.",
 	"brew_bought": "%s: %s",
 	"brew_done": "Your %s wore off.",

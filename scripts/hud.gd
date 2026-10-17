@@ -156,6 +156,8 @@ func _process(delta: float) -> void:
 	mess_label.visible = mess > 0
 	if Game.has_effect("crucifix"):
 		mess_label.text = "Blood: %d (the crucifix keeps everyone calm)" % mess
+	elif Game.store.settled_spills() <= Store.FREE_SPILLS:
+		mess_label.text = "Blood: %d (nobody minds yet: mop it before it dries)" % mess
 	else:
 		mess_label.text = "Blood: %d (-%d%% shoppers)" % [mess, roundi((1.0 - Game.store.mess_multiplier()) * 100.0)]
 	clock_label.text = "Day %d   %s   %s" % [Game.day, Game.clock_text(), "OPEN" if Game.is_open else "CLOSED"]

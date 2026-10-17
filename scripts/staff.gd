@@ -1061,9 +1061,7 @@ func on_layout_changed() -> void:
 func leave() -> void:
 	store.release_all(self)
 	if carry_count > 0:
-		var c := store.nearest_drop_cell(current_cell())
-		if c != Store.NO_CELL:
-			store.drop_box(c, carry_product, carry_count)
+		store.stash_box(current_cell(), carry_product, carry_count)  # put down (never lost)
 		carry_count = 0
 	if is_instance_valid(register) and register.cashier == self:
 		register.cashier = null

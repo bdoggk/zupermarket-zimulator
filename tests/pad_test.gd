@@ -149,6 +149,23 @@ func _ready() -> void:
 	check(b.selected == store.objects.get(spot), "Sell: looking at the new shelf picks it")
 	await _button(JOY_BUTTON_A)
 	check(not store.objects.has(spot), "A sells it")
+	# Move the OPEN sign: d-pad to Move, look at the sign, A, look somewhere else, A.
+	while b.tool != BuildMode.Tool.MOVE:
+		await _button(JOY_BUTTON_DPAD_LEFT)
+	var sign: OpenSign = store.sign
+	var sign_spot := Store.NO_CELL
+	for c: Vector2i in store.floor_cells:
+		if Iso.chebyshev(c, sign.cell) >= 3 and store.placement_error(c, "", sign) == "":
+			sign_spot = c
+			break
+	_look_at(b, sign.cell)
+	await _frames(3)
+	await _button(JOY_BUTTON_A)
+	check(b.moving == sign, "Move: A on the OPEN sign picks it up")
+	_look_at(b, sign_spot)
+	await _frames(3)
+	await _button(JOY_BUTTON_A)
+	check(sign.cell == sign_spot and b.moving == null, "and A puts it down somewhere else (%s)" % sign_spot)
 	await _button(JOY_BUTTON_B)
 	await _button(JOY_BUTTON_B)
 	check(not b.active and not get_tree().paused, "B (twice) leaves build mode")
