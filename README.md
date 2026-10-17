@@ -38,6 +38,12 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.9.4
+
+- **Ready for the Microsoft Store.** The game can now be packaged for the Store (see
+  "Microsoft Store" below). The Store version leaves updating to the Store, so it never
+  updates itself or goes online. Nothing changes in the downloaded .exe or on Android.
+
 ## What's new in 0.9.3
 
 - **The game updates itself on Windows.** A couple of seconds after it starts, it
@@ -894,6 +900,18 @@ First, in Godot: **Editor → Manage Export Templates → Download and Install**
 **Windows:** Project → Export → "Windows Desktop" → Export Project. You get a single
 .exe in `build/windows/`.
 
+**Microsoft Store:** everything for the Store is in `store/`:
+- `AppxManifest.xml.in`, `Assets/` (Start menu and taskbar icons) and `make_msix.ps1`,
+  which packs the Windows .exe into `ZupermarketZimulator-store.msix` with Windows'
+  `makeappx` (it runs on GitHub Actions; the Store signs the package itself).
+- `identity.ini`: the three values from Partner Center > Product identity. Once it's
+  filled in, each release also gets a `ZupermarketZimulator-store.msix` to upload.
+- `listing/`: the screenshots and art for the Store page, made by
+  `tools/make_store_art.py` from `CLEAN=1` showcase screenshots (see the script).
+The Store doesn't allow 0 as a package's first number, so game version 0.9.4 is
+package version 1.9.4.0. A game installed from the Store lives in
+`Program Files/WindowsApps`; the updater sees that and stays off.
+
 **Releases and updates:** the game updates itself from the latest GitHub release
 (`scripts/updater.gd`). It compares the release's tag (`v0.9.3`) with
 `application/config/version` in Project Settings, so bump the version before
@@ -919,8 +937,6 @@ The project uses the Compatibility renderer, so it runs on older phones too.
 
 ## Ideas for what to build next
 
-- The Microsoft Store: free for individual developers, and Store apps never get the
-  "Windows protected your PC" warning (it needs a Partner Center account in your name)
 
 - A second store of your own (run Bone Mart once you've bought it)
 - More upgrades: a faster checkout scanner, bigger delivery trucks

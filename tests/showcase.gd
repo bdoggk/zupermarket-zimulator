@@ -3,9 +3,13 @@ extends Node
 # and in the zombie game some blood and the mop) and saves screenshots.
 #   SHOT_DIR=/some/dir godot --path . res://tests/showcase.tscn
 # TOUCH=1 shows the phone / handheld layout. WINDOW=960x540 sets the window size.
-# PAD=1 acts as if a controller was plugged in.
+# PAD=1 acts as if a controller was plugged in. CLEAN=1 hides the first-day
+# tips and messages (for store pages) and also saves a few shots with no HUD
+# at all (<name>_nohud.png).
 
 var shot_dir := OS.get_environment("SHOT_DIR")
+var clean := OS.get_environment("CLEAN") == "1"
+var hud: Node
 
 
 func _ready() -> void:
@@ -20,13 +24,15 @@ func _ready() -> void:
 		await get_tree().process_frame
 	UI.pretend_pad = OS.get_environment("PAD") == "1"  # as if a controller was plugged in
 	var main: Node = preload("res://scenes/main.tscn").instantiate()
-	var hud: Node = main.get_node("HUD")
+	hud = main.get_node("HUD")
 	hud.force_touch_ui = OS.get_environment("TOUCH") == "1"
 	add_child(main)
 	await _frames(2)
 	var store: Store = Game.store
 	var p: Player = Game.player
 	var b: BuildMode = Game.build_mode
+	if clean:
+		Game.tutorial_hidden = true
 
 	Game.open_store()
 	Game.money = 3000.0
@@ -296,6 +302,14 @@ func _seconds(t: float) -> void:
 func _shot(name: String) -> void:
 	if shot_dir == "":
 		return
+	if clean:
+		for m in hud.message_box.get_children():
+			m.visible = false
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(shot_dir.path_join(name + ".png"))
+	if clean and name in ["store", "shops", "shops_night", "lanterns", "shop_brewery_inside", "shop_curios_inside"]:
+		hud.root.visible = false
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(shot_dir.path_join(name + "_nohud.png"))
+		hud.root.visible = true
 	print("saved ", name)

@@ -91,7 +91,7 @@ func _build_settings(parent: Control) -> void:
 	vol_slider.drag_ended.connect(func(_changed: bool): _play_preview())
 	vib_check = _check(col, "Vibration", func(on: bool): Settings.set_vibration(on))
 	vib_note = _info(col)
-	if Updater.ASSETS.has(Updater.platform()):
+	if Updater.ASSETS.has(Updater.platform()) and not Updater.from_store():
 		update_check = _check(col, "Automatic updates", func(on: bool): Settings.set_auto_update(on))
 		update_note = _info(col)
 

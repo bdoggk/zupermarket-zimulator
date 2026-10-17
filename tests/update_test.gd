@@ -222,6 +222,12 @@ func _android_and_elsewhere() -> void:
 		"Windows, but the game's folder can't be written to: it offers the download instead")
 	OS.set_environment("ZZ_UPDATE_EXE", exe)
 
+	OS.set_environment("ZZ_UPDATE_EXE", "C:\\Program Files\\WindowsApps\\Zupermarket_0.9.3.0_x64__abc\\ZupermarketZimulator.exe")
+	check(Updater.from_store() and not Updater.works_here(), "the Microsoft Store version never updates itself (the Store does)")
+	OS.set_environment("ZZ_UPDATE_EXE", "C:/Users/me/Downloads/ZupermarketZimulator.exe")
+	check(not Updater.from_store(), "a downloaded .exe isn't the Store version")
+	OS.set_environment("ZZ_UPDATE_EXE", exe)
+
 	_release("noexe.json", "v99.0.0", {"name": "something-else.zip"})
 	await _check()
 	check(Updater.state == Updater.State.AVAILABLE and Updater.download_url == Updater.RELEASES_PAGE,

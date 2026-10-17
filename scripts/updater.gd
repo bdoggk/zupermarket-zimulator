@@ -14,7 +14,8 @@ extends Node
 ##   Android  the main menu says a new version is out, and Download opens the
 ##            APK in the browser (Android has to do the installing).
 ## Options > Automatic updates turns it off. It never runs in the Godot
-## editor, and a failed check (no internet) stays quiet.
+## editor or in the Microsoft Store version (the Store does the updating
+## there), and a failed check (no internet) stays quiet.
 ##
 ## Tests (tests/update_test.gd) point it elsewhere with environment variables:
 ##   ZZ_UPDATE_API       the "latest release" address to ask
@@ -64,6 +65,8 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	if not works_here():
 		state = State.OFF
+		if from_store():
+			print("Updater: off (Microsoft Store version)")
 		return
 	clean_up()
 	if Settings.auto_update:
@@ -72,9 +75,10 @@ func _ready() -> void:
 				check())
 
 
-## Exported Windows and Android games (not the editor or a test run).
+## Exported Windows and Android games (not the editor, a test run or the
+## Microsoft Store version).
 func works_here() -> bool:
-	if not ASSETS.has(platform()):
+	if not ASSETS.has(platform()) or from_store():
 		return false
 	return OS.has_feature("template") or OS.get_environment("ZZ_UPDATE_CHECK") == "1"
 
@@ -104,6 +108,12 @@ func api_url() -> String:
 func exe_path() -> String:
 	var forced := OS.get_environment("ZZ_UPDATE_EXE")
 	return forced if forced != "" else OS.get_executable_path()
+
+
+## Installed from the Microsoft Store: Windows keeps Store games in
+## Program Files/WindowsApps, and the Store updates them itself.
+func from_store() -> bool:
+	return exe_path().replace("\\", "/").to_lower().contains("/windowsapps/")
 
 
 ## This platform downloads and installs updates by itself.
