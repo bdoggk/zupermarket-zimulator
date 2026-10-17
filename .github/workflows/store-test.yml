@@ -21,7 +21,7 @@ jobs:
 
       - name: Download 0.9.3 and 0.9.2
         run: |
-          New-Item -ItemType Directory builds | Out-Null
+          New-Item -ItemType Directory builds -Force | Out-Null
           curl.exe -sSL -o builds\v093.exe https://github.com/bdoggk/zupermarket-zimulator/releases/download/v0.9.3/ZupermarketZimulator-windows.exe
           curl.exe -sSL -o builds\v092.exe https://github.com/bdoggk/zupermarket-zimulator/releases/download/v0.9.2/ZupermarketZimulator-windows.exe
           Get-ChildItem builds | ForEach-Object { "$($_.Name) $($_.Length)" }
