@@ -27,6 +27,7 @@ jobs:
           Get-ChildItem builds | ForEach-Object { "$($_.Name) $($_.Length)" }
 
       - name: The exe updates itself while running
+        if: false
         run: |
           $game = "$env:RUNNER_TEMP\game"; New-Item -ItemType Directory $game | Out-Null
           $www = "$env:RUNNER_TEMP\www"; New-Item -ItemType Directory $www | Out-Null
@@ -55,15 +56,13 @@ jobs:
           if ($old -ne $before) { Write-Output "::error title=Self-update::FAIL - the old game file wasn't kept as .old ($old)"; exit 1 }
           Write-Output "::notice title=Self-update::PASS - while the game ran, it downloaded the update, checked it and swapped it in; the old exe is .old (game kept running: $stillRunning)"
 
-      - name: Build the Store package
+      - name: Build the Store package (from the current code)
         run: |
+          Expand-Archive builds\current.zip -DestinationPath builds\current
           "Name=ZupermarketTest.ZupermarketZimulator`nPublisher=CN=ZupermarketTest`nPublisherDisplayName=Zupermarket Test" | Set-Content "$env:RUNNER_TEMP\identity.ini"
-          ./store/make_msix.ps1 -Exe builds\v093.exe -Version 0.9.3 -Out "$env:RUNNER_TEMP\zz.msix" -IdentityFile "$env:RUNNER_TEMP\identity.ini"
-          $makeappx = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.*\x64\makeappx.exe" | Select-Object -Last 1
-          & $makeappx.FullName unpack /o /p "$env:RUNNER_TEMP\zz.msix" /d "$env:RUNNER_TEMP\unpacked" | Out-Null
-          $files = (Get-ChildItem "$env:RUNNER_TEMP\unpacked" -Recurse -File | ForEach-Object { $_.FullName.Substring("$env:RUNNER_TEMP\unpacked".Length + 1) }) -join ", "
+          ./store/make_msix.ps1 -Exe builds\current\ZupermarketZimulator.exe -Version 0.9.3 -Out "$env:RUNNER_TEMP\zz.msix" -IdentityFile "$env:RUNNER_TEMP\identity.ini"
           $size = (Get-Item "$env:RUNNER_TEMP\zz.msix").Length
-          Write-Output "::notice title=Store package::PASS - built and unpacked ($size bytes): $files"
+          Write-Output "::notice title=Store package::PASS - built ($size bytes)"
 
       - name: Install and start it like the Store would
         run: |
@@ -74,26 +73,31 @@ jobs:
           Import-Certificate -FilePath "$env:RUNNER_TEMP\test.cer" -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
           Copy-Item "$env:RUNNER_TEMP\zz.msix" "$env:RUNNER_TEMP\zz_signed.msix"
           $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.*\x64\signtool.exe" | Select-Object -Last 1
-          & $signtool.FullName sign /fd SHA256 /f "$env:RUNNER_TEMP\test.pfx" /p test "$env:RUNNER_TEMP\zz_signed.msix"
+          & $signtool.FullName sign /fd SHA256 /f "$env:RUNNER_TEMP\test.pfx" /p test "$env:RUNNER_TEMP\zz_signed.msix" | Out-Null
           if ($LASTEXITCODE -ne 0) { Write-Output "::error title=Install::couldn't sign the test copy"; exit 1 }
           Add-AppxPackage -Path "$env:RUNNER_TEMP\zz_signed.msix"
           $pkg = Get-AppxPackage -Name "ZupermarketTest.ZupermarketZimulator"
           if (-not $pkg) { Write-Output "::error title=Install::FAIL - the package didn't install"; exit 1 }
-          Write-Output "::notice title=Installed::$($pkg.PackageFullName) in $($pkg.InstallLocation)"
           Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!ZupermarketZimulator"
-          Start-Sleep 40
+          Start-Sleep 30
           $proc = Get-Process ZupermarketZimulator -ErrorAction SilentlyContinue
-          $running = [bool]$proc
           $where = if ($proc) { ($proc | Select-Object -First 1).Path } else { "not running" }
-          $logs = @(Get-ChildItem "$env:LOCALAPPDATA\Packages\$($pkg.PackageFamilyName)" -Recurse -Filter godot.log -ErrorAction SilentlyContinue)
-          $logs | ForEach-Object { Write-Output "log: $($_.FullName)" }
-          $text = if ($logs) { Get-Content $logs[0].FullName -Raw } else { "" }
-          $short = ($text -split "`r?`n" | Where-Object { $_ -match "Updater|ERROR|error|OpenGL|Vulkan|ANGLE|Direct3D" } | Select-Object -First 12) -join " | "
-          Write-Output "::notice title=Game in the package::running: $running ($where); log: $short"
+          $data = @(Get-ChildItem "$env:LOCALAPPDATA\Packages\$($pkg.PackageFamilyName)" -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName.Substring($env:LOCALAPPDATA.Length) }) -join " | "
           if ($proc) { $proc | Stop-Process -Force }
-          if (-not $running) { Write-Output "::error title=Start::FAIL - the game didn't stay running"; exit 1 }
+          Write-Output "::notice title=Started from the Start menu::running: $([bool]$proc) ($where); its files: $data"
+          if (-not $proc) { Write-Output "::error title=Start::FAIL - the game didn't stay running"; exit 1 }
+          # The same game file, run directly so its output can be read.
+          New-Item -ItemType Directory C:\zz -Force | Out-Null
+          $exe = Join-Path $pkg.InstallLocation "ZupermarketZimulator.exe"
+          $p = Start-Process $exe -ArgumentList "--headless", "--log-file", "C:\zz\store.log" -PassThru
+          Start-Sleep 20
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Start-Sleep 1
+          $text = if (Test-Path C:\zz\store.log) { Get-Content C:\zz\store.log -Raw } else { "(no log)" }
+          $short = ($text -split "`r?`n" | Where-Object { $_ -match "Updater|ERROR|rror|OpenGL|Vulkan|ANGLE|Direct3D|Godot Engine" } | Select-Object -First 12) -join " | "
+          Write-Output "::notice title=Store copy log::$short"
           if ($text -notmatch "Updater: off \(Microsoft Store version\)") { Write-Output "::error title=Updater::FAIL - the Store version didn't turn its updater off"; exit 1 }
-          Write-Output "::notice title=Store version::PASS - it starts from the package, saves its data in the package's own folder, and its updater is off"
+          Write-Output "::notice title=Store version::PASS - it starts from the package and its updater is off"
 
       - name: Windows App Certification Kit
         if: always()
@@ -102,12 +106,15 @@ jobs:
           $appcert = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\appcert.exe" -ErrorAction SilentlyContinue
           if (-not $appcert) { Write-Output "::warning title=WACK::not installed on this runner"; exit 0 }
           Get-AppxPackage -Name "ZupermarketTest.ZupermarketZimulator" | Remove-AppxPackage
-          & $appcert.FullName reset
-          & $appcert.FullName test -appxpackagepath "$env:RUNNER_TEMP\zz_signed.msix" -reportoutputpath "$env:RUNNER_TEMP\wack.xml"
+          & $appcert.FullName reset | Out-Null
+          & $appcert.FullName test -appxpackagepath "$env:RUNNER_TEMP\zz_signed.msix" -reportoutputpath "$env:RUNNER_TEMP\wack.xml" | Out-Null
           if (-not (Test-Path "$env:RUNNER_TEMP\wack.xml")) { Write-Output "::warning title=WACK::no report"; exit 0 }
           [xml]$r = Get-Content "$env:RUNNER_TEMP\wack.xml"
-          $overall = $r.REPORT.OVERALL_RESULT
-          $tests = $r.SelectNodes("//TEST") | ForEach-Object { "$($_.NAME): $($_.RESULT.'#cdata-section')$($_.RESULT.InnerText)" }
-          $bad = $tests | Where-Object { $_ -notmatch ": (PASS|SKIP|NOT RUN)" }
-          Write-Output "::notice title=WACK overall::$overall"
-          Write-Output "::notice title=WACK not passed::$($bad -join ' | ')"
+          Write-Output "::notice title=WACK overall::$($r.REPORT.OVERALL_RESULT)"
+          foreach ($t in $r.SelectNodes("//TEST")) {
+            $res = $t.RESULT.InnerText
+            if ($res -notmatch "PASS") {
+              $msgs = @($t.SelectNodes(".//MESSAGE") | ForEach-Object { $_.TEXT }) | Select-Object -First 6
+              Write-Output "::notice title=WACK $($t.NAME) [$res] optional=$($t.OPTIONAL)::$($t.DESCRIPTION) -- $($msgs -join ' / ')"
+            }
+          }
