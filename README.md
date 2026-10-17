@@ -29,12 +29,30 @@ too) work with the d-pad, A and B; in build mode the middle of the screen is the
 cursor (d-pad picks what to buy, A places it). You can tap the touchscreen for anything
 too.
 
-**Windows:** it's a single .exe, no installer. Windows may show "Windows protected your
-PC" because the game isn't code-signed: click **More info → Run anyway**.
+**Windows:** it's a single .exe, no installer. The first time, Windows may show "Windows
+protected your PC" because the game isn't code-signed: click **More info → Run anyway**.
+That's the last time you need to download it: from 0.9.3 on, the game **updates
+itself** (see below), and the versions it downloads itself don't get the warning.
 
 It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The two
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
+
+## What's new in 0.9.3
+
+- **The game updates itself on Windows.** A couple of seconds after it starts, it
+  checks GitHub for a newer version. If there is one, it downloads it in the
+  background (a card next to the main menu shows the progress), checks the file is
+  complete and undamaged, and puts it in place of the old .exe. The game you have
+  open keeps running; the next time you open it (or click **Restart now**), it's
+  the new version, with the same saves. Windows doesn't show its security warning
+  for updates, because the game downloaded them itself.
+- **Android** tells you on the main menu when a new version is out; **Download** opens
+  the APK (Android installs it over this one and keeps your saves).
+- **Options > Automatic updates** turns it off. With no internet, nothing happens.
+- If the game's folder can't be written to (say, Program Files), the card offers the
+  download page instead. If a download fails or comes through damaged, the old
+  version stays as it is and the card says **Try again**.
 
 ## What's new in 0.9.2
 
@@ -303,6 +321,7 @@ It has Resume, Save Game, Options, Save & Main Menu, and Save & Quit (PC).
 | Show FPS | A frame counter next to the clock |
 | Sound | How loud the game is, from off to 100% (a slider) |
 | Graphics | **Low**: simple lighting (older phones, battery life). **Medium**: store lights with darker corners. **High**: adds a flickering light tube and floating dust |
+| Automatic updates | Windows: new versions download by themselves and start the next time you open the game. Android: the main menu says when a new version is out. On by default (Windows and Android only) |
 | Vibration | Phone vibration and controller rumble. It turns on when a phone or controller is available, and you feel it when you make a sale, stock a shelf, scan, mop, level up, or when a zombie storms out |
 
 **Controls** (the button at the bottom of Options) lists every key and button, for
@@ -664,6 +683,8 @@ scripts/
                        roster and wages, clock, daily stats
   saves.gd             Autoload "Saves": the 3 save slots, autosaving, continue
   settings.gd          Autoload "Settings": options, saved to settings.cfg, vibration
+  updater.gd           Autoload "Updater": checks GitHub for a new version, downloads,
+                       checks and swaps in the new .exe on Windows
   store_lights.gd      Store lighting for each graphics level, day/night tint
   market.gd            Prices that drift over time + daily news events
   store.gd             Builds the store from the map, furniture placement rules,
@@ -809,6 +830,7 @@ godot --headless --path . --fixed-fps 60 res://tests/shops_test.tscn   # the lit
 godot --headless --path . --fixed-fps 60 res://tests/spy_test.tscn     # Bone Mart's spies and yours
 godot --headless --path . --fixed-fps 60 res://tests/pad_test.tscn     # menus, the computer and build mode with a controller
 SEED=1 godot --headless --path . --fixed-fps 60 res://tests/walk_test.tscn  # walking between random spots in random layouts
+godot --headless --path . res://tests/update_test.tscn  # the updater, against a stand-in GitHub (needs python3)
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below)
 ```
 
@@ -872,6 +894,13 @@ First, in Godot: **Editor → Manage Export Templates → Download and Install**
 **Windows:** Project → Export → "Windows Desktop" → Export Project. You get a single
 .exe in `build/windows/`.
 
+**Releases and updates:** the game updates itself from the latest GitHub release
+(`scripts/updater.gd`). It compares the release's tag (`v0.9.3`) with
+`application/config/version` in Project Settings, so bump the version before
+exporting, and keep the file names: `ZupermarketZimulator-windows.exe` and
+`ZupermarketZimulator-android.apk`. GitHub lists each file's SHA-256, and the game
+refuses a download that doesn't match.
+
 **Android:**
 1. Install Android Studio (for the Android SDK) and OpenJDK 17.
 2. In Godot: Editor → Editor Settings → Export → Android, then set the
@@ -889,6 +918,9 @@ Official guide: https://docs.godotengine.org/en/stable/tutorials/export/exportin
 The project uses the Compatibility renderer, so it runs on older phones too.
 
 ## Ideas for what to build next
+
+- The Microsoft Store: free for individual developers, and Store apps never get the
+  "Windows protected your PC" warning (it needs a Partner Center account in your name)
 
 - A second store of your own (run Bone Mart once you've bought it)
 - More upgrades: a faster checkout scanner, bigger delivery trucks

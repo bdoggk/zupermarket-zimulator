@@ -84,6 +84,7 @@ func _ready() -> void:
 	root.theme = UI.make_theme(is_touch)
 	add_child(root)
 
+	Updater.changed.connect(_on_update_changed)
 	_build_status()
 	_build_corner_buttons()
 	_build_prompt()
@@ -292,6 +293,12 @@ func _open_options() -> void:
 
 func _on_options_closed() -> void:
 	pause_menu.show_again()
+
+
+## An update finished downloading while you play (see Updater).
+func _on_update_changed() -> void:
+	if Updater.state == Updater.State.READY:
+		show_message("Version %s is downloaded. It starts the next time you open the game." % Updater.latest)
 
 
 ## Shows a message at the top of the screen. Up to 3 at once; old ones fade.

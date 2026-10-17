@@ -13,6 +13,8 @@ extends Node
 ##   Show FPS      a frame counter in the corner
 ##   Sound         how loud the game is (Off to 100%)
 ##   Vibration     phone and controller rumble, when available
+##   Automatic updates  Windows: download and install new versions by
+##                 itself; Android: say when one is out (see Updater)
 
 signal changed
 
@@ -50,6 +52,7 @@ var vsync := true
 var show_fps := false
 var volume := 0.75  # 0-1, for the whole game
 var vibration := true
+var auto_update := true
 
 var _applying := false  # we're resizing the window ourselves
 var _save_queued := false
@@ -225,6 +228,14 @@ func set_show_fps(on: bool) -> void:
 	changed.emit()
 
 
+func set_auto_update(on: bool) -> void:
+	auto_update = on
+	save_settings()
+	changed.emit()
+	if on:
+		Updater.check()
+
+
 func set_vibration(on: bool) -> void:
 	vibration = on
 	save_settings()
@@ -260,6 +271,7 @@ func save_settings() -> void:
 	cfg.set_value("display", "show_fps", show_fps)
 	cfg.set_value("audio", "volume", volume)
 	cfg.set_value("controls", "vibration", vibration)
+	cfg.set_value("updates", "automatic", auto_update)
 	cfg.save(PATH)
 
 
@@ -280,3 +292,4 @@ func load_settings() -> void:
 	show_fps = bool(cfg.get_value("display", "show_fps", show_fps))
 	volume = clampf(float(cfg.get_value("audio", "volume", volume)), 0.0, 1.0)
 	vibration = bool(cfg.get_value("controls", "vibration", vibration))
+	auto_update = bool(cfg.get_value("updates", "automatic", auto_update))

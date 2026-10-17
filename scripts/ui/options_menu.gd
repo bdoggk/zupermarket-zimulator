@@ -1,6 +1,7 @@
 extends PanelContainer
 ## The Options screen: display mode, window size (PC), frame rate, graphics
-## level, VSync, an FPS counter, sound volume and vibration. Changes apply right away and
+## level, VSync, an FPS counter, sound volume, vibration and automatic updates
+## (Windows and Android). Changes apply right away and
 ## are saved. "Controls" shows every key and button (ControlsList). Used by
 ## the main menu and the in-game pause menu.
 
@@ -28,6 +29,8 @@ var vol_value: Label
 var _preview: AudioStreamPlayer  # a growl so you can hear how loud it is
 var vib_check: CheckButton
 var vib_note: Label
+var update_check: CheckButton  # null where the game can't update itself
+var update_note: Label
 var controls_button: Button
 var back_button: Button
 var controls_back: Button
@@ -88,6 +91,9 @@ func _build_settings(parent: Control) -> void:
 	vol_slider.drag_ended.connect(func(_changed: bool): _play_preview())
 	vib_check = _check(col, "Vibration", func(on: bool): Settings.set_vibration(on))
 	vib_note = _info(col)
+	if Updater.ASSETS.has(Updater.platform()):
+		update_check = _check(col, "Automatic updates", func(on: bool): Settings.set_auto_update(on))
+		update_note = _info(col)
 
 	settings_page.add_child(HSeparator.new())
 	var buttons := HBoxContainer.new()
@@ -340,5 +346,13 @@ func _refresh() -> void:
 		vib_note.text = "Controller rumble."
 	else:
 		vib_note.text = "Connect a controller to use vibration."
+	if update_check:
+		update_check.set_pressed_no_signal(Settings.auto_update)
+		if not Settings.auto_update:
+			update_note.text = "Off: get new versions from the download page yourself."
+		elif Updater.replaces_itself():
+			update_note.text = "New versions download by themselves and start the next time you open the game."
+		else:
+			update_note.text = "The main menu tells you when a new version is out."
 	if visible:
 		_fit()

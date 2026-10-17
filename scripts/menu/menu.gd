@@ -1,10 +1,13 @@
 extends Node
 ## The main menu: Continue, New Game, Load Game, Options and Quit.
 ## Continue loads whichever of the 3 save slots was played most recently.
+## A card beside the menu shows updates (see Updater): the download's
+## progress, then Restart now (Windows) or Download (Android).
 
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
 const TITLE := preload("res://assets/sprites/title.png")
 const TITLE_SCALE := 7
+const UPDATE_WIDTH := 340.0
 
 enum Screen { MAIN, NEW, LOAD, CONFIRM, OPTIONS }
 
@@ -25,6 +28,11 @@ var confirm_label: Label
 var confirm_yes: Button
 var confirm_no: Button
 var options: PanelContainer
+var update_panel: PanelContainer
+var update_label: Label
+var update_headline: Label
+var update_bar: ProgressBar
+var update_button: Button
 var _confirm_action := Callable()
 var _confirm_return := Screen.MAIN
 
@@ -49,9 +57,12 @@ func _ready() -> void:
 	options = OptionsMenu.new()
 	root.add_child(options)
 	options.closed.connect(func(): show_screen(Screen.MAIN))
-	version_label = UI.label("v" + str(ProjectSettings.get_setting("application/config/version", "")), UI.DIM)
+	version_label = UI.label(Updater.version_text(), UI.DIM)
 	root.add_child(version_label)
+	_build_update()
+	Updater.changed.connect(_refresh_update)
 	show_screen(Screen.MAIN)
+	Updater.check_again_if_failed()
 
 
 func _process(_delta: float) -> void:
@@ -61,6 +72,21 @@ func _process(_delta: float) -> void:
 	_place(confirm_panel, (s - confirm_panel.size) / 2.0)
 	_place(options, (s - options.size) / 2.0)
 	_place(version_label, s - version_label.size - Vector2(14, 10))
+	_place_update(s)
+
+
+## Beside the menu when there's room, otherwise over the top of it.
+func _place_update(s: Vector2) -> void:
+	if not update_panel.visible:
+		return
+	var right := main_panel.position.x + main_panel.size.x
+	var room := s.x - right - 40.0
+	update_panel.custom_minimum_size.x = clampf(room, 260.0, UPDATE_WIDTH)
+	update_panel.reset_size()
+	var pos := Vector2(right + 20.0, main_panel.position.y)
+	if room < 260.0:
+		pos = Vector2((s.x - update_panel.size.x) / 2.0, 10.0)
+	update_panel.position = pos.round()
 
 
 func _place(c: Control, pos: Vector2) -> void:
@@ -117,6 +143,7 @@ func show_screen(s: Screen) -> void:
 	confirm_panel.visible = s == Screen.CONFIRM
 	if s != Screen.OPTIONS and options.visible:
 		options.visible = false
+	_refresh_update()
 	match s:
 		Screen.MAIN:
 			_refresh_main()
@@ -164,6 +191,61 @@ func _build_main() -> void:
 	col.add_child(UI.menu_button("Options", func(): show_screen(Screen.OPTIONS)))
 	if Settings.is_desktop():
 		col.add_child(UI.menu_button("Quit", func(): get_tree().quit()))
+
+
+func _build_update() -> void:
+	update_panel = PanelContainer.new()
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.05, 0.055, 0.07, 0.85)
+	bg.border_color = UI.WARN.darkened(0.3)
+	bg.set_border_width_all(2)
+	bg.set_content_margin_all(18)
+	bg.set_corner_radius_all(6)
+	update_panel.add_theme_stylebox_override("panel", bg)
+	update_panel.visible = false
+	root.add_child(update_panel)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 10)
+	update_panel.add_child(col)
+	var title := UI.label("UPDATE", UI.WARN)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(title)
+	update_label = UI.label()
+	update_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(update_label)
+	update_headline = UI.label("", UI.DIM)
+	update_headline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(update_headline)
+	update_bar = ProgressBar.new()
+	update_bar.max_value = 1.0
+	update_bar.show_percentage = false
+	update_bar.custom_minimum_size.y = 14
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.2, 0.21, 0.24)
+	track.set_corner_radius_all(4)
+	update_bar.add_theme_stylebox_override("background", track)
+	var fill := track.duplicate()
+	fill.bg_color = UI.WARN.darkened(0.25)
+	update_bar.add_theme_stylebox_override("fill", fill)
+	col.add_child(update_bar)
+	update_button = UI.menu_button("", func(): Updater.do_action(), Vector2(0, 56))
+	col.add_child(update_button)
+
+
+func _refresh_update() -> void:
+	version_label.text = Updater.version_text()
+	var text := Updater.status_text()
+	update_panel.visible = text != "" and screen == Screen.MAIN
+	if text == "":
+		return
+	update_label.text = text
+	update_headline.text = Updater.headline
+	update_headline.visible = Updater.headline != "" and Updater.state != Updater.State.FAILED
+	update_bar.visible = Updater.state in [Updater.State.DOWNLOADING, Updater.State.VERIFYING]
+	update_bar.value = Updater.progress() if Updater.state == Updater.State.DOWNLOADING else 1.0
+	var action := Updater.action_text()
+	update_button.visible = action != ""
+	update_button.text = action
 
 
 func _build_slots() -> void:
