@@ -32,6 +32,8 @@ var news_label: Label
 var footer_label: Label
 var match_button: Button
 var auto_button: CheckButton
+var markup_row: HBoxContainer  # Stock & Prices: [<] +10% [>]
+var markup_label: Label
 var tab_buttons: Array[Button] = []  # the apps on the taskbar
 var desktop_icons: Array[Button] = []
 var screen: Control
@@ -276,14 +278,33 @@ func _build_window() -> void:
 	footer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	footer.add_child(footer_label)
+	# One markup for every price, instead of setting each one.
+	markup_row = HBoxContainer.new()
+	markup_row.add_theme_constant_override("separation", 4)
+	footer.add_child(markup_row)
+	var down := UI.button("<", func(): _change_markup(-Game.MARKUP_STEP), Vector2(44, 52))
+	down.tooltip_text = "Lower markup"
+	markup_row.add_child(down)
+	markup_label = UI.label("", UI.WARN)
+	markup_label.custom_minimum_size.x = 104
+	markup_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	markup_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	markup_row.add_child(markup_label)
+	var up := UI.button(">", func(): _change_markup(Game.MARKUP_STEP), Vector2(44, 52))
+	up.tooltip_text = "Higher markup"
+	markup_row.add_child(up)
+	match_button = UI.button("Set all prices", func():
+		Game.match_all_prices()
+		_rebuild_if_open(), Vector2(0, 52))
+	match_button.tooltip_text = "Every price: the market price plus your markup"
+	footer.add_child(match_button)
 	auto_button = CheckButton.new()
-	auto_button.text = "Auto-match"
+	auto_button.text = "Auto"
+	auto_button.tooltip_text = "Keep every price at the market price plus your markup, as the market moves"
 	auto_button.focus_mode = Control.FOCUS_NONE
 	auto_button.button_pressed = Game.auto_price
 	auto_button.toggled.connect(_on_auto_toggled)
 	footer.add_child(auto_button)
-	match_button = UI.button("Match all to market", Game.match_all_prices, Vector2(0, 52))
-	footer.add_child(match_button)
 
 
 ## Along the bottom of the screen: Home, the apps, the time and Close PC.
@@ -331,7 +352,19 @@ func _build_taskbar() -> void:
 	row.add_child(off)
 
 
-## Auto-match: your prices follow the market every time it changes.
+## The markup: < and > in Stock & Prices.
+func _change_markup(step: float) -> void:
+	Game.set_markup(Game.price_markup + step)
+	_refresh_markup()
+
+
+func _refresh_markup() -> void:
+	markup_label.text = "Markup\n" + Game.markup_text(Game.price_markup)
+	if tab == Tab.STOCK:
+		footer_label.text = Game.markup_effect(Game.price_markup)
+
+
+## Auto: your prices follow the market (plus your markup) every time it changes.
 func _on_auto_toggled(on: bool) -> void:
 	Game.auto_price = on
 	if on:
@@ -474,6 +507,7 @@ func _rebuild() -> void:
 	news_label.text = "NEWS: " + Game.market.news if Game.market.news != "" else "No big news today."
 	match_button.visible = tab == Tab.STOCK
 	auto_button.visible = tab == Tab.STOCK
+	markup_row.visible = tab == Tab.STOCK
 	match tab:
 		Tab.STOCK:
 			_build_stock()
@@ -513,7 +547,7 @@ func _price_field(id: String) -> LineEdit:
 	f.custom_minimum_size = Vector2(100, 46)
 	f.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	f.max_length = 9
-	f.select_all_on_focus = true
+	f.select_all_on_focus = Game.touch_ui  # a mouse click puts the cursor where you clicked; a tap selects it all
 	f.focus_mode = Control.FOCUS_CLICK  # controllers use - and + (no getting stuck in a text box)
 	f.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER_DECIMAL
 	f.tooltip_text = "Type a price and press Enter"
@@ -542,9 +576,7 @@ func _input(event: InputEvent) -> void:
 
 func _build_stock() -> void:
 	var rival := Game.store.town != null and not Game.rival_owned
-	footer_label.text = "Prices change every few hours. Price above market and %s may skip it." % Brand.SAY.shoppers
-	if rival:
-		footer_label.text += " Walk down the street to check %s's prices." % Brand.RIVAL.name
+	_refresh_markup()
 	var g := _grid(9 if rival else 8)
 	var heads := ["", "Product", "Market", "", "Your price", "", "", ""]
 	if rival:
@@ -571,7 +603,9 @@ func _build_stock() -> void:
 		var price := _price_field(id)
 		g.add_child(price)
 		g.add_child(_row_button("+", func(): Game.change_price(id, Game.PRICE_STEP)))
-		g.add_child(_row_button("=", func(): Game.match_market(id)))
+		var eq := _row_button("=", func(): Game.match_market(id))
+		eq.tooltip_text = "The market price plus your markup"
+		g.add_child(eq)
 		var order := _row_button("Order box", func(): Game.order_box(id), Vector2(0, 52))
 		g.add_child(order)
 
@@ -632,7 +666,7 @@ func _build_products() -> void:
 		if Game.fans_text(id) != "":
 			name_text += "\n%s: stock it to bring more in" % Game.fans_text(id)
 		if not owned and int(wanted.get(id, 0)) > 0:
-			name_text += "\n%d %s asked for it today!" % [int(wanted[id]), Brand.SAY.shopper if int(wanted[id]) == 1 else Brand.SAY.shoppers]
+			name_text += "\nAsked for today by %s!" % Game.askers_text(id)
 		var info := UI.label(name_text)
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		g.add_child(info)

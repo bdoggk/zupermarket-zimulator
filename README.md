@@ -38,6 +38,40 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.9.5
+
+Fixes from players' notes:
+- **Skeletons, witches and vampires ask for things too.** The game used to say
+  "Zombies keep asking..." whoever asked; now the computer and the reminders say who
+  ("2 witches and 1 zombie"). They ask for their favorites a lot more, and the ones
+  walking around town tell you when you walk by ("Got any Eye of Newt? Bone Mart
+  doesn't!", "Your Bone Meal is all gone!").
+- **The general manager keeps every shelf stocked.** With several shelves for one
+  product, an empty one gets a box even while the others are full, and new empty
+  shelves get products that aren't on any shelf yet.
+- **Stockers bring what's emptiest first**, to the emptiest shelf for it, instead of
+  whatever box is closest.
+- **Stockers share the storage racks.** A second stocker no longer puts boxes back on
+  the delivery zone because another one was using the rack.
+- **The day's summary fits on any screen**: two columns, and the long list of
+  asked-for products wraps (the top 6, then "and 10 more").
+- **Clicking a price puts the cursor where you clicked** instead of selecting the
+  whole price (tapping on a touch screen still selects it all).
+- **E picks the right thing.** Picking up a box, stocking, ringing up a shopper and
+  mopping come before taking over a cashier's register, and with two things equally
+  close, E picks the one you're facing.
+- **No more getting stuck on gravestones and lanterns**: only their post is solid, so
+  you slide around them.
+- **Time to read the messages.** They stay up longer (longer ones longest), up to 4 at
+  once, never cover the hints or buttons, and the same one doesn't pile up. **Log**
+  (top right), **M**, or the controller's Back/View button shows the recent ones; so
+  does Messages in the pause menu.
+- **One markup for every price.** In Stock & Prices, < and > set a markup over the
+  market (from 25% under to 50% over), and it tells you what that means for each kind
+  of shopper. **Set all prices** prices everything at it, and **Auto** keeps every
+  price there as the market moves.
+- Fixed: firing a stocker just as they picked up a box made the box vanish.
+
 ## What's new in 0.9.4
 
 - **Ready for the Microsoft Store.** The game can now be packaged for the Store (see
@@ -409,9 +443,10 @@ In the **Stock & Prices** tab:
 - The market column shows the current price and how much it just moved.
 - Your price turns yellow or red when it's above market. The higher it goes, the
   more zombies skip it ("Grrr... pricey!").
-- **=** sets one product to the market price. **Match all to market** does it for
-  everything.
-- **Auto-match** keeps all your prices at market automatically.
+- **Markup** (< and > at the bottom): how far over (or under) the market you want to
+  sell, from -25% to +50%. It says how often each kind of shopper still buys at it.
+- **=** sets one product to the market price plus your markup. **Set all prices** does
+  it for everything, and **Auto** keeps every price there as the market moves.
 - **Type a price:** click the price box, type it (like `3.50`) and press Enter (or click
   somewhere else). **-** and **+** still nudge it by 25 cents.
 
@@ -657,10 +692,11 @@ computer. A scanner icon appears next to your money once you own it.
 | Turn something (build mode) | R | Rotate button, then tap it |
 | Zoom | Mouse wheel or the +/- buttons | +/- buttons |
 | Pause menu | Esc or P | II button / back button |
+| Recent messages | M, or the Log button | Log button |
 | Close / cancel | Esc | Back button |
 
 A gamepad works too: left stick to move, LT or L3 (sprint), A (use), X (scan), Y
-(build), Start (pause), B (back). Every menu works with the d-pad, A and B, the store
+(build), Start (pause), Back/View (messages), B (back). Every menu works with the d-pad, A and B, the store
 computer and its apps included. In build mode the tile in the middle of the screen is
 the cursor: left stick to look around, d-pad left/right (or LB) to pick what to buy or
 Move / Rotate / Sell / Expand, A to place it (or pick up, sell...), RB to turn it, B to
@@ -730,6 +766,7 @@ scripts/
   ui/tutorial.gd       The first-day tips
   ui/build_bar.gd      The build mode toolbar and paint menu
   ui/pause_menu.gd     The in-game pause menu
+  ui/message_log.gd    Recent messages (M, the Log button, or the pause menu)
   ui/options_menu.gd   The Options screen (main menu and pause menu)
   ui/ui.gd             UI helpers and theme
   menu/menu.gd         Main menu: Continue / New Game / Load Game / Options / Quit
@@ -837,6 +874,7 @@ godot --headless --path . --fixed-fps 60 res://tests/spy_test.tscn     # Bone Ma
 godot --headless --path . --fixed-fps 60 res://tests/pad_test.tscn     # menus, the computer and build mode with a controller
 SEED=1 godot --headless --path . --fixed-fps 60 res://tests/walk_test.tscn  # walking between random spots in random layouts
 godot --headless --path . res://tests/update_test.tscn  # the updater, against a stand-in GitHub (needs python3)
+godot --headless --path . --fixed-fps 60 res://tests/fixes_test.tscn  # 0.9.5's fixes from players' notes
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below)
 ```
 

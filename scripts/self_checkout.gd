@@ -116,6 +116,10 @@ func can_interact(_p: Player) -> bool:
 	return jammed
 
 
+func use_priority(_p: Player) -> int:
+	return 2
+
+
 func get_action_time(_p: Player) -> float:
 	return FIX_SECONDS
 

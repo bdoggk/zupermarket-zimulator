@@ -26,6 +26,12 @@ func can_interact(p: Player) -> bool:
 	return not p.is_carrying() and not p.holding_mop
 
 
+## Picking up a box beats most things around it (like taking over a
+## cashier's register).
+func use_priority(_p: Player) -> int:
+	return 2
+
+
 func get_action_time(_p: Player) -> float:
 	return PICKUP_SECONDS
 

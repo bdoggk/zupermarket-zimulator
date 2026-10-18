@@ -53,6 +53,9 @@ const SPY_EVERY_MINUTES := 120  # your spy goes back over this often (game minut
 const SPY_REPORT_XP := 6.0  # your spy, for each report
 const SPY_CATCH_XP := 6.0  # your spy, for throwing out one of the rival's
 const MIN_PRICE := 0.05
+const MARKUP_STEP := 0.05  # Stock & Prices: the markup goes up and down in steps of 5%...
+const MARKUP_MIN := -0.25  # ...from 25% under the market...
+const MARKUP_MAX := 0.5  # ...to 50% over
 const MAX_PRICE := 999.99
 const STARTING_MONEY := 100.0
 
@@ -97,6 +100,9 @@ var opened := false  # the OPEN sign has been flipped today
 var is_open := false  # open for customers (after the sign is flipped, until 8 PM)
 var day_over := false
 var stats := {}
+const LOG_SIZE := 60  # messages kept in the log
+var message_log: Array[Dictionary] = []  # recent messages, oldest first: {text, day, time}
+var price_markup := 0.0  # Stock & Prices: prices are set to the market price plus this much (0.1 = +10%)
 var auto_price := false  # your prices follow the market automatically
 var play_time := 0.0  # seconds played in this save
 var slot := -1  # save slot being played (0-2), -1 = not saving (e.g. tests)
@@ -121,11 +127,20 @@ var build_mode: Node2D
 
 func _ready() -> void:
 	reset()
+	message.connect(_log_message)
+
+
+## Every message also goes in the message log (HUD > Log, or M).
+func _log_message(text: String) -> void:
+	message_log.append({"text": text, "day": day, "time": clock_text()})
+	while message_log.size() > LOG_SIZE:
+		message_log.pop_front()
 
 
 ## Starts a fresh game (the main menu calls this for New Game and before
 ## loading a save).
 func reset() -> void:
+	message_log.clear()
 	money = STARTING_MONEY
 	prices = {}
 	licensed = {}
@@ -143,6 +158,7 @@ func reset() -> void:
 	is_open = false
 	day_over = false
 	auto_price = false
+	price_markup = 0.0
 	play_time = 0.0
 	slot = -1
 	staff = []
@@ -259,8 +275,14 @@ static func parse_price(text: String) -> float:
 	return v if v >= 0.0 else -1.0
 
 
+## The price "=", Set all prices and Auto give a product: the market price
+## plus your markup (Stock & Prices), to the nickel.
+func target_price(id: String) -> float:
+	return clampf(snappedf(market_price(id) * (1.0 + price_markup), 0.05), MIN_PRICE, MAX_PRICE)
+
+
 func match_market(id: String) -> void:
-	prices[id] = market_price(id)
+	prices[id] = target_price(id)
 
 
 func match_all_prices() -> void:
@@ -268,14 +290,74 @@ func match_all_prices() -> void:
 		match_market(id)
 
 
+## One markup for everything (0.1 = 10% over the market). With Auto on,
+## every price moves to it right away.
+func set_markup(m: float) -> void:
+	price_markup = clampf(snappedf(m, 0.01), MARKUP_MIN, MARKUP_MAX)
+	if auto_price:
+		match_all_prices()
+
+
+## "+10%", "at market", "-5%".
+static func markup_text(m: float) -> String:
+	var pct := roundi(m * 100.0)
+	return "at market" if pct == 0 else "%+d%%" % pct
+
+
+## What a markup means for the shoppers who come to your store now:
+## "At +10%: vampires always pay it; zombies and brutes buy 84% of the
+## time, skeletons 68%."
+func markup_effect(m: float) -> String:
+	if m > -0.001 and m <= 0.001:
+		return "At the market price, every shopper buys what they came for."
+	if m <= 0.001:
+		return "At %s, every shopper buys what they came for (but you earn less per item)." % markup_text(m)
+	var always: Array[String] = []
+	var groups := {}  # percent -> kinds that buy that often
+	for k: Dictionary in Brand.SHOPPERS.values():
+		if level < int(k.get("level", 1)):
+			continue
+		var chance := buy_chance_at(1.0 + m, float(k.tolerance))
+		if chance >= 0.999:
+			always.append(shopper_plural(k))
+		else:
+			var pct := roundi(chance * 100.0)
+			if not groups.has(pct):
+				groups[pct] = []
+			groups[pct].append(shopper_plural(k))
+	var parts: Array[String] = []
+	if not always.is_empty():
+		parts.append("%s always pay it" % _and_list(always))
+	var pcts := groups.keys()
+	pcts.sort()
+	pcts.reverse()
+	var some: Array[String] = []
+	for pct: int in pcts:
+		some.append(("%s buy %d%% of the time" if some.is_empty() else "%s %d%%") % [_and_list(groups[pct]), pct])
+	if not some.is_empty():
+		parts.append(", ".join(some))
+	return "At %s: %s." % [markup_text(m), "; ".join(parts)]
+
+
+## How likely a shopper who pays up to `tolerance` times the market price
+## buys at `markup` times it (see buy_chance).
+static func buy_chance_at(markup: float, tolerance: float) -> float:
+	if markup <= tolerance:
+		return 1.0
+	return clampf(1.0 - (markup - tolerance) * 1.6, 0.0, 1.0)
+
+
+static func _and_list(names: Array) -> String:
+	if names.size() <= 1:
+		return "".join(names)
+	return ", ".join(names.slice(0, -1)) + " and " + str(names[-1])
+
+
 ## Chance (0-1) that a customer still buys at your price. `tolerance` is
 ## how far over the market price they'll go without blinking (1 = not at
 ## all, 1.5 = half again; see Brand.SHOPPERS).
 func buy_chance(id: String, tolerance := 1.0) -> float:
-	var markup: float = prices[id] / market_price(id)
-	if markup <= tolerance:
-		return 1.0
-	return clampf(1.0 - (markup - tolerance) * 1.6, 0.0, 1.0)
+	return buy_chance_at(prices[id] / market_price(id), tolerance)
 
 
 # ---------------------------------------------------------------- shoppers
@@ -330,6 +412,29 @@ func fans_of(id: String) -> Array:
 ## "witches", "skeletons"...
 static func shopper_plural(k: Dictionary) -> String:
 	return str(k.get("plural", (k.name as String).to_lower() + "s"))
+
+
+## What someone in town (a skeleton, witch or vampire) tells you about
+## their favorite products (Brand.SHOPPERS likes), most useful first: one
+## you could license now (that counts as asking for it, like a shopper),
+## one that's sold out on your shelves, one you'll be able to sell later,
+## or one they love. "" for kinds with no favorites.
+func townsfolk_says(kind: Dictionary) -> String:
+	var likes: Array = kind.get("likes", [])
+	if likes.is_empty():
+		return ""
+	var now := likes.filter(func(id): return can_license(id))
+	if not now.is_empty():
+		var id: String = now.pick_random()
+		record_wanted(id, kind)
+		return (Brand.SAY.town_wants as Array).pick_random() % product_name(id)
+	var gone := likes.filter(func(id): return is_licensed(id) and in_game() and store.shelves_with(id).is_empty())
+	if not gone.is_empty():
+		return (Brand.SAY.town_gone as Array).pick_random() % product_name(gone.pick_random())
+	var later := likes.filter(func(id): return not is_licensed(id))
+	if not later.is_empty():
+		return (Brand.SAY.town_later as Array).pick_random() % product_name(later.pick_random())
+	return (Brand.SAY.town_loves as Array).pick_random() % product_name(likes.pick_random())
 
 
 ## "Witches love it" (or "" if nobody has it as a favorite).
@@ -833,14 +938,57 @@ func record_missed() -> void:
 	stats.missed += 1
 
 
-## A shopper wanted `id`, but you don't sell it (no license yet). Asked
-## about twice in a day, you get a reminder to license it.
-func record_wanted(id: String) -> void:
+## A shopper (of `kind`, a Brand.SHOPPERS entry) wanted `id`, but you don't
+## sell it (no license yet). Asked about twice in a day, you get a reminder
+## to license it. stats.wanted counts the asks per product, and
+## stats.wanted_by who asked ("witch": 2).
+func record_wanted(id: String, kind := {}) -> void:
 	var wanted: Dictionary = stats.get("wanted", {})
 	wanted[id] = int(wanted.get(id, 0)) + 1
 	stats.wanted = wanted
+	var by: Dictionary = stats.get("wanted_by", {})
+	var who: Dictionary = by.get(id, {})
+	var name := (str(kind.name) if kind.has("name") else Brand.SAY.shopper).to_lower()
+	who[name] = int(who.get(name, 0)) + 1
+	by[id] = who
+	stats.wanted_by = by
 	if wanted[id] == 2:
-		message.emit("%s keep asking for %s. License it at the computer (Products)!" % [Brand.SAY.shoppers.capitalize(), product_name(id)])
+		message.emit("%s keep asking for %s. License it at the computer (Products)!" % [top_askers(id).capitalize(), product_name(id)])
+
+
+## Who asked for `id` today, the most first: "2 witches and 1 zombie".
+func askers_text(id: String) -> String:
+	var who: Dictionary = stats.get("wanted_by", {}).get(id, {})
+	if who.is_empty():
+		var n := int(stats.get("wanted", {}).get(id, 0))
+		return "%d %s" % [n, Brand.SAY.shopper if n == 1 else Brand.SAY.shoppers] if n > 0 else ""
+	var names := who.keys()
+	names.sort_custom(func(a, b): return int(who[a]) > int(who[b]))
+	var parts: Array[String] = []
+	for n: String in names:
+		var count := int(who[n])
+		parts.append("%d %s" % [count, n if count == 1 else plural_of(n)])
+	if parts.size() == 1:
+		return parts[0]
+	return ", ".join(parts.slice(0, -1)) + " and " + parts[-1]
+
+
+## The kind that asked for `id` most, as a plural: "witches".
+func top_askers(id: String) -> String:
+	var who: Dictionary = stats.get("wanted_by", {}).get(id, {})
+	var best := ""
+	for n: String in who:
+		if best == "" or int(who[n]) > int(who[best]):
+			best = n
+	return plural_of(best) if best != "" else Brand.SAY.shoppers
+
+
+## "witch" -> "witches", "rich zombie" -> "rich zombies".
+static func plural_of(singular: String) -> String:
+	for k: Dictionary in Brand.SHOPPERS.values():
+		if str(k.name).to_lower() == singular:
+			return shopper_plural(k)
+	return singular + "s"
 
 
 func record_walkout() -> void:
@@ -889,7 +1037,7 @@ func to_dict() -> Dictionary:
 		"money": money, "xp": xp, "day": day, "minute": minute,
 		"next_market_minute": next_market_minute, "is_open": is_open, "opened": opened,
 		"between_days": day_over, "prices": prices, "licensed": licensed.keys(),
-		"upgrades": upgrades.keys(), "auto_price": auto_price,
+		"upgrades": upgrades.keys(), "auto_price": auto_price, "markup": price_markup,
 		"floor_style": floor_style, "wall_color": wall_color, "stats": stats,
 		"play_time": play_time,
 		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
@@ -912,6 +1060,7 @@ func from_dict(d: Dictionary) -> void:
 	opened = bool(d.get("opened", true))  # saves from before the sign existed were always open
 	day_over = false
 	auto_price = bool(d.get("auto_price", false))
+	price_markup = clampf(float(d.get("markup", 0.0)), MARKUP_MIN, MARKUP_MAX)
 	floor_style = clampi(int(d.get("floor_style", 0)), 0, FLOOR_STYLES.size() - 1)
 	wall_color = clampi(int(d.get("wall_color", 0)), 0, WALL_COLORS.size() - 1)
 	play_time = float(d.get("play_time", 0.0))
@@ -1105,5 +1254,5 @@ func clock_text() -> String:
 
 
 func _reset_stats() -> void:
-	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0, "wanted": {}, "xp_lost": 0.0, "brews": 0,
+	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0, "wanted": {}, "wanted_by": {}, "xp_lost": 0.0, "brews": 0,
 		"spies_caught": 0, "spies_escaped": 0, "spy_reports": 0}

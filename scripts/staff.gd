@@ -3,10 +3,11 @@ extends Node2D
 ## Someone you hired at the computer (Staff tab). They get paid at the end
 ## of every day, and get faster as they level up (see Game.add_staff_xp).
 ##
-##   Stocker  picks up delivery boxes and stocks the shelves with them. Tops
-##            up shelves that already hold that product first, then fills
-##            empty ones. Whatever doesn't fit goes on a storage rack, or
-##            back on the delivery zone.
+##   Stocker  picks up delivery boxes and stocks the shelves with them:
+##            whatever's emptiest on the shelves first, onto the emptiest
+##            shelf for it (new, unlabeled shelves last). Whatever doesn't fit
+##            goes on a storage rack (racks are shared), or back on the
+##            delivery zone if every rack is full.
 ##   Cashier  walks to a register (one each) and checks out the customers
 ##            in its line. While a cashier is at a register, you can't use
 ##            it yourself, so you're free to do other things.
@@ -39,6 +40,7 @@ const STOCK_SECONDS_PER_ITEM := 0.2  # a little slower than you
 const SCAN_SLOWDOWN := 1.15  # cashiers scan a little slower than you
 const MOP_SECONDS := 1.4  # a little slower than you
 const LOOK_FOR_WORK := 0.6  # seconds between looking for something to do
+const NEED_WEIGHT := 1500.0  # stockers: an empty product's box beats a full one's this many pixels closer
 const XP_PER_SPILL := 4.0
 const REORDER_AT := 2  # the manager always orders more of anything down to this many...
 const REORDER_SHARE := 0.34  # ...or to a third of the shelf space labeled for it
@@ -436,7 +438,9 @@ func _stocker(delta: float) -> void:
 
 
 ## Looks for a box (on the floor or in a storage rack) that has a shelf to
-## go on. With nothing to stock, tidies boxes off the floor into a rack.
+## go on: whatever's emptiest on the shelves first (a whole shelf-load of
+## difference beats walking across the store), then the closest. With
+## nothing to stock, tidies boxes off the floor into a rack.
 func _find_box() -> void:
 	var best_d := INF
 	var pick: Array = []  # [floor box, rack, box on the rack, shelf]
@@ -446,7 +450,7 @@ func _find_box() -> void:
 		var shelf := store.best_shelf_for(box.product_id, box.position, self)
 		if shelf == null:
 			continue
-		var d := position.distance_to(box.position)
+		var d := position.distance_to(box.position) + store.shelf_fill(box.product_id) * NEED_WEIGHT
 		if d < best_d:
 			best_d = d
 			pick = [box, null, null, shelf]
@@ -457,7 +461,7 @@ func _find_box() -> void:
 			var shelf := store.best_shelf_for(b.product_id, rack.position, self)
 			if shelf == null:
 				continue
-			var d := position.distance_to(rack.position) + 64.0  # boxes on the floor first
+			var d := position.distance_to(rack.position) + 64.0 + store.shelf_fill(b.product_id) * NEED_WEIGHT  # boxes on the floor first
 			if d < best_d:
 				best_d = d
 				pick = [null, rack, b, shelf]
@@ -504,8 +508,7 @@ func _tidy_up() -> void:
 		return
 	target_box = best
 	store.claim(best, self)
-	put_rack = rack
-	store.claim(rack, self)
+	put_rack = rack  # (racks are shared, not claimed: see Store.rack_with_room)
 	target_shelf = null
 	job = Job.TO_BOX
 
@@ -525,7 +528,6 @@ func _deliver() -> void:
 	if not _put_rack_ok():
 		put_rack = store.rack_with_room(position, self)
 	if put_rack:
-		store.claim(put_rack, self)
 		var stand := store.stand_cell_for(put_rack.cell, current_cell())
 		if stand != Store.NO_CELL and _go_to(stand):
 			job = Job.TO_RACK
@@ -1057,9 +1059,13 @@ func on_layout_changed() -> void:
 
 
 ## Called when they're fired or the store closes down for a load: drop
-## what they're holding and let go of everything.
+## what they're holding and let go of everything. They stop right away (not
+## at the end of the frame), so they can't finish picking up a box on the
+## way out and take it with them.
 func leave() -> void:
-	store.release_all(self)
+	set_process(false)
+	set_physics_process(false)
+	_give_up()
 	if carry_count > 0:
 		store.stash_box(current_cell(), carry_product, carry_count)  # put down (never lost)
 		carry_count = 0

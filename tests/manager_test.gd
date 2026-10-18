@@ -125,13 +125,19 @@ func _ready() -> void:
 	var wants := store.reorder_list()
 	var box_size: int = Game.PRODUCTS[S0].box_size
 	check(wants.get(S0, 0) == mini(Staff.MAX_BOXES_PER_ORDER, (36 - 9) / box_size), "three shelves a quarter full: order %d boxes of %d (%s)" % [wants.get(S0, 0), box_size, wants])
-	for s in three:
-		s.stock = 5  # 15 of 36: still over a third
-	check(not store.reorder_list().has(S0), "not while they're over a third full")
+	three[0].stock = Shelf.CAPACITY
+	three[1].stock = Shelf.CAPACITY
+	three[2].stock = Shelf.CAPACITY - (box_size - 1)
+	check(not store.reorder_list().has(S0), "not while they're too full for another box")
+	three[2].stock = 0
+	check(store.reorder_list().get(S0, 0) == 1, "but one empty shelf of three gets a box, even with the other two full (%s)" % store.reorder_list())
 	for s in three:
 		s.stock = 3
 	store.drop_box(store.delivery_cells[1], S0, box_size)
-	check(not store.reorder_list().has(S0), "or when a box of it is already waiting")
+	check(store.reorder_list().get(S0, 0) == mini(Staff.MAX_BOXES_PER_ORDER, (36 - 9 - box_size) / box_size),
+		"a box already waiting counts: one fewer (%s)" % store.reorder_list())
+	if (36 - 9 - box_size) / box_size == 0:
+		check(not store.reorder_list().has(S0), "(none at all, with one waiting)")
 	for b: StockBox in store.boxes.values():
 		store.remove_box(b)
 	stocker.set_process(false)  # leave the shelves alone for a moment

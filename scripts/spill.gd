@@ -31,6 +31,11 @@ func can_interact(p: Player) -> bool:
 	return p.holding_mop
 
 
+## With the mop in hand, mopping is what you're there for.
+func use_priority(_p: Player) -> int:
+	return 2
+
+
 func get_action_time(_p: Player) -> float:
 	return MOP_SECONDS
 

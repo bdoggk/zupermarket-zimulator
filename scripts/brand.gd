@@ -518,6 +518,11 @@ const SAY := {
 	"shoppers": "zombies",
 	"no_product": "No %s?! Grrr",
 	"not_sold": "You don't sell %s?!",
+	# Townsfolk (skeletons, witches, vampires) about their favorite products:
+	"town_wants": ["Sell %s and I'll shop at your place!", "Got any %s? Bone Mart doesn't!", "I'd come in for %s, you know."],
+	"town_later": ["Sell %s when your store's bigger!", "One day you'll sell %s, right?"],
+	"town_gone": ["Your %s is all gone!", "Out of %s again?!"],
+	"town_loves": ["Love your %s!", "Best %s in town."],
 	"too_pricey": "Grrr... pricey!",
 	"sold_out": "Braaains... sold out?!",
 	"walkout": "Uuurrgh!",

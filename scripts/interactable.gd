@@ -31,7 +31,9 @@ func can_interact(_player: Player) -> bool:
 
 
 ## When several things nearby can be used, the highest priority wins (then
-## the closest). Things you'd rarely want to do by accident return 0.
+## the one you're facing and closest). Things you'd rarely want to do by
+## accident return 0; the main jobs (picking up a box, stocking, scanning,
+## mopping) return 2.
 func use_priority(_player: Player) -> int:
 	return 1
 

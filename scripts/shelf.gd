@@ -120,10 +120,11 @@ func can_interact(p: Player) -> bool:
 	return not p.holding_mop and (stock > 0 or is_labeled())
 
 
-## Taking things off a shelf loses to anything else you could do right
-## there (like picking up a box), so you don't do it by accident.
+## Stocking it (with a box in hand) is what you came for; taking things off
+## it loses to anything else you could do right there (like picking up a
+## box), so you don't do it by accident.
 func use_priority(p: Player) -> int:
-	return 1 if p.is_carrying() else 0
+	return 2 if p.is_carrying() else 0
 
 
 func get_action_time(p: Player) -> float:

@@ -3,6 +3,7 @@ extends PanelContainer
 ## phone's back button): resume, save, options, or go back to the main menu.
 
 signal options_requested
+signal messages_requested
 
 var info_label: Label
 var save_button: Button
@@ -26,6 +27,7 @@ func _ready() -> void:
 	save_button = UI.menu_button("Save Game", _save)
 	col.add_child(save_button)
 	col.add_child(UI.menu_button("Options", func(): options_requested.emit()))
+	col.add_child(UI.menu_button("Messages", func(): messages_requested.emit()))
 	col.add_child(UI.menu_button("Save & Main Menu", Saves.quit_to_menu))
 	if Settings.is_desktop():
 		col.add_child(UI.menu_button("Save & Quit", Saves.quit_game))

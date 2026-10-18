@@ -41,6 +41,7 @@ const PLANT_APPEAL := 0.08  # each plant brings 8% more customers...
 const MAX_PLANTS_COUNTED := 6  # ...up to this many plants
 const LEVEL_TRAFFIC := 0.1  # each store level brings 10% more customers
 const MAX_SPILLS := 14
+const SMALL_SOLID := Vector2(11, 6)  # the part of a gravestone or lantern you bump into (half-widths, px)
 ## Where something tall can stand, from someone's cell, to hide them (see _hides).
 const HIDE_OFFSETS := [Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 0), Vector2i(0, 2), Vector2i(2, 1),
 	Vector2i(1, 2), Vector2i(2, 2), Vector2i(3, 1), Vector2i(1, 3), Vector2i(3, 2), Vector2i(2, 3), Vector2i(3, 3)]
@@ -56,7 +57,8 @@ const TOWN_TRAFFIC := 1.5
 const VARIETY_TRAFFIC := 0.05
 const VARIETY_MAX := 0.5
 ## How often a shopper also wants something you could sell but don't (yet).
-const WANT_UNSOLD_CHANCE := 0.25
+const WANT_UNSOLD_CHANCE := 0.25  # a shopper also wants something you could sell but don't this often...
+const FAVORITE_ASK_CHANCE := 0.5  # ...or this often for one of their favorites (Brand.SHOPPERS likes)
 const LOT_WIDTH := 4  # tiles each lot adds to the store
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
@@ -345,10 +347,14 @@ func _add_object(obj: Interactable, cell: Vector2i) -> void:
 	_put(obj, cell)
 
 
-func _make_solid(cell: Vector2i) -> void:
+## Nobody walks through `cell` (pathfinding goes around it). `small`: only
+## a little post in the middle of it blocks you (gravestones, lanterns), so
+## you can brush past and slide around it instead of hitting the whole tile.
+func _make_solid(cell: Vector2i, small := false) -> void:
 	astar.set_point_solid(cell, true)
-	if not _collision.has(cell):
-		_collision[cell] = _add_collision_poly(cell)
+	if _collision.has(cell):
+		_collision[cell].queue_free()
+	_collision[cell] = _add_collision_poly(cell, small)
 
 
 func _make_walkable(cell: Vector2i) -> void:
@@ -358,10 +364,17 @@ func _make_walkable(cell: Vector2i) -> void:
 		_collision.erase(cell)
 
 
-func _add_collision_poly(cell: Vector2i) -> CollisionPolygon2D:
+func _add_collision_poly(cell: Vector2i, small := false) -> CollisionPolygon2D:
 	var c := Iso.cell_to_world(cell)
 	var poly := CollisionPolygon2D.new()
-	poly.polygon = PackedVector2Array([c + Vector2(0, -16), c + Vector2(32, 0), c + Vector2(0, 16), c + Vector2(-32, 0)])
+	if small:  # a squashed octagon around the foot of the post
+		var pts := PackedVector2Array()
+		for i in 8:
+			var a := TAU * (i + 0.5) / 8.0
+			pts.append(c + Vector2(cos(a) * SMALL_SOLID.x, sin(a) * SMALL_SOLID.y))
+		poly.polygon = pts
+	else:
+		poly.polygon = PackedVector2Array([c + Vector2(0, -16), c + Vector2(32, 0), c + Vector2(0, 16), c + Vector2(-32, 0)])
 	collision.add_child(poly)
 	return poly
 
@@ -671,7 +684,7 @@ func _put(obj: Interactable, cell: Vector2i) -> void:
 	obj.cell = cell
 	obj.position = Iso.cell_to_world(cell)
 	objects[cell] = obj
-	_make_solid(cell)
+	_make_solid(cell, obj is Decoration)
 	if spills.has(cell):  # furniture covers up a spill
 		remove_spill(spills[cell])
 
@@ -1134,10 +1147,10 @@ func shelves_with(product_id: String) -> Array[Shelf]:
 	return found
 
 
-## The best shelf for a stocker to put `product_id` on: one that already
-## has it and has room, then an empty one that held it before, then a
-## brand-new one, then any empty one. Skips shelves another stocker is
-## already filling and ones nobody can get to.
+## The best shelf for a stocker to put `product_id` on: of the shelves
+## labeled for it, the emptiest (then the closest); a new, unlabeled shelf
+## only if none of those has room. Skips shelves another stocker is already
+## filling and ones nobody can get to.
 func best_shelf_for(product_id: String, from: Vector2, who: Staff) -> Shelf:
 	var best: Shelf = null
 	var best_score := INF
@@ -1147,44 +1160,61 @@ func best_shelf_for(product_id: String, from: Vector2, who: Staff) -> Shelf:
 			continue
 		if stand_cell_for(s.cell, from_cell) == NO_CELL:
 			continue
-		var rank := 3
+		var rank := 2  # an empty shelf with no label yet: last
 		if s.product_id == product_id:
-			rank = 0 if s.stock > 0 else 1
-		elif s.product_id == "":
-			rank = 2
-		var score := rank * 100000.0 + from.distance_to(s.position)
+			rank = 0
+		var score := rank * 100000.0 + s.stock * 2000.0 + from.distance_to(s.position)
 		if score < best_score:
 			best_score = score
 			best = s
 	return best
 
 
+## How full the shelves labeled for `product_id` are, 0-1 (0 if none are:
+## a new product is as needed as an empty one).
+func shelf_fill(product_id: String) -> float:
+	var room := 0
+	var have := 0
+	for s in shelves:
+		if s.product_id == product_id:
+			room += Shelf.CAPACITY
+			have += s.stock
+	return float(have) / room if room > 0 else 0.0
+
+
 ## Products that are running low (see reorder_list), most urgent first.
 func products_running_low(at := Staff.REORDER_AT) -> Array[String]:
 	var low: Array[String] = []
-	low.assign(reorder_list(at).keys())
+	low.assign(reorder_list(at, false).keys())
 	return low
 
 
 ## What the general manager should order: product id -> boxes, most urgent
 ## (emptiest) first. A product needs more once everything we have of it (on
 ## its shelves, in boxes anywhere, in anyone's hands, ordered) would fill a
-## third of the shelves labeled for it, or `at` items, whichever's more.
-## Then: enough boxes to fill those shelves back up (at least one, at most
-## Staff.MAX_BOXES_PER_ORDER).
-func reorder_list(at := Staff.REORDER_AT) -> Dictionary:
+## third of the shelves labeled for it (or `at` items, whichever's more), or
+## once a whole box would fit on them (with several shelves for one product,
+## an empty one gets filled even while the others are full). Then: enough
+## boxes to fill those shelves back up (at least one, at most
+## Staff.MAX_BOXES_PER_ORDER). And a box of anything you sell that isn't on
+## any shelf yet, for each empty shelf with no label.
+func reorder_list(at := Staff.REORDER_AT, new_products := true) -> Dictionary:
 	var room := {}
 	var have := {}
+	var free := {false: 0, true: 0}  # empty, unlabeled shelves (true: coolers)
 	for s in shelves:
 		if s.product_id != "":
 			room[s.product_id] = int(room.get(s.product_id, 0)) + Shelf.CAPACITY
 			have[s.product_id] = int(have.get(s.product_id, 0)) + s.stock
+		elif s.stock == 0:
+			free[s.holds_cold()] += 1
 	var coming := stock_on_the_way()
 	for id: String in coming:
 		if have.has(id):
 			have[id] += coming[id]
 	var ids: Array = room.keys().filter(func(id: String) -> bool:
-		return Game.is_licensed(id) and have[id] <= maxi(at, floori(room[id] * Staff.REORDER_SHARE)))
+		return Game.is_licensed(id) and (have[id] <= maxi(at, floori(room[id] * Staff.REORDER_SHARE)) \
+			or room[id] - have[id] >= int(Game.PRODUCTS[id].box_size)))
 	ids.sort_custom(func(a: String, b: String) -> bool: return float(have[a]) / room[a] < float(have[b]) / room[b])
 	var out := {}
 	for id: String in ids:
@@ -1193,6 +1223,21 @@ func reorder_list(at := Staff.REORDER_AT) -> Dictionary:
 		while n < Staff.MAX_BOXES_PER_ORDER and have[id] + (n + 1) * size <= room[id]:
 			n += 1
 		out[id] = n
+	# Licensed, but on no shelf (and none coming): one box each, the most
+	# wanted first, while there are empty shelves (or coolers) to put it on.
+	if not new_products:
+		return out
+	for id: String in Game.unlocked_ids():
+		if not room.has(id) and int(coming.get(id, 0)) > 0:  # its box will take one of those shelves
+			free[Game.is_cold(id)] = maxi(0, free[Game.is_cold(id)] - 1)
+	var unshelved: Array = Game.unlocked_ids().filter(func(id: String) -> bool:
+		return not room.has(id) and int(coming.get(id, 0)) == 0)
+	unshelved.sort_custom(func(a: String, b: String) -> bool: return Game.market.demand[a] > Game.market.demand[b])
+	for id: String in unshelved:
+		var cold := Game.is_cold(id)
+		if free[cold] > 0:
+			free[cold] -= 1
+			out[id] = 1
 	return out
 
 
@@ -1263,18 +1308,30 @@ func nearest_drop_cell(from: Vector2i, taken := {}) -> Vector2i:
 	return best
 
 
-## The nearest storage rack with room that no other stocker is filling.
+## The nearest storage rack with room for one more box, counting the
+## boxes other stockers are already bringing it (racks are shared: two
+## stockers can put boxes on the same one).
 func rack_with_room(from: Vector2, who: Staff) -> StorageRack:
 	var best: StorageRack = null
 	var best_d := INF
 	for r in racks:
-		if not r.has_room() or is_claimed(r, who) or stand_cell_for(r.cell, Iso.world_to_cell(from)) == NO_CELL:
+		if rack_room_for(r, who) <= 0 or stand_cell_for(r.cell, Iso.world_to_cell(from)) == NO_CELL:
 			continue
 		var d := from.distance_to(r.position)
 		if d < best_d:
 			best_d = d
 			best = r
 	return best
+
+
+## Free spots on rack `r` once the other stockers heading there with a box
+## have put theirs down.
+func rack_room_for(r: StorageRack, who: Staff) -> int:
+	var heading := 0
+	for st in staff:
+		if st != who and st.put_rack == r:
+			heading += 1
+	return StorageRack.CAPACITY - r.boxes.size() - heading
 
 
 # ---------------------------------------------------------------- delivery zone
@@ -1692,12 +1749,15 @@ func _make_shopping_list(kind := {}) -> Array[Dictionary]:
 		var id := _weighted_pick(pool, likes)
 		pool.erase(id)
 		list.append({"id": id, "qty": randi_range(qty[0], qty[1])})
-	# Now and then they also want something you could sell but don't yet
-	# (most often one of their favorites, if you don't sell that yet).
+	# Now and then they also want something you could sell but don't yet.
+	# A skeleton, witch or vampire whose favorite you don't sell yet asks
+	# for it a lot more often.
 	var unsold := Game.licensable_ids()
-	if not unsold.is_empty() and randf() < WANT_UNSOLD_CHANCE:
-		var faves := unsold.filter(func(id): return likes.has(id))
-		list.append({"id": (faves if not faves.is_empty() and randf() < 0.7 else unsold).pick_random(), "qty": 1})
+	var faves := unsold.filter(func(id): return likes.has(id))
+	if not faves.is_empty() and randf() < FAVORITE_ASK_CHANCE:
+		list.append({"id": faves.pick_random(), "qty": 1})
+	elif not unsold.is_empty() and randf() < WANT_UNSOLD_CHANCE:
+		list.append({"id": unsold.pick_random(), "qty": 1})
 	return list
 
 

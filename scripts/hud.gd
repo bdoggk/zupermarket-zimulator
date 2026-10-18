@@ -12,9 +12,15 @@ const Tutorial := preload("res://scripts/ui/tutorial.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
 const MARGIN := 14.0
-const MAX_MESSAGES := 3
-const MESSAGE_SECONDS := 4.0
-const FIRST_DAY_MESSAGE_SECONDS := 8.0  # messages stay up longer while you learn
+const WANTED_SHOWN := 6  # the day's summary names this many of the things shoppers asked for
+const MAX_MESSAGES := 4
+const MESSAGE_SECONDS := 6.0  # a message stays up at least this long...
+const MESSAGE_SECONDS_PER_CHAR := 0.06  # ...plus time to read it
+const FIRST_DAY_MESSAGE_SCALE := 1.5  # longer still on the first day, while you learn
+const MESSAGE_MIN_SECONDS := 3.0  # a new message never pushes an old one off sooner than this
+const MESSAGE_FADE := 0.6
+const MESSAGE_WIDTH := 900.0  # longer messages wrap
+const MESSAGE_MIN_WIDTH := 420.0  # narrower than this between the panels, and messages use the whole width
 
 ## Tick this in the Inspector (HUD node in main.tscn) to preview the phone
 ## controls on your PC.
@@ -56,6 +62,11 @@ var message_box: VBoxContainer
 var computer: PanelContainer
 var rival_panel: PanelContainer
 var shop_panel: PanelContainer  # a little shop's wares (the witch's, the vampire's)
+var message_log: MessageLog  # M / Back / Log: the recent messages
+var log_button: Button
+var _messages: Array = []  # on screen, oldest first: [label, seconds left, seconds shown]
+var _message_queue: Array[String] = []  # waiting for room
+var _message_width := MESSAGE_WIDTH
 var effects_box: VBoxContainer  # brews working right now, under the corner buttons
 var _effect_rows := {}  # brew id -> its Label in effects_box
 var build_bar: PanelContainer
@@ -64,7 +75,11 @@ var options: PanelContainer
 var pause_button: Button
 var dimmer: ColorRect
 var summary_panel: PanelContainer
-var summary_label: Label
+var summary_label: Label  # the title: "DAY 3 COMPLETE"
+var summary_scroll: ScrollContainer  # the rest scrolls if the window is too small
+var summary_money: Label  # left column: sales, costs, profit
+var summary_people: Label  # right column: shoppers, items, walkouts...
+var summary_notes: Label  # longer lines underneath, wrapped
 var summary_hint: Label
 var next_day_button: Button
 var day_over_bar: Button  # "Day 3 is over! Press Space..." along the bottom
@@ -95,6 +110,8 @@ func _ready() -> void:
 	root.add_child(computer)
 	rival_panel = RivalPanel.new()
 	root.add_child(rival_panel)
+	message_log = MessageLog.new()
+	root.add_child(message_log)
 	shop_panel = ShopPanel.new()
 	root.add_child(shop_panel)
 	effects_box = VBoxContainer.new()
@@ -113,12 +130,15 @@ func _ready() -> void:
 	pause_menu = PauseMenu.new()
 	root.add_child(pause_menu)
 	pause_menu.options_requested.connect(_open_options)
+	pause_menu.messages_requested.connect(func():
+		pause_menu.close()
+		message_log.open())
 	options = OptionsMenu.new()
 	root.add_child(options)
 	options.closed.connect(_on_options_closed)
 	# Panels keep the mouse to themselves: scrolling or clicking on a menu
 	# mustn't zoom the view or walk you somewhere behind it.
-	for panel: Control in [status_panel, tutorial, computer, rival_panel, shop_panel, build_bar, summary_panel, pause_menu, options, day_over_bar, levelup_panel]:
+	for panel: Control in [status_panel, tutorial, computer, rival_panel, shop_panel, build_bar, summary_panel, pause_menu, options, day_over_bar, levelup_panel, message_log]:
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	Game.message.connect(show_message)
@@ -170,10 +190,10 @@ func _process(delta: float) -> void:
 	var building: bool = Game.build_mode.active
 	var paused := pause_menu.visible or options.visible
 	dimmer.visible = paused
-	message_box.visible = not paused and not summary_panel.visible  # (it would show through the summary)
+	message_box.visible = not paused and not summary_panel.visible and not message_log.visible  # (it would show through)
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
-	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or summary_panel.visible
+	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or summary_panel.visible or message_log.visible
 	# After closing you can keep working (stock, order, build...) until you
 	# press Space for the summary and the next day.
 	var summing_up := summary_panel.visible
@@ -196,7 +216,7 @@ func _process(delta: float) -> void:
 	_place(prep_panel, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
 	_place(tutorial, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
 	_place(corner_box, Vector2(s.x - corner_box.size.x - MARGIN, MARGIN))
-	_place(message_box, Vector2((s.x - message_box.size.x) / 2.0, 70))
+	_place_messages(s)
 	_place(prompt_panel, Vector2((s.x - prompt_panel.size.x) / 2.0, s.y - prompt_panel.size.y - MARGIN))
 	_place(use_button, Vector2(s.x - use_button.size.x - MARGIN, s.y - use_button.size.y - MARGIN))
 	_place(scan_button, Vector2(s.x - use_button.size.x - scan_button.size.x - 2 * MARGIN, s.y - scan_button.size.y - MARGIN))
@@ -209,7 +229,12 @@ func _process(delta: float) -> void:
 	for id: String in _effect_rows:
 		(_effect_rows[id] as Label).text = "%s  %s" % [Brand.BREWS[id].name, ShopPanel.time_text(float(Game.effects.get(id, 0.0)))]
 	_place(build_bar, Vector2((s.x - build_bar.size.x) / 2.0, s.y - build_bar.size.y - MARGIN))
+	if summary_panel.visible:
+		_fit_summary(s)
 	_place(summary_panel, (s - summary_panel.size) / 2.0)
+	message_log.custom_minimum_size = Vector2(minf(820.0, s.x - 2 * MARGIN), minf(560.0, s.y - 2 * MARGIN))
+	_place(message_log, (s - message_log.size) / 2.0)
+	_tick_messages(delta)
 	# Above whatever is along the bottom (the E prompt, or the big touch buttons).
 	var bottom := s.y - MARGIN
 	if prompt_panel.visible:
@@ -241,6 +266,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			show_day_summary()
 		return
+	if event.is_action_pressed("messages") and not event.is_echo() and not Game.build_mode.active \
+			and not pause_menu.visible and not options.visible and not get_viewport().gui_get_focus_owner() is LineEdit:
+		get_viewport().set_input_as_handled()
+		message_log.toggle()
+		return
 	if not (event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause")):
 		return
 	if Game.build_mode.active:
@@ -265,6 +295,8 @@ func _notification(what: int) -> void:
 func _back(or_pause := true) -> void:
 	if levelup_panel.visible:
 		levelup_panel.visible = false
+	elif message_log.visible:
+		message_log.close()
 	elif options.visible:
 		options.close()
 	elif pause_menu.visible:
@@ -301,22 +333,71 @@ func _on_update_changed() -> void:
 		show_message("Version %s is downloaded. It starts the next time you open the game." % Updater.latest)
 
 
-## Shows a message at the top of the screen. Up to 3 at once; old ones fade.
+## Shows a message at the top of the screen, long enough to read it: up to
+## MAX_MESSAGES at once, the rest wait their turn (an old one only makes
+## room once it's been up a few seconds). The same message again just stays
+## up longer. Everything also goes in the message log (M).
 func show_message(text: String) -> void:
-	var l := UI.label(text)
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_constant_override("outline_size", 6)
-	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-	message_box.add_child(l)
-	while message_box.get_child_count() > MAX_MESSAGES:
-		var old := message_box.get_child(0)
-		message_box.remove_child(old)
-		old.queue_free()
-	var tw := l.create_tween()
-	tw.tween_interval(FIRST_DAY_MESSAGE_SECONDS if Game.day == 1 else MESSAGE_SECONDS)
-	tw.tween_property(l, "modulate:a", 0.0, 0.6)
-	tw.tween_callback(l.queue_free)
+	for m: Array in _messages:
+		if (m[0] as Label).text == text:
+			m[1] = maxf(m[1], _message_seconds(text))
+			return
+	if text in _message_queue:
+		return
+	_message_queue.append(text)
+	_tick_messages(0.0)
+
+
+func _message_seconds(text: String) -> float:
+	var t := MESSAGE_SECONDS + text.length() * MESSAGE_SECONDS_PER_CHAR
+	return t * (FIRST_DAY_MESSAGE_SCALE if Game.day == 1 else 1.0)
+
+
+## Messages go across the top, in the space between the panels on the left
+## (the status bar's hints) and the buttons on the right, so they never
+## cover either; on a narrow screen they use the whole width.
+func _place_messages(s: Vector2) -> void:
+	var left := MARGIN
+	for panel: Control in [prep_panel, tutorial]:
+		if panel.visible:
+			left = maxf(left, panel.position.x + maxf(panel.size.x, panel.get_combined_minimum_size().x) + MARGIN)
+	var right := corner_box.position.x - MARGIN
+	if right - left < MESSAGE_MIN_WIDTH:
+		left = MARGIN
+		right = s.x - MARGIN
+	_message_width = minf(MESSAGE_WIDTH, right - left)
+	for m: Array in _messages:
+		(m[0] as Label).custom_minimum_size.x = _message_width
+	message_box.reset_size()
+	_place(message_box, Vector2(left + (right - left - message_box.size.x) / 2.0, 70))
+
+
+## Counts down the messages on screen (only while they can be seen: not
+## behind the pause menu or the day's summary) and brings on waiting ones.
+func _tick_messages(delta: float) -> void:
+	if message_box.visible:
+		for m: Array in _messages:
+			m[1] -= delta
+			m[2] += delta
+			(m[0] as Label).modulate.a = clampf(m[1] / MESSAGE_FADE, 0.0, 1.0)
+	for i in range(_messages.size() - 1, -1, -1):
+		if _messages[i][1] <= 0.0:
+			_messages[i][0].queue_free()
+			_messages.remove_at(i)
+	while not _message_queue.is_empty() and (_messages.size() < MAX_MESSAGES or _messages[0][2] >= MESSAGE_MIN_SECONDS):
+		if _messages.size() >= MAX_MESSAGES:
+			_messages[0][0].queue_free()
+			_messages.remove_at(0)
+		var text: String = _message_queue.pop_front()
+		var l := UI.label(text)
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.add_theme_constant_override("outline_size", 6)
+		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # a long one wraps instead of running off the screen
+		l.custom_minimum_size.x = _message_width
+		message_box.add_child(l)
+		_messages.append([l, _message_seconds(text), 0.0])
 
 
 func open_computer() -> void:
@@ -475,6 +556,9 @@ func _build_corner_buttons() -> void:
 	for z in [["-", 0.8], ["+", 1.25]]:
 		var factor: float = z[1]
 		zoom_row.add_child(UI.button(z[0], func(): Game.player.zoom_by(factor), Vector2(56, 56)))
+	log_button = UI.button("Log", func(): message_log.toggle(), Vector2(64, 56))
+	log_button.tooltip_text = "Recent messages (M)"
+	zoom_row.add_child(log_button)
 	pause_button = UI.button("II", open_pause, Vector2(56, 56))
 	zoom_row.add_child(pause_button)
 	build_button = UI.button("Build" if is_touch else "Build (B)", func(): Game.build_mode.enter(), Vector2(0, 56))
@@ -520,8 +604,26 @@ func _build_summary_panel() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 14)
 	summary_panel.add_child(col)
-	summary_label = UI.label()
+	summary_label = UI.label("", UI.WARN)
+	summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(summary_label)
+	summary_scroll = ScrollContainer.new()
+	summary_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	summary_scroll.follow_focus = true
+	col.add_child(summary_scroll)
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 12)
+	summary_scroll.add_child(body)
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 48)
+	body.add_child(cols)
+	summary_money = UI.label()
+	cols.add_child(summary_money)
+	summary_people = UI.label()
+	cols.add_child(summary_people)
+	summary_notes = UI.label("", UI.DIM)
+	summary_notes.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(summary_notes)
 	next_day_button = UI.button("Next day", _on_next_day, Vector2(240, 56))
 	next_day_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(next_day_button)
@@ -706,35 +808,47 @@ func show_day_summary() -> void:
 
 
 func _show_summary(s: Dictionary) -> void:
-	summary_label.text = "\n".join([
-		"DAY %d COMPLETE" % s.day,
-		"",
+	summary_label.text = "DAY %d COMPLETE   -   Store level %d" % [s.day, Game.level]
+	summary_money.text = "\n".join([
 		"Sales: $%.2f" % s.revenue,
 		"Stock bought: $%.2f" % s.spent,
 		"Store upgrades: $%.2f" % s.invested,
 		"Staff wages: $%.2f" % s.wages,
 		"Profit: $%.2f" % s.profit,
-		"",
+	])
+	summary_people.text = "\n".join([
 		"%s served: %d" % [Brand.SAY.shoppers.capitalize(), s.customers],
 		"Items sold: %d" % s.items_sold,
 		"Missed sales: %d" % s.missed,
 		"Walked out: %d" % s.walkouts,
-		"Went to %s instead: %d" % [Brand.RIVAL.name, s.get("lost", 0)],
+		"Went to %s instead: %d" % [Brand.RIVAL.name, s.get("lost", 0)] if s.get("lost", 0) > 0 else "--",
+		"Blood mopped up: %d" % s.cleaned if Brand.SPILLS else "--",
+	].filter(func(line: String): return line != "--"))
+	summary_notes.text = "\n".join([
 		_wanted_line(s.get("wanted", {})),
 		_spies_line(s),
 		"Your spy's reports: %d" % int(s.get("spy_reports", 0)) if int(s.get("spy_reports", 0)) > 0 else "--",
-		"Blood mopped up: %d" % s.cleaned,
-		"XP lost to blood on the floor: %d" % roundi(float(s.get("xp_lost", 0.0))),
-		"",
-		"Store level %d" % Game.level,
-	].filter(func(line: String): return (Brand.SPILLS or not line.begins_with("Blood")) \
-		and (not line.begins_with("Went to") or s.get("lost", 0) > 0) \
-		and (not line.begins_with("XP lost") or roundi(float(s.get("xp_lost", 0.0))) > 0) \
-		and line != "--"))
+		"XP lost to blood on the floor: %d" % roundi(float(s.get("xp_lost", 0.0))) if Brand.SPILLS and roundi(float(s.get("xp_lost", 0.0))) > 0 else "--",
+	].filter(func(line: String): return line != "--"))
+	summary_notes.visible = summary_notes.text != ""
+	summary_scroll.scroll_vertical = 0
 	next_day_button.text = "Go to Day %d" % (s.day + 1)
 	summary_hint.text = "" if is_touch and Input.get_connected_joypads().is_empty() else "%s to go to Day %d" % [_key_hint("the button"), s.day + 1]
 	summary_hint.visible = summary_hint.text != ""
 	summary_panel.visible = true
+
+
+## Keeps the day's summary inside the window: long lines wrap, and the
+## numbers scroll if the window is short.
+func _fit_summary(s: Vector2) -> void:
+	var cols: Control = summary_money.get_parent()
+	var width := minf(maxf(cols.get_combined_minimum_size().x, 560.0), s.x - 2.0 * MARGIN - 48.0)
+	summary_notes.custom_minimum_size.x = width
+	var body: Control = summary_scroll.get_child(0)
+	var wanted_h := body.get_combined_minimum_size().y
+	var other := summary_label.get_combined_minimum_size().y + next_day_button.get_combined_minimum_size().y \
+		+ (summary_hint.get_combined_minimum_size().y if summary_hint.visible else 0.0) + 3 * 14.0 + 48.0
+	summary_scroll.custom_minimum_size = Vector2(width, minf(wanted_h, maxf(80.0, s.y - 2.0 * MARGIN - other)))
 
 
 ## "Bone Mart's spies: 1 thrown out, 1 got away", or "--" if none came.
@@ -757,10 +871,15 @@ static func _wanted_line(wanted: Dictionary) -> String:
 	if wanted.is_empty():
 		return "--"
 	var total := 0
+	var ids := wanted.keys()
+	ids.sort_custom(func(a, b): return int(wanted[a]) > int(wanted[b]))
 	var parts: Array[String] = []
-	for id: String in wanted:
+	for id: String in ids:
 		total += int(wanted[id])
-		parts.append("%s x%d" % [Game.product_name(id), int(wanted[id])])
+		if parts.size() < WANTED_SHOWN:
+			parts.append("%s x%d" % [Game.product_name(id), int(wanted[id])])
+	if ids.size() > WANTED_SHOWN:
+		parts.append("and %d more" % (ids.size() - WANTED_SHOWN))
 	return "Asked for things you don't sell: %d (%s)" % [total, ", ".join(parts)]
 
 

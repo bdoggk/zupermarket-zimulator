@@ -178,6 +178,13 @@ func can_interact(_p: Player) -> bool:
 	return has_cashier() or front_customer() != null
 
 
+## Ringing up a shopper is the job; taking over from a cashier is only
+## what E does when nothing else is in reach (no more sending them off
+## by accident while you reach for a box).
+func use_priority(_p: Player) -> int:
+	return 0 if has_cashier() else 2
+
+
 func get_action_time(_p: Player) -> float:
 	if has_cashier():
 		return TAKE_OVER_SECONDS

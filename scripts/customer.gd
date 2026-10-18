@@ -332,7 +332,7 @@ func _next_item() -> void:
 				Game.record_missed()
 			else:  # you don't sell it (yet)
 				_think(Brand.SAY.get("not_sold", "No %s here?!") % Game.product_name(want.id).to_lower())
-				Game.record_wanted(want.id)
+				Game.record_wanted(want.id, kind)
 			shopping_list.pop_front()
 			continue
 		var stand := store.shelf_stand_cell(shelf, current_cell(), 1.5)

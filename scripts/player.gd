@@ -45,6 +45,7 @@ var action_duration := 0.0
 var action_label := ""
 
 var _walk_anim := 0.0
+var facing := Vector2.ZERO  # the way you last walked (E prefers what's in front of you)
 var _stuck_time := 0.0
 var _last_prompt := ["-", false, "-"]
 
@@ -88,6 +89,8 @@ func _process(delta: float) -> void:
 		velocity = Vector2.ZERO
 
 	move_and_slide()
+	if velocity.length() > 5.0:
+		facing = velocity.normalized()
 	_animate(delta)
 	_update_focus()
 	queue_redraw()
@@ -412,9 +415,12 @@ func _update_focus() -> void:
 		var d := position.distance_to(obj.position)
 		if obj.can_interact(self):
 			var pr := obj.use_priority(self)
-			if pr > best_pr or (pr == best_pr and d < best_d):
+			# Same priority: what's in front of you counts as up to 40% closer.
+			var ahead := maxf(0.0, facing.dot((obj.position - position).normalized())) if d > 0.5 else 1.0
+			var score := d * (1.0 - 0.4 * ahead)
+			if pr > best_pr or (pr == best_pr and score < best_d):
 				best_pr = pr
-				best_d = d
+				best_d = score
 				best = obj
 		elif d < info_d and obj.get_prompt(self) != "":
 			info_d = d

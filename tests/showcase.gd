@@ -263,6 +263,10 @@ func _ready() -> void:
 		await _seconds(1.0)
 		await _shot("lanterns")
 		Game.minute = 10 * 60 + 40
+	hud.message_log.open()
+	await _frames(3)
+	await _shot("message_log")
+	hud.message_log.close()
 	for c in store.customers.duplicate():
 		if is_instance_valid(c.register):
 			c.register.leave_line(c)

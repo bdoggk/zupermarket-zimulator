@@ -27,6 +27,7 @@ static func rows() -> Array:
 		["Look around (build mode)", "Drag, or WASD", "Left stick", "Drag"],
 		["Zoom", "Mouse wheel, or the - / + buttons", "", "- / + buttons"],
 		["Pause menu", "Esc or P", "Start", "II button"],
+		["Recent messages", "M, or the Log button", "Back / View", "Log button"],
 		["Menus", "Arrow keys, Enter, Esc", "D-pad, A, B", "Tap"],
 	]
 

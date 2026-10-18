@@ -22,6 +22,9 @@ const VAMPIRES := 2  # vampires who come out at dusk (Game.NIGHT_MINUTE)
 const SKELETON_CHANCE := 0.4  # how many of the passers-by are skeletons...
 const WITCH_CHANCE := 0.15  # ...witches...
 const VAMPIRE_CHANCE := 0.15  # ...and, after dusk, vampires
+const TALK_RANGE := 4  # cells: townsfolk this close tell you what they'd buy...
+const TALK_GAP := 20.0  # ...one remark every this many seconds at most...
+const TALK_AGAIN := 150.0  # ...and the same person waits this long to say anything again
 const LAMP_DAY := 0.14
 const LAMP_NIGHT := 0.8
 const GROUND := {
@@ -71,6 +74,9 @@ var _keeper_cells := {}  # shop id -> where its keeper stands
 var _in_shop := ""  # the shop you're in (its keeper says hello as you walk in)
 var _vampires: Array[Wanderer] = []  # out for the night
 var _vampires_out := false
+var folk: Array[Wanderer] = []  # townsfolk with a kind (meta "kind": a Brand.SHOPPERS key): they talk
+var _talk_timer := 6.0
+var _clock := 0.0
 
 
 ## Builds everything outside the store. Called by the store while it
@@ -301,6 +307,7 @@ func _process(delta: float) -> void:
 	if in_shop != "" and in_shop != _in_shop and shop_keepers.has(in_shop):
 		Game.show_popup(shop_keepers[in_shop].position + Vector2(0, -50), Brand.SHOPS[in_shop].hello, Color(0.92, 0.86, 1.0))
 	_in_shop = in_shop
+	_townsfolk_talk(delta, p)
 	var night := Game.minute >= Game.NIGHT_MINUTE
 	if night != _vampires_out:
 		_vampires_out = night
@@ -311,6 +318,31 @@ func _process(delta: float) -> void:
 				if is_instance_valid(w) and not w.is_leaving():
 					w.leave(spawns.pick_random() if not spawns.is_empty() else Store.NO_CELL)
 			_vampires.clear()
+
+
+## Skeletons, witches and vampires near you in town tell you what they'd
+## come in for (see Game.townsfolk_says): one of them every TALK_GAP
+## seconds at most.
+func _townsfolk_talk(delta: float, p: Player) -> void:
+	_clock += delta
+	_talk_timer -= delta
+	if _talk_timer > 0.0:
+		return
+	_talk_timer = 1.0  # nobody near: look again in a second
+	folk = folk.filter(func(w): return is_instance_valid(w) and not w.is_leaving())
+	var here := p.current_cell()
+	for w in folk:
+		if w.modulate.a < 0.8 or Iso.chebyshev(w.current_cell(), here) > TALK_RANGE:
+			continue
+		if _clock - float(w.get_meta("said_at", -INF)) < TALK_AGAIN:
+			continue
+		var line := Game.townsfolk_says(Brand.SHOPPERS.get(w.get_meta("kind"), {}))
+		if line == "":
+			continue
+		w.set_meta("said_at", _clock)
+		Game.show_popup(w.position + Vector2(0, -44), line, Color(0.92, 0.86, 1.0))
+		_talk_timer = TALK_GAP
+		return
 
 
 func _apply_settings() -> void:
@@ -560,7 +592,7 @@ func send_to_rival(kind: Dictionary) -> Wanderer:
 			stops.append([pay, randf_range(1.5, 2.5)])
 	stops.append([rival_door, 0.0])
 	stops.append([spawns.pick_random(), 0.0])
-	var w := _walker((kind.looks as Array).pick_random(), spawns.pick_random(), stops, Customer.SPEED * kind.speed)
+	var w := _walker((kind.looks as Array).pick_random(), spawns.pick_random(), stops, Customer.SPEED * kind.speed, _kind_id(kind))
 	walkers.append(w)
 	return w
 
@@ -588,7 +620,7 @@ func _send_shambler() -> void:
 		var middle := _random_street_cell()
 		if middle != NO_CELL:
 			stops.push_front([middle, randf_range(2.0, 6.0)])
-	var w := _walker((kind.looks as Array).pick_random(), from, stops, 1.6 * kind.speed)
+	var w := _walker((kind.looks as Array).pick_random(), from, stops, 1.6 * kind.speed, _kind_id(kind))
 	w.set_meta("shambler", true)
 	walkers.append(w)
 
@@ -596,14 +628,14 @@ func _send_shambler() -> void:
 ## A few skeletons and witches who live in town: they stroll around between
 ## spots on the street, the cemetery and the ruins, all day and all night.
 func _add_locals() -> void:
-	_add_strollers(Brand.SHOPPERS.skeleton.looks, LOCALS, 1.3)
+	_add_strollers(Brand.SHOPPERS.skeleton.looks, LOCALS, 1.3, NO_CELL, "skeleton")
 	if Brand.SHOPPERS.has("witch"):
-		_add_strollers(Brand.SHOPPERS.witch.looks, WITCHES, 1.2)
+		_add_strollers(Brand.SHOPPERS.witch.looks, WITCHES, 1.2, NO_CELL, "witch")
 
 
 ## `count` townsfolk who loop around town (starting somewhere along the way
 ## unless `from` says where).
-func _add_strollers(looks: Array, count: int, speed: float, from := NO_CELL) -> Array[Wanderer]:
+func _add_strollers(looks: Array, count: int, speed: float, from := NO_CELL, kind_id := "") -> Array[Wanderer]:
 	var out: Array[Wanderer] = []
 	for i in count:
 		var stops := []
@@ -613,7 +645,7 @@ func _add_strollers(looks: Array, count: int, speed: float, from := NO_CELL) -> 
 				stops.append([c, randf_range(3.0, 9.0)])
 		if stops.size() < 2:
 			continue
-		var w := _walker(looks[i % looks.size()], from if from != NO_CELL else stops[0][0], stops, speed)
+		var w := _walker(looks[i % looks.size()], from if from != NO_CELL else stops[0][0], stops, speed, kind_id)
 		w.loop = true
 		if from == NO_CELL:
 			w.modulate.a = 1.0
@@ -627,7 +659,7 @@ func _vampires_come_out() -> void:
 	if not Brand.SHOPPERS.has("vampire"):
 		return
 	var from: Vector2i = shop_doors.get("curios", spawns.pick_random() if not spawns.is_empty() else NO_CELL)
-	_vampires = _add_strollers(Brand.SHOPPERS.vampire.looks, VAMPIRES, 1.4, from)
+	_vampires = _add_strollers(Brand.SHOPPERS.vampire.looks, VAMPIRES, 1.4, from, "vampire")
 
 
 ## The rival sends a spy over to your store (Game.rival_spies).
@@ -658,11 +690,21 @@ func _random_street_cell() -> Vector2i:
 	return NO_CELL
 
 
-func _walker(tex: Texture2D, cell: Vector2i, stops: Array, speed: float) -> Wanderer:
+## Someone walking around town. `kind_id` (a Brand.SHOPPERS key) for
+## townsfolk who can talk to you about what they'd buy.
+func _walker(tex: Texture2D, cell: Vector2i, stops: Array, speed: float, kind_id := "") -> Wanderer:
 	var w := Wanderer.new()
 	w.setup(store, tex, cell, stops, speed)
 	store.world.add_child(w)
+	if kind_id != "":
+		w.set_meta("kind", kind_id)
+		folk.append(w)
 	return w
+
+
+static func _kind_id(kind: Dictionary) -> String:
+	var id: Variant = Brand.SHOPPERS.find_key(kind)
+	return str(id) if id != null else ""
 
 
 func _on_rival_bought() -> void:
