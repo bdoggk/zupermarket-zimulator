@@ -21,6 +21,8 @@ var res_right: Button
 var fps_value: Label
 var gfx_value: Label
 var gfx_info: Label
+var ui_value: Label
+var ui_info: Label
 var vsync_check: CheckButton
 var vsync_info: Label
 var fps_check: CheckButton
@@ -81,6 +83,8 @@ func _build_settings(parent: Control) -> void:
 
 	gfx_value = _selector(col, "Graphics", _change_graphics)[0]
 	gfx_info = _info(col)
+	ui_value = _selector(col, "UI size", _change_ui_scale)[0]
+	ui_info = _info(col)
 
 	var vol := _slider(col, "Sound", func(v: float):
 		Settings.set_volume(v / 100.0)
@@ -184,7 +188,7 @@ func close() -> void:
 
 ## Keeps the panel on the screen: the lists scroll when the window is small.
 func _fit() -> void:
-	var h := get_viewport_rect().size.y
+	var h := (get_parent() as Control).size.y if get_parent() is Control else get_viewport_rect().size.y  # (the UI's own units: see UI size)
 	var room := clampf(h - 230.0, 240.0, 560.0)
 	settings_scroll.custom_minimum_size = Vector2(640, minf(room, settings_scroll.get_child(0).get_combined_minimum_size().y))
 	controls_scroll.custom_minimum_size = Vector2(800, room)
@@ -316,6 +320,16 @@ func _change_fps(step: int) -> void:
 	Settings.set_fps_limit(list[wrapi(i + step, 0, list.size())])
 
 
+func _change_ui_scale(step: int) -> void:
+	var list := Settings.available_ui_scales()
+	var now := Settings.effective_ui_scale()
+	var i := 0
+	for j in list.size():  # the closest to the size you see now
+		if absf(list[j] - now) < absf(list[i] - now):
+			i = j
+	Settings.set_ui_scale(list[clampi(i + step, 0, list.size() - 1)])
+
+
 func _change_graphics(step: int) -> void:
 	Settings.set_graphics(wrapi(Settings.graphics + step, 0, 3) as Settings.Graphics)
 
@@ -332,6 +346,10 @@ func _refresh() -> void:
 	fps_value.text = Settings.fps_name(Settings.fps_limit)
 	gfx_value.text = Settings.GRAPHICS_NAMES[Settings.graphics]
 	gfx_info.text = Settings.GRAPHICS_INFO[Settings.graphics]
+	ui_value.text = Settings.ui_scale_name(Settings.effective_ui_scale())
+	ui_info.text = "How big the menus, buttons and text are. The store itself stays the same size."
+	if Settings.effective_ui_scale() < Settings.ui_scale - 0.001:
+		ui_info.text += " (You picked %s, but this window only has room for this much.)" % Settings.ui_scale_name(Settings.ui_scale)
 	vsync_check.set_pressed_no_signal(Settings.vsync)
 	vsync_info.text = Settings.vsync_info()
 	fps_check.set_pressed_no_signal(Settings.show_fps)

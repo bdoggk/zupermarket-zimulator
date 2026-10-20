@@ -292,20 +292,20 @@ func _ready() -> void:
 	for s in used:
 		s.stock = 0
 	check(Game.favorites_on_shelves(witch) == 0 and is_equal_approx(Game.shopper_weight(witch), base_w), "sold out, and it's back to normal")
-	# Not selling a favorite yet: they ask for it.
+	# Not selling a favorite yet: shoppers don't ask for it (0.9.6), but the
+	# vampires in town tell you about it (Game.townsfolk_says).
 	var vamp: Dictionary = Brand.SHOPPERS.vampire
 	for id: String in vamp.likes:
 		Game.licensed.erase(id)
 	check(vamp.likes.all(func(id): return Game.can_license(id)), "(the vampire's favorites aren't licensed yet)")
 	var asked := 0
-	var asked_faves := 0
 	for i in 1500:
 		for want in store._make_shopping_list(vamp):
 			if not Game.is_licensed(want.id):
 				asked += 1
-				if vamp.likes.has(want.id):
-					asked_faves += 1
-	check(asked > 0 and asked_faves > asked * 0.6, "vampires ask for their favorites when you don't sell them (%d of %d asks)" % [asked_faves, asked])
+	check(asked == 0, "vampire shoppers only want what you sell (%d asks for anything else)" % asked)
+	var hint := Game.townsfolk_says(vamp)
+	check((vamp.likes as Array).any(func(id): return hint.contains(Game.product_name(id))), "a vampire in town hints at one: \"%s\"" % hint)
 	Game.licensed = was_licensed
 
 	print("RESULT: %d failure%s" % [fails, "" if fails == 1 else "s"])

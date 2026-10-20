@@ -1,7 +1,7 @@
 extends Node
 # Checks sprinting, smooth movement (the player moves every frame, not just
 # on physics ticks), crisp zoom steps, the Controls list in Options, and the
-# frame rate / window settings.
+# frame rate / window / UI size settings.
 #   godot --headless --path . --fixed-fps 60 res://tests/controls_test.tscn
 
 var fails := 0
@@ -175,6 +175,76 @@ func _ready() -> void:
 	old.save(Settings.PATH)
 	Settings.load_settings()
 	check(Settings.display == Settings.Display.FULLSCREEN and Settings.resolution == Vector2i(1600, 900) and Settings.fps_limit == 0, "older settings files still load")
+
+	# ---- UI size
+	hud.pause_menu.close()  # (closing Options brought it back)
+	check(Settings.ui_scale_name(1.3) == "130%" and Settings.ui_scale_name(0.7) == "70%", "UI size names")
+	var room := get_viewport().get_visible_rect().size
+	var sizes := Settings.available_ui_scales()
+	check(sizes.has(0.7) and sizes.has(1.0) and sizes.has(1.3), "UI sizes from 70%% to 130%% at %s: %s" % [room, sizes])
+	check(Settings.max_ui_scale() * Settings.UI_MIN_ROOM.x <= room.x + 0.5 and Settings.max_ui_scale() * Settings.UI_MIN_ROOM.y <= room.y + 0.5, "the biggest still leaves room for %s of UI" % Settings.UI_MIN_ROOM)
+	Settings.set_ui_scale(1.3)
+	await _frames(2)
+	check(is_equal_approx(hud.scale.x, 1.3) and hud.root.size.is_equal_approx(room / 1.3), "130%%: the HUD is drawn 1.3x, laid out in %s" % hud.root.size)
+	var screen_rect := Rect2(Vector2.ZERO, room)
+	var off_screen := []
+	for c: Control in [hud.status_panel, hud.corner_box, hud.build_button]:
+		var r: Rect2 = hud.transform * c.get_global_rect()
+		if not screen_rect.encloses(r.grow(-0.5)):
+			off_screen.append(c.name)
+	check(off_screen.is_empty(), "and it all stays on screen %s" % [off_screen])
+	# A click lands where the bigger button is drawn.
+	var at: Vector2 = hud.transform * hud.build_button.get_global_rect().get_center()
+	for press in [true, false]:
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = press
+		click.position = at
+		click.global_position = at
+		get_viewport().push_input(click)
+		await _frames(1)
+	await _frames(1)
+	check(Game.build_mode.active, "clicking the 130%% Build button works (at %s)" % at)
+	Game.build_mode.exit()
+	await _frames(2)
+	# The shopper card still sits over the shopper's head.
+	var shopper := store.spawn_customer(Brand.SHOPPERS.zombie)
+	shopper.set_process(false)  # standing still (and not turning back: the store's closed)
+	shopper.set_physics_process(false)
+	p.position = Iso.cell_to_world(shopper.current_cell() + Vector2i(1, 0))
+	await _frames(40)
+	var card: Control = hud.shopper_card
+	var head := get_viewport().get_canvas_transform() * shopper.head_position()
+	var card_foot: Vector2 = hud.transform * (card.position + Vector2(card.size.x / 2.0, card.size.y))
+	check(card.visible and card_foot.distance_to(head) < 3.0, "130%%: the shopper card is over their head (%s vs %s)" % [card_foot, head])
+	store.customer_left(shopper)
+	shopper.queue_free()
+	# Options: the arrows step through the sizes and stop at the ends.
+	opt.open()
+	await _frames(1)
+	check(opt.ui_value.text == "130%", "Options shows UI size: " + opt.ui_value.text)
+	opt._change_ui_scale(1)
+	check(is_equal_approx(Settings.ui_scale, 1.3), "> stops at the biggest")
+	opt._change_ui_scale(-1)
+	await _frames(1)
+	check(is_equal_approx(Settings.ui_scale, 1.2) and opt.ui_value.text == "120%", "< makes it smaller: " + opt.ui_value.text)
+	for i in 10:
+		opt._change_ui_scale(-1)
+	await _frames(2)
+	check(is_equal_approx(Settings.ui_scale, 0.7) and is_equal_approx(hud.scale.x, 0.7), "down to 70%")
+	check(opt.get_global_rect().size.y <= hud.root.size.y and opt.ui_value.text == "70%", "and Options fits on screen at every size")
+	Settings.set_ui_scale(2.0)  # (only by editing the settings file)
+	await _frames(2)
+	check(is_equal_approx(hud.scale.x, Settings.max_ui_scale()) and opt.ui_info.text.contains("only has room"), "too big for the window: as big as fits, and Options says so")
+	opt.close()
+	hud.pause_menu.close()
+	Settings.set_ui_scale(0.8)
+	Settings.ui_scale = 1.0
+	Settings.load_settings()
+	check(is_equal_approx(Settings.ui_scale, 0.8), "UI size is saved")
+	Settings.set_ui_scale(1.0)
+	await _frames(2)
+	check(is_equal_approx(hud.scale.x, 1.0) and hud.root.size.is_equal_approx(room), "100%: back to normal")
 
 	# Put back the real settings.
 	if settings_backup != "":

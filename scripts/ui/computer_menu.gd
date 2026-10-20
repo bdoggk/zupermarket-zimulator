@@ -426,7 +426,7 @@ func _refresh_note() -> void:
 		var top := wanted.keys()
 		top.sort_custom(func(a, b): return wanted[a] > wanted[b])
 		lines.append("")
-		lines.append("Customers asked for: %s" % ", ".join(top.slice(0, 3).map(func(id): return Game.product_name(id))))
+		lines.append("Townsfolk asked for: %s" % ", ".join(top.slice(0, 3).map(func(id): return Game.product_name(id))))
 	var low: Array = Game.store.products_running_low(Staff.REORDER_AT) if Game.in_game() else []
 	if not low.is_empty():
 		lines.append("")

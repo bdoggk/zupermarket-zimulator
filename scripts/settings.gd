@@ -9,6 +9,8 @@ extends Node
 ##                 maximizing it works too, and the game remembers.
 ##   Frame rate    a cap on the frames per second (or none)
 ##   Graphics      Low / Medium / High (see GRAPHICS_INFO)
+##   UI size       how big the menus, buttons and text are (UI_SCALES); the
+##                 store itself stays the same size (see UI.fit_layer)
 ##   VSync         on/off (on: the frame rate matches the screen)
 ##   Show FPS      a frame counter in the corner
 ##   Sound         how loud the game is (Off to 100%)
@@ -35,6 +37,8 @@ const DISPLAY_INFO := [
 ]
 
 const FPS_LIMITS := [30, 60, 90, 120, 144, 165, 240, 0]  # 0 = no limit
+const UI_SCALES := [0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3]
+const UI_MIN_ROOM := Vector2(960, 540)  # the UI needs this much room (in its own units) to fit, so big sizes stop there
 
 enum Graphics { LOW, MEDIUM, HIGH }
 const GRAPHICS_NAMES := ["Low", "Medium", "High"]
@@ -52,6 +56,7 @@ var vsync := true
 var show_fps := false
 var volume := 0.75  # 0-1, for the whole game
 var vibration := true
+var ui_scale := 1.0
 var auto_update := true
 
 var _applying := false  # we're resizing the window ourselves
@@ -106,6 +111,33 @@ static func resolution_name(r: Vector2i) -> String:
 
 static func fps_name(limit: int) -> String:
 	return "No limit" if limit <= 0 else "%d FPS" % limit
+
+
+static func ui_scale_name(v: float) -> String:
+	return "%d%%" % roundi(v * 100.0)
+
+
+## The biggest UI size this window has room for (at least 100%).
+func max_ui_scale() -> float:
+	var room: Vector2 = get_viewport().get_visible_rect().size
+	return maxf(1.0, minf(room.x / UI_MIN_ROOM.x, room.y / UI_MIN_ROOM.y))
+
+
+## The UI sizes to choose from in Options (the ones that fit this window).
+func available_ui_scales() -> Array:
+	var most := max_ui_scale() + 0.001
+	return UI_SCALES.filter(func(k: float): return k <= most)
+
+
+## The UI size actually used: the setting, or the biggest that fits.
+func effective_ui_scale() -> float:
+	return clampf(ui_scale, 0.5, max_ui_scale())
+
+
+func set_ui_scale(v: float) -> void:
+	ui_scale = clampf(snappedf(v, 0.05), 0.5, 2.0)
+	save_settings()
+	changed.emit()
 
 
 static func volume_name(v: float) -> String:
@@ -269,6 +301,7 @@ func save_settings() -> void:
 	cfg.set_value("display", "graphics", graphics)
 	cfg.set_value("display", "vsync", vsync)
 	cfg.set_value("display", "show_fps", show_fps)
+	cfg.set_value("display", "ui_scale", ui_scale)
 	cfg.set_value("audio", "volume", volume)
 	cfg.set_value("controls", "vibration", vibration)
 	cfg.set_value("updates", "automatic", auto_update)
@@ -290,6 +323,7 @@ func load_settings() -> void:
 	graphics = clampi(int(cfg.get_value("display", "graphics", graphics)), 0, 2) as Graphics
 	vsync = bool(cfg.get_value("display", "vsync", vsync))
 	show_fps = bool(cfg.get_value("display", "show_fps", show_fps))
+	ui_scale = clampf(float(cfg.get_value("display", "ui_scale", ui_scale)), 0.5, 2.0)
 	volume = clampf(float(cfg.get_value("audio", "volume", volume)), 0.0, 1.0)
 	vibration = bool(cfg.get_value("controls", "vibration", vibration))
 	auto_update = bool(cfg.get_value("updates", "automatic", auto_update))

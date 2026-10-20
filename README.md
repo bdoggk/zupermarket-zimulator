@@ -38,6 +38,18 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.9.6
+
+- **UI size** in Options: make the menus, buttons and text bigger or smaller, from
+  70% to 130%. The store itself stays the same size. On a small window it goes only
+  as big as still fits.
+- **Cashiers come back after you take over their register.** They're back a few
+  seconds after you walk away, or once you've stood there a few seconds without
+  ringing anyone up. Or press E on the register to hand it back right away.
+- **Shoppers only ask for products you've licensed.** What to license next comes from
+  the townsfolk you walk past (the computer's sticky note keeps a list), not from
+  shoppers asking for things you can't sell yet.
+
 ## What's new in 0.9.5
 
 Fixes from players' notes:
@@ -270,7 +282,8 @@ pass over every screen size and input. Fixed:
   space around it (clear some room first if something's in the way).
 - **Take over a register:** walk up to a register a cashier is running and press E.
   The cashier moves to a free register or takes a break, and gets back to work once
-  you walk away.
+  you walk away, once you've stood there a few seconds without ringing anyone up,
+  or when you press E on the register again.
 - **Skeletons in town:** a few skeleton locals wander around town all day, and
   skeleton shoppers show up from day one.
 - **General manager** (Staff tab, $100 + $45/day): walks the floor checking the
@@ -360,6 +373,7 @@ It has Resume, Save Game, Options, Save & Main Menu, and Save & Quit (PC).
 | VSync | On: the frame rate matches your screen's refresh rate and the picture never tears. Turn it off for the most FPS |
 | Show FPS | A frame counter next to the clock |
 | Sound | How loud the game is, from off to 100% (a slider) |
+| UI size | How big the menus, buttons and text are: 70% to 130%. The store itself stays the same size. On a small window it only goes as big as still fits |
 | Graphics | **Low**: simple lighting (older phones, battery life). **Medium**: store lights with darker corners. **High**: adds a flickering light tube and floating dust |
 | Automatic updates | Windows: new versions download by themselves and start the next time you open the game. Android: the main menu says when a new version is out. On by default (Windows and Android only) |
 | Vibration | Phone vibration and controller rumble. It turns on when a phone or controller is available, and you feel it when you make a sale, stock a shelf, scan, mop, level up, or when a zombie storms out |
@@ -455,9 +469,10 @@ Every $1 of sales is 1 XP (the bar next to your level shows how close the next l
 is), and every license you buy earns a bit too. Blood on the floor slowly costs you XP
 while you're open. When you level up, a panel lists everything the new level unlocks.
 Leveling up your store (6 levels) lets you buy **licenses** for new products in the
-**Products** tab. Every product you add brings a few more shoppers (up to +50%), and
-shoppers ask for products you don't sell yet: the Products tab and the day summary
-say which. There are 18 products in total:
+**Products** tab. Every product you add brings a few more shoppers (up to +50%).
+Shoppers only want what you've licensed, but the skeletons, witches and vampires in
+town tell you which of their favorites to license next (the Products tab and the day
+summary say who asked). There are 18 products in total:
 
 | Level | Products |
 |---|---|
@@ -530,7 +545,9 @@ spies they throw out).
 **Favorite products:** every favorite of theirs you have on your shelves (in stock)
 brings 75% more skeletons, witches or vampires (both favorites: 2.5 times as many).
 They're 4 times as likely to want it, and 5% less likely to go to Bone Mart for each
-one. If you don't sell it yet, they ask for it. Vampires with both their favorites
+one. Shoppers only want what you sell; if you don't sell a favorite yet, the ones in
+town tell you about it as you pass ("Got any Eye of Newt? Bone Mart doesn't!").
+Vampires with both their favorites
 stocked are the most common shoppers after dark.
 
 Out in town, a few skeletons and witches wander around all day, and a couple of
@@ -573,7 +590,8 @@ you in the red).
   will wait a little longer in a line that has a cashier. Your staff are zombies too.
   Want to run a register yourself? Walk up to it and press E to **take over**: the
   cashier goes to a free register or takes a break, and comes back once you've
-  walked away.
+  walked away or stood there a few seconds without ringing anyone up (or press E on
+  the register to hand it back).
 - **Janitor** ($20/day, up to 2): brings their own mop and cleans up the blood.
 - **Spy** ($80 to hire, $35/day, one): spies on Bone Mart and throws out its spies (see
   "Spies" above).

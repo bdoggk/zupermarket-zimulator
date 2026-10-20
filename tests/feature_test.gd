@@ -92,8 +92,7 @@ func _ready() -> void:
 				only_licensed = only_licensed and want.id in Game.licensable_ids()
 		only_licensed = only_licensed and unsold <= 1
 		asks += unsold
-	check(only_licensed, "shopping lists use licensed products, plus at most one you could license (%d of 300 lists asked for one)" % asks)
-	check(asks > 20 and asks < 150, "now and then someone asks for something you don't sell yet")
+	check(only_licensed and asks == 0, "shoppers only want products you've licensed (%d asks for anything else in 300 lists)" % asks)
 	check(milk_lists > 0, "customers start wanting newly licensed products")
 
 	# ---- scanner

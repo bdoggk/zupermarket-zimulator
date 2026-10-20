@@ -11,6 +11,19 @@ const INFO := Color(0.6, 0.82, 1.0)
 const DIM := Color(1, 1, 1, 0.55)
 
 
+## Sizes a whole UI layer (the HUD, the main menu) by Options > UI size:
+## the layer is scaled, and its root Control covers the screen in the
+## scaled units, so everything laid out from root.size still fits. The
+## root needs top-left anchors (not full rect) so its size can be set.
+static func fit_layer(layer: CanvasLayer, root: Control) -> void:
+	var k: float = Settings.effective_ui_scale()
+	if not is_equal_approx(layer.scale.x, k):
+		layer.scale = Vector2(k, k)
+	var want := layer.get_viewport().get_visible_rect().size / k
+	if not root.size.is_equal_approx(want):
+		root.size = want
+
+
 static func button(text: String, on_press: Callable, min_size := Vector2.ZERO) -> Button:
 	var b := Button.new()
 	b.text = text

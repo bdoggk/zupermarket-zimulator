@@ -938,8 +938,9 @@ func record_missed() -> void:
 	stats.missed += 1
 
 
-## A shopper (of `kind`, a Brand.SHOPPERS entry) wanted `id`, but you don't
-## sell it (no license yet). Asked about twice in a day, you get a reminder
+## Someone (of `kind`, a Brand.SHOPPERS entry: a local in town, or a shopper
+## from an older save) asked for `id`, which you don't sell yet (no license).
+## Asked about twice in a day, you get a reminder
 ## to license it. stats.wanted counts the asks per product, and
 ## stats.wanted_by who asked ("witch": 2).
 func record_wanted(id: String, kind := {}) -> void:

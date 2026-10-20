@@ -56,9 +56,6 @@ const TOWN_TRAFFIC := 1.5
 ## this many more shoppers, up to VARIETY_MAX.
 const VARIETY_TRAFFIC := 0.05
 const VARIETY_MAX := 0.5
-## How often a shopper also wants something you could sell but don't (yet).
-const WANT_UNSOLD_CHANCE := 0.25  # a shopper also wants something you could sell but don't this often...
-const FAVORITE_ASK_CHANCE := 0.5  # ...or this often for one of their favorites (Brand.SHOPPERS likes)
 const LOT_WIDTH := 4  # tiles each lot adds to the store
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
@@ -1749,15 +1746,8 @@ func _make_shopping_list(kind := {}) -> Array[Dictionary]:
 		var id := _weighted_pick(pool, likes)
 		pool.erase(id)
 		list.append({"id": id, "qty": randi_range(qty[0], qty[1])})
-	# Now and then they also want something you could sell but don't yet.
-	# A skeleton, witch or vampire whose favorite you don't sell yet asks
-	# for it a lot more often.
-	var unsold := Game.licensable_ids()
-	var faves := unsold.filter(func(id): return likes.has(id))
-	if not faves.is_empty() and randf() < FAVORITE_ASK_CHANCE:
-		list.append({"id": faves.pick_random(), "qty": 1})
-	elif not unsold.is_empty() and randf() < WANT_UNSOLD_CHANCE:
-		list.append({"id": unsold.pick_random(), "qty": 1})
+	# Only things you sell: what to license next is for the townsfolk to
+	# hint at (Game.townsfolk_says), not for shoppers to ask for.
 	return list
 
 

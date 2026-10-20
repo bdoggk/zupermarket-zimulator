@@ -1,7 +1,8 @@
 extends Node
 # 0.9.5's fixes, from players' notes:
 #  1. the computer says which kind of shopper asked for a product; skeletons,
-#     witches and vampires ask for their favorites, in the store and in town
+#     witches and vampires in town tell you their favorites (in 0.9.6,
+#     shoppers stopped asking for products you haven't licensed)
 #  2. the general manager keeps every shelf of a product stocked, and stocks
 #     new empty shelves with products that aren't on any
 #  3. stockers bring what's emptiest first, to the emptiest shelf for it
@@ -81,13 +82,22 @@ func _who_asked(hud: Node) -> void:
 	check(texts.any(func(t): return t.contains("Asked for today by 2 witches")), "the Products tab says witches asked for it")
 	hud.computer.close()
 
-	# Shoppers whose favorite you don't sell ask for it, a lot.
+	# Shoppers only want what you've licensed (0.9.6); townsfolk do the hinting.
 	var asks := 0
 	for i in 400:
 		var list: Array = Game.store._make_shopping_list(Brand.SHOPPERS.witch)
-		if list.any(func(e): return (Brand.SHOPPERS.witch.likes as Array).has(e.id) and not Game.is_licensed(e.id)):
+		if list.any(func(e): return not Game.is_licensed(e.id)):
 			asks += 1
-	check(asks > 150, "witches ask for a favorite you don't sell (%d of 400 shopping lists)" % asks)
+	check(asks == 0, "shoppers never ask for something you haven't licensed (%d of 400 witches' lists)" % asks)
+	Game.licensed[newt] = true
+	if not Game.prices.has(newt):
+		Game.prices[newt] = Game.market_price(newt)
+	var with_newt := 0
+	for i in 400:
+		if Game.store._make_shopping_list(Brand.SHOPPERS.witch).any(func(e): return e.id == newt):
+			with_newt += 1
+	Game.licensed.erase(newt)
+	check(with_newt > 120, "license a witch's favorite and witches want it a lot (%d of 400 lists)" % with_newt)
 
 	# Townsfolk tell you what they'd come in for.
 	Game.stats.wanted = {}
@@ -231,7 +241,7 @@ func _summary(hud: Node) -> void:
 		var r: Rect2 = hud.summary_panel.get_global_rect()
 		var screen := Rect2(Vector2.ZERO, hud.root.size)
 		check(screen.encloses(r), "at %dx%d the day's summary fits on the screen (%s in %s)" % [size.x, size.y, r, screen])
-	check(hud.summary_notes.text.contains("Asked for things you don't sell"), "with the long list of asked-for products wrapped underneath")
+	check(hud.summary_notes.text.contains("Townsfolk asked you to sell"), "with the long list of asked-for products wrapped underneath")
 	check(hud.summary_notes.text.contains("and %d more" % (Game.PRODUCTS.size() - hud.WANTED_SHOWN)), "naming the top %d and how many more" % hud.WANTED_SHOWN)
 	# Messages stay clear of the hints on the left and the buttons on the right.
 	hud.summary_panel.visible = false

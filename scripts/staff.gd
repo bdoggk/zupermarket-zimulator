@@ -276,7 +276,7 @@ func status_text() -> String:
 			return "Checking out a %s" % Brand.SAY.shopper
 		Job.NO_POST:
 			if on_break():
-				return "On a break (you took over register %d)" % (store.registers.find(on_break_from) + 1)
+				return "On a break: you took over register %d (they're back once you step away, or press E on it)" % (store.registers.find(on_break_from) + 1)
 			return "Can't get to a free register" if store.registers.size() > 0 else "No register"
 		Job.TO_SPILL:
 			return "Heading to a mess"

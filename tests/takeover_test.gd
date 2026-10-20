@@ -54,13 +54,6 @@ func _ready() -> void:
 		if store.is_walkable(c) and c != cashier.post and not store.is_line_spot(c):
 			stand = c
 			break
-	p.position = Iso.cell_to_world(stand)
-	await _frames(2)
-	check(reg.can_interact(p) and reg.get_prompt(p).begins_with("Take over"), "you can take over: " + reg.get_prompt(p))
-	reg.interact(p)
-	await _frames(2)
-	check(reg.taken_over and not reg.is_staffed(), "you took over the register")
-	check(cashier.on_break() or cashier.register != reg, "the cashier steps aside: " + cashier.status_text())
 	var S0 := TestIds.starter(0)
 	for s in store.shelves:
 		if not s.holds_cold():
@@ -69,6 +62,17 @@ func _ready() -> void:
 	Game.open_store()
 	store.spawn_timer = 9999.0
 	var c0 := store.spawn_customer(Brand.SHOPPERS.zombie, [{"id": S0, "qty": 1}])
+	for i in 4000:
+		await get_tree().physics_frame
+		if reg.line.has(c0):
+			break
+	p.position = Iso.cell_to_world(stand)
+	await _frames(2)
+	check(reg.can_interact(p) and reg.get_prompt(p).begins_with("Take over"), "you can take over: " + reg.get_prompt(p))
+	reg.interact(p)
+	await _frames(2)
+	check(reg.taken_over and not reg.is_staffed(), "you took over the register")
+	check(cashier.on_break() or cashier.register != reg, "the cashier steps aside: " + cashier.status_text())
 	var ready := false
 	for i in 4000:
 		await get_tree().physics_frame
@@ -89,6 +93,38 @@ func _ready() -> void:
 			back = true
 			break
 	check(back, "when you walk away, the cashier comes back to it")
+
+	# Standing right by it but not ringing anyone up: they come back too.
+	p.position = Iso.cell_to_world(stand)
+	await _frames(2)
+	reg.interact(p)  # take over again
+	await _frames(2)
+	check(reg.taken_over and cashier.on_break(), "took it over again, standing right next to it")
+	for i in int(1.5 * 60.0 / Engine.time_scale):
+		await get_tree().physics_frame
+	check(reg.taken_over, "a moment later it's still yours")
+	back = false
+	for i in 1200:
+		await get_tree().physics_frame
+		if not reg.taken_over and cashier.register == reg and cashier.is_at_post():
+			back = true
+			break
+	check(back and p.current_cell() == stand, "stop ringing people up for a few seconds, and the cashier comes back even with you standing there")
+
+	# E hands it straight back when there's nobody to scan.
+	reg.interact(p)
+	await _frames(2)
+	check(reg.taken_over and reg.can_interact(p) and reg.get_prompt(p) == "Hand the register back to %s" % cashier.staff_name, "with nobody to scan, E offers to hand it back: " + reg.get_prompt(p))
+	check(cashier.status_text().contains("press E"), "and the Staff app says how: " + cashier.status_text())
+	reg.interact(p)
+	check(not reg.taken_over, "E: it's theirs again")
+	back = false
+	for i in 300:
+		await get_tree().physics_frame
+		if cashier.register == reg and cashier.is_at_post():
+			back = true
+			break
+	check(back, "and they're straight back at it")
 
 	# ---- a stuck shopper finds a new plan
 	var c1 := store.spawn_customer(Brand.SHOPPERS.zombie, [{"id": S0, "qty": 1}])

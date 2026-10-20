@@ -9,12 +9,15 @@ extends Interactable
 ## the extra ones can be sold again, the first one can only be moved.
 ##
 ## You can take a register over from its cashier: they go to another free
-## register, or take a break and come back once you've walked away.
+## register, or take a break. They come back once you step away from it or
+## stop ringing people up for a few seconds, or right away if you press E
+## on it with nobody to scan ("Hand the register back").
 
 const TEXTURE := preload("res://assets/sprites/register.png")
 const SCAN_SECONDS_PER_ITEM := 0.35
 const TAKE_OVER_SECONDS := 0.3
-const GIVE_BACK_AFTER := 4.0  # seconds you're away from a register you took over before the cashier comes back
+const GIVE_BACK_AFTER := 4.0  # seconds you're away from a register you took over before the cashier comes back...
+const IDLE_GIVE_BACK := 6.0  # ...or that you're not ringing anyone up at it, even standing right there
 
 var line_cells: Array[Vector2i] = []  # the marked spots; [0] is the front
 var facing := Vector2i(1, 0)  # which side of the register the line starts on
@@ -23,6 +26,7 @@ var line: Array[Customer] = []
 var cashier: Staff = null  # the cashier assigned to this register, if any
 var taken_over := false  # you're running it instead of the cashier
 var _away := 0.0
+var _idle := 0.0
 
 
 func _draw() -> void:
@@ -34,13 +38,16 @@ func _process(delta: float) -> void:
 	if not taken_over:
 		return
 	var p: Player = Game.player
-	if p == null or Iso.chebyshev(p.current_cell(), cell) > 2:
+	if p == null or Iso.chebyshev(p.current_cell(), cell) > 1:
 		_away += delta
 	else:
 		_away = 0.0
-	if _away > GIVE_BACK_AFTER:  # you walked off: the cashiers can have it back
-		taken_over = false
-		_away = 0.0
+	if player_is_scanning() or (not line.is_empty() and front_customer() == null):
+		_idle = 0.0  # ringing someone up, or someone's on their way to you
+	else:
+		_idle += delta
+	if _away > GIVE_BACK_AFTER or _idle > IDLE_GIVE_BACK:  # you walked off, or stopped ringing people up
+		give_back()
 
 
 ## A cashier is assigned here and you haven't taken over.
@@ -52,6 +59,7 @@ func has_cashier() -> bool:
 func take_over() -> void:
 	taken_over = true
 	_away = 0.0
+	_idle = 0.0
 	if has_cashier():
 		var who := cashier
 		cashier = null
@@ -169,20 +177,46 @@ func get_prompt(_p: Player) -> String:
 	if c:
 		var n := c.item_count()
 		return "Scan %d item%s ($%.2f)" % [n, "" if n == 1 else "s", c.checkout_total()]
+	var back := waiting_cashier()
+	if back:
+		return "Hand the register back to %s" % back.staff_name
 	if not line.is_empty():
 		return "%s on the way..." % Brand.SAY.shopper.capitalize()
 	return "Register (no %s)" % Brand.SAY.shoppers
 
 
+## The cashiers can have it back: the one on a break from it comes straight
+## back (any cashier without a register can take it).
+func give_back() -> void:
+	taken_over = false
+	_away = 0.0
+	_idle = 0.0
+	if not Game.in_game():
+		return
+	for s in Game.store.staff:
+		if s.on_break_from == self:
+			s.timer = 0.0  # no waiting for their next look around
+
+
+## The cashier who's on a break because you took over (null if none).
+func waiting_cashier() -> Staff:
+	if not taken_over or not Game.in_game():
+		return null
+	for s in Game.store.staff:
+		if s.on_break_from == self and s.on_break():
+			return s
+	return null
+
+
 func can_interact(_p: Player) -> bool:
-	return has_cashier() or front_customer() != null
+	return has_cashier() or front_customer() != null or waiting_cashier() != null
 
 
 ## Ringing up a shopper is the job; taking over from a cashier is only
 ## what E does when nothing else is in reach (no more sending them off
 ## by accident while you reach for a box).
 func use_priority(_p: Player) -> int:
-	return 0 if has_cashier() else 2
+	return 2 if not has_cashier() and front_customer() != null else 0
 
 
 func get_action_time(_p: Player) -> float:
@@ -201,6 +235,10 @@ func interact(_p: Player) -> void:
 		take_over()
 		return
 	if front_customer() == null:
+		var back := waiting_cashier()
+		if back:
+			give_back()
+			Game.show_popup(position + Vector2(0, -56), "All yours, %s!" % back.staff_name, Color(0.8, 0.95, 1.0))
 		return
 	Settings.vibrate(0.4, 0.06)
 	checkout()

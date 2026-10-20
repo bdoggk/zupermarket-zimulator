@@ -94,10 +94,10 @@ func _ready() -> void:
 	is_touch = force_touch_ui or DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
 	Game.touch_ui = is_touch
 	root = Control.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.theme = UI.make_theme(is_touch)
 	add_child(root)
+	UI.fit_layer(self, root)  # Options > UI size
 
 	Updater.changed.connect(_on_update_changed)
 	_build_status()
@@ -160,6 +160,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	UI.fit_layer(self, root)
 	money_label.text = "$%.2f" % Game.money
 	UI.set_color(money_label, UI.GOOD if Game.money >= 0.0 else UI.BAD)
 	level_label.text = "Lv %d" % Game.level
@@ -355,21 +356,26 @@ func _message_seconds(text: String) -> float:
 
 ## Messages go across the top, in the space between the panels on the left
 ## (the status bar's hints) and the buttons on the right, so they never
-## cover either; on a narrow screen they use the whole width.
+## cover either. When that gap is too narrow (a small window, a big UI
+## size), they go underneath both, across the whole width.
 func _place_messages(s: Vector2) -> void:
 	var left := MARGIN
+	var below := status_panel.position.y + status_panel.size.y + 8.0
 	for panel: Control in [prep_panel, tutorial]:
 		if panel.visible:
 			left = maxf(left, panel.position.x + maxf(panel.size.x, panel.get_combined_minimum_size().x) + MARGIN)
+			below = maxf(below, panel.position.y + maxf(panel.size.y, panel.get_combined_minimum_size().y) + 8.0)
 	var right := corner_box.position.x - MARGIN
+	var top := 70.0
 	if right - left < MESSAGE_MIN_WIDTH:
 		left = MARGIN
 		right = s.x - MARGIN
+		top = maxf(below, corner_box.position.y + corner_box.size.y + 8.0)
 	_message_width = minf(MESSAGE_WIDTH, right - left)
 	for m: Array in _messages:
 		(m[0] as Label).custom_minimum_size.x = _message_width
 	message_box.reset_size()
-	_place(message_box, Vector2(left + (right - left - message_box.size.x) / 2.0, 70))
+	_place(message_box, Vector2(left + (right - left - message_box.size.x) / 2.0, top))
 
 
 ## Counts down the messages on screen (only while they can be seen: not
@@ -694,13 +700,19 @@ func _popup_label(text: String, color: Color) -> Label:
 	return l
 
 
+## Where a spot in the store is, in the HUD's own units (which Options >
+## UI size makes bigger or smaller than the screen's).
+func _world_to_ui(world_pos: Vector2) -> Vector2:
+	return transform.affine_inverse() * (get_viewport().get_canvas_transform() * world_pos)
+
+
 ## Shows `c` over `world_pos`, drifting up and fading away.
 func _float_up(c: Control, world_pos: Vector2) -> void:
 	root.add_child(c)
 	root.move_child(c, 0)  # under all the menus and panels
 	c.reset_size()
-	var screen := get_viewport().get_canvas_transform() * world_pos
-	c.position = (screen - Vector2(c.size.x / 2.0, c.size.y)).round()
+	var at := _world_to_ui(world_pos)
+	c.position = (at - Vector2(c.size.x / 2.0, c.size.y)).round()
 	var tw := c.create_tween().set_parallel()
 	tw.tween_property(c, "position:y", c.position.y - 30.0, 1.2)
 	tw.tween_property(c, "modulate:a", 0.0, 0.8).set_delay(0.4)
@@ -741,7 +753,7 @@ func _update_shopper_card(delta: float, hidden: bool) -> void:
 		return
 	shopper_text.text = c.describe()
 	shopper_card.reset_size()
-	var head := get_viewport().get_canvas_transform() * c.head_position()
+	var head := _world_to_ui(c.head_position())
 	var s := root.size
 	var pos := Vector2(head.x - shopper_card.size.x / 2.0, head.y - shopper_card.size.y)
 	pos.x = clampf(pos.x, MARGIN, maxf(MARGIN, s.x - shopper_card.size.x - MARGIN))
@@ -865,7 +877,7 @@ static func _spies_line(s: Dictionary) -> String:
 	return "%s's spies: %s" % [Brand.RIVAL.name, ", ".join(parts)]
 
 
-## "Asked for things you don't sell: 5 (Brains x3, Lungs x2)", or "--"
+## "Townsfolk asked you to sell: 5 (Brains x3, Lungs x2)", or "--"
 ## (left out) if nobody did.
 static func _wanted_line(wanted: Dictionary) -> String:
 	if wanted.is_empty():
@@ -880,7 +892,7 @@ static func _wanted_line(wanted: Dictionary) -> String:
 			parts.append("%s x%d" % [Game.product_name(id), int(wanted[id])])
 	if ids.size() > WANTED_SHOWN:
 		parts.append("and %d more" % (ids.size() - WANTED_SHOWN))
-	return "Asked for things you don't sell: %d (%s)" % [total, ", ".join(parts)]
+	return "Townsfolk asked you to sell: %d (%s)" % [total, ", ".join(parts)]
 
 
 func _on_next_day() -> void:

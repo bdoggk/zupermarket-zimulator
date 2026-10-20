@@ -367,8 +367,10 @@ func _act() -> void:
 			p.position = Iso.cell_to_world(c)
 		"settings":
 			var g := rng.randi() % 3
-			_note("graphics %d" % g)
+			var k: float = Settings.UI_SCALES[rng.randi() % Settings.UI_SCALES.size()]
+			_note("graphics %d, UI size %s" % [g, Settings.ui_scale_name(k)])
 			Settings.set_graphics(g as Settings.Graphics)
+			Settings.set_ui_scale(k)
 		"wait":
 			pass
 		"click":

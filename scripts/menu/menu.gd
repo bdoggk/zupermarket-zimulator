@@ -6,12 +6,15 @@ extends Node
 
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
 const TITLE := preload("res://assets/sprites/title.png")
-const TITLE_SCALE := 7
+const TITLE_SCALE := 7  # the title's pixels, as big as there's room for...
+const MIN_TITLE_SCALE := 3  # ...down to this on a small window or a big UI size
 const UPDATE_WIDTH := 340.0
 
 enum Screen { MAIN, NEW, LOAD, CONFIRM, OPTIONS }
 
 var screen := Screen.MAIN
+var layer: CanvasLayer
+var title: TextureRect
 var root: Control
 var main_panel: PanelContainer
 var main_box: VBoxContainer
@@ -43,13 +46,13 @@ func _ready() -> void:
 	var touch := DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
 	Game.touch_ui = touch
 
-	var layer := CanvasLayer.new()
+	layer = CanvasLayer.new()
 	add_child(layer)
 	root = Control.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.theme = UI.make_theme(touch)
 	layer.add_child(root)
+	UI.fit_layer(layer, root)  # Options > UI size
 
 	_build_main()
 	_build_slots()
@@ -66,13 +69,28 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	UI.fit_layer(layer, root)
 	var s := root.size
+	_fit_title(s)
 	_place(main_panel, Vector2((s.x - main_panel.size.x) / 2.0, maxf(10.0, (s.y - main_panel.size.y) / 2.0)))
 	_place(slots_panel, (s - slots_panel.size) / 2.0)
 	_place(confirm_panel, (s - confirm_panel.size) / 2.0)
 	_place(options, (s - options.size) / 2.0)
 	_place(version_label, s - version_label.size - Vector2(14, 10))
 	_place_update(s)
+
+
+## The title shrinks (by whole pixels) when the menu wouldn't fit the
+## window's height otherwise.
+func _fit_title(s: Vector2) -> void:
+	var px := Vector2(TITLE.get_width(), TITLE.get_height())
+	var rest := main_panel.get_combined_minimum_size().y - title.custom_minimum_size.y
+	var k := TITLE_SCALE
+	while k > MIN_TITLE_SCALE and rest + px.y * k > s.y - 20.0:
+		k -= 1
+	if title.custom_minimum_size != px * k:
+		title.custom_minimum_size = px * k
+		title.size = px * k
 
 
 ## Beside the menu when there's room, otherwise over the top of it.
@@ -172,7 +190,7 @@ func _build_main() -> void:
 	main_box = VBoxContainer.new()
 	main_box.add_theme_constant_override("separation", 10)
 	main_panel.add_child(main_box)
-	var title := UI.icon(TITLE, Vector2(TITLE.get_width(), TITLE.get_height()) * TITLE_SCALE)
+	title = UI.icon(TITLE, Vector2(TITLE.get_width(), TITLE.get_height()) * TITLE_SCALE)
 	main_box.add_child(title)
 	var tagline := UI.label(Brand.TAGLINE, UI.DIM)
 	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
