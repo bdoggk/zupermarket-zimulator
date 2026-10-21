@@ -233,6 +233,11 @@ func _wait_for_store() -> void:
 	store = Game.store
 	p = store.player
 	hud = get_tree().current_scene.get_node("HUD")
+	# Random clicks and taps mustn't quit the game or leave it for the main
+	# menu (saving and loading is its own action).
+	for b in hud.pause_menu.find_children("*", "Button", true, false):
+		if (b as Button).text in ["Save & Quit", "Save & Main Menu"]:
+			b.visible = false
 	build = Game.build_mode
 	baseline = -1
 	shopper_watch = {}

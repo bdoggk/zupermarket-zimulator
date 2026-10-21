@@ -38,6 +38,21 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.9.8
+
+- **Every button on the store computer works without the mouse or touch screen.**
+  With the keyboard (on a Mac or PC): the arrow keys pick any button, Enter or Space
+  presses it, **Tab** / Shift+Tab or **1-4** switch apps, and Esc goes back. With a
+  controller (like the AYN Thor's): the d-pad, A and B, and **LB / RB** switch apps.
+  That includes the buttons you couldn't reach before: the markup's < and >, the
+  window's X, and the taskbar (Home, the apps, Close PC).
+- Left and right stay on the row you're on (along one product's -, +, = and Order box),
+  and pressing Set all prices or Auto keeps it selected.
+- While the computer (or a shop, or the message log) is open, the arrow keys and the
+  stick don't walk you away, and E doesn't kick you back to the computer's desktop.
+- If nothing on the computer is selected (you turned it on with a tap or a click), the
+  first press of an arrow key or the d-pad selects something.
+
 ## What's new in 0.9.7
 
 Touch-screen fixes (Android, the AYN Thor):
@@ -733,13 +748,15 @@ computer. A scanner icon appears next to your money once you own it.
 | Pause menu | Esc or P | II button / back button |
 | Recent messages | M, or the Log button | Log button |
 | Close / cancel | Esc | Back button |
+| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-4 switch apps, Esc goes back | Tap |
 
 A gamepad works too: left stick to move, LT or L3 (sprint), A (use), X (scan), Y
 (build), Start (pause), Back/View (messages), B (back). Every menu works with the d-pad, A and B, the store
 computer and its apps included. In build mode the tile in the middle of the screen is
 the cursor: left stick to look around, d-pad left/right (or LB) to pick what to buy or
 Move / Rotate / Sell / Expand, A to place it (or pick up, sell...), RB to turn it, B to
-cancel.
+cancel. On the store computer the d-pad reaches every button (the markup, Set all prices,
+Auto, the window's X and the taskbar too), and LB / RB switch apps.
 
 **Forgot a key?** Pause (Esc) > Options > **Controls** lists them all in the game.
 Menus can be navigated with the d-pad, arrow keys, A/Enter and B/Esc.

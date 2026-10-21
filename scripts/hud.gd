@@ -196,6 +196,7 @@ func _process(delta: float) -> void:
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
 	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or summary_panel.visible or message_log.visible
+	Game.menu_open = menu_open  # (the arrow keys pick buttons, not walk you away)
 	# After closing you can keep working (stock, order, build...) until you
 	# press Space for the summary and the next day.
 	var summing_up := summary_panel.visible

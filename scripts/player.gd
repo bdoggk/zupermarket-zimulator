@@ -71,7 +71,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	var typing := is_typing()
+	var typing := is_typing() or Game.menu_open  # (the keys are working the menu)
 	var input := Vector2.ZERO if typing else Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if is_busy() and input != Vector2.ZERO:
 		cancel_action()
@@ -127,6 +127,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_WHEEL_DOWN:
 				if not _over_menu():
 					zoom_by(1.0 / 1.1)
+	elif Game.menu_open:
+		return  # E / Q don't reach the store under the computer (or a shop)
 	elif event.is_action_pressed("interact"):
 		try_interact()
 	elif event.is_action_pressed("scan"):

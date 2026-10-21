@@ -107,6 +107,7 @@ var auto_price := false  # your prices follow the market automatically
 var play_time := 0.0  # seconds played in this save
 var slot := -1  # save slot being played (0-2), -1 = not saving (e.g. tests)
 var touch_ui := false  # set by the HUD
+var menu_open := false  # a window is open over the store (the computer, a shop...): you stay put (set by the HUD)
 var staff: Array[Dictionary] = []  # everyone you've hired: [{id, role, name, xp, level}]
 var _next_staff_id := 1
 var expansions := 0  # lots next door you've bought (Brand.EXPANSIONS)

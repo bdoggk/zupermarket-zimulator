@@ -1,7 +1,8 @@
 extends Node
 # Checks sprinting, smooth movement (the player moves every frame, not just
 # on physics ticks), crisp zoom steps, the Controls list in Options, and the
-# frame rate / window / UI size settings.
+# frame rate / window / UI size settings, and the store computer with just
+# the keyboard.
 #   godot --headless --path . --fixed-fps 60 res://tests/controls_test.tscn
 
 var fails := 0
@@ -176,6 +177,49 @@ func _ready() -> void:
 	Settings.load_settings()
 	check(Settings.display == Settings.Display.FULLSCREEN and Settings.resolution == Vector2i(1600, 900) and Settings.fps_limit == 0, "older settings files still load")
 
+	# ---- the store computer with just the keyboard (no mouse, no controller)
+	hud.pause_menu.close()  # (closing Options brought it back)
+	await _frames(1)
+	var pc: Node = hud.computer
+	Game.money = 5000.0
+	hud.open_computer()
+	await _frames(3)
+	check(_focus() == pc.desktop_icons[pc.tab], "the computer opens with an app selected: " + _focus_name())
+	check(pc.pad_hint.visible and pc.pad_hint.text.contains("Tab"), "the title bar says Tab switches apps: " + pc.pad_hint.text)
+	await _key(KEY_UP)
+	await _key(KEY_UP)
+	await _key(KEY_UP)
+	await _key(KEY_ENTER)
+	check(pc.is_app_open() and pc.tab == 0, "Enter opens Stock & Prices")
+	check(_text() == "-", "with its first button selected: " + _focus_name())
+	var stood := p.position
+	await _key(KEY_RIGHT)
+	check(_text() == "+", "the arrow keys go along the row: " + _focus_name())
+	check(p.position.is_equal_approx(stood), "and don't walk you away from the computer")
+	var first_id: String = Game.unlocked_ids()[0]
+	var was_price: float = Game.prices[first_id]
+	await _key(KEY_ENTER)
+	check(is_equal_approx(Game.prices[first_id], was_price + Game.PRICE_STEP), "Enter on + raises the price ($%.2f)" % Game.prices[first_id])
+	await _key(KEY_E)
+	check(pc.is_app_open() and pc.tab == 0, "E doesn't kick you back to the desktop")
+	await _key(KEY_TAB)
+	await _frames(2)
+	check(pc.tab == 1 and _focus() != null, "Tab: the next app (Products)")
+	await _key(KEY_TAB, true)
+	await _frames(2)
+	check(pc.tab == 0, "Shift+Tab: back to Stock & Prices")
+	await _key(KEY_3)
+	await _frames(2)
+	check(pc.tab == 2 and _text().begins_with("Hire"), "3: Staff, with Hire selected: " + _focus_name())
+	var staff := Game.staff.size()
+	await _key(KEY_SPACE)
+	await _frames(2)
+	check(Game.staff.size() == staff + 1, "Space hires someone")
+	await _key(KEY_ESCAPE)
+	check(pc.visible and not pc.is_app_open(), "Esc: back to the desktop")
+	await _key(KEY_ESCAPE)
+	check(not pc.visible, "Esc again turns it off")
+
 	# ---- UI size
 	hud.pause_menu.close()  # (closing Options brought it back)
 	check(Settings.ui_scale_name(1.3) == "130%" and Settings.ui_scale_name(0.7) == "70%", "UI size names")
@@ -275,6 +319,30 @@ func _walk_for(p: Player, cell: Vector2i, seconds: float, sprint: bool, way := "
 	Input.action_release("sprint")
 	await _frames(1)
 	return p.position.distance_to(from)
+
+
+func _key(k: Key, shift := false) -> void:
+	for down in [true, false]:
+		var e := InputEventKey.new()
+		e.keycode = k
+		e.physical_keycode = k
+		e.shift_pressed = shift
+		e.pressed = down
+		Input.parse_input_event(e)
+		await _frames(2)
+
+
+func _focus() -> Control:
+	return get_viewport().gui_get_focus_owner()
+
+
+func _text() -> String:
+	return (_focus() as Button).text if _focus() is Button else "(nothing)"
+
+
+func _focus_name() -> String:
+	var f := _focus()
+	return "%s '%s'" % [f.get_class(), (f as Button).text if f is Button else ""] if f else "(nothing)"
 
 
 func _frames(n: int) -> void:

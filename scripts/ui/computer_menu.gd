@@ -50,6 +50,10 @@ var price_fields: Array[LineEdit] = []  # Stock & Prices: type a price in
 var _rebuild_later := false  # something changed while you were typing a price
 var window_close: Button  # the app window's X
 var taskbar: PanelContainer
+var markup_buttons: Array[Button] = []  # Stock & Prices: < and >
+var home_button: Button
+var off_button: Button  # Close PC
+var pad_hint: Label  # "LB / RB: other apps", with a controller
 
 
 func _ready() -> void:
@@ -100,6 +104,10 @@ func _ready() -> void:
 	chin.add_child(led)
 
 	Game.unlocks_changed.connect(_rebuild_if_open)
+	# Left and right on a controller stay on the row: along the taskbar, the
+	# markup buttons, and the buttons of one product (or person) in an app.
+	_chain([home_button] + tab_buttons + [off_button])
+	_chain(markup_buttons + [match_button, auto_button])
 	Game.market_changed.connect(_rebuild_if_open)
 	Game.staff_changed.connect(_rebuild_if_open)
 
@@ -238,6 +246,11 @@ func _build_window() -> void:
 	window_title = UI.label("")
 	window_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(window_title)
+	pad_hint = UI.label("LB / RB: other apps", Color(0.85, 0.95, 0.85, 0.75))
+	pad_hint.add_theme_font_size_override("font_size", 15)
+	pad_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pad_hint.visible = false
+	title_row.add_child(pad_hint)
 	var x := UI.button("X", go_home, Vector2(44, 36))
 	window_close = x
 	x.tooltip_text = "Back to the desktop"
@@ -294,6 +307,7 @@ func _build_window() -> void:
 	var up := UI.button(">", func(): _change_markup(Game.MARKUP_STEP), Vector2(44, 52))
 	up.tooltip_text = "Higher markup"
 	markup_row.add_child(up)
+	markup_buttons = [down, up]
 	match_button = UI.button("Set all prices", func():
 		Game.match_all_prices()
 		_rebuild_if_open(), Vector2(0, 52))
@@ -334,6 +348,7 @@ func _build_taskbar() -> void:
 	row.add_theme_constant_override("separation", 6)
 	taskbar.add_child(row)
 	var home := UI.button("Home", go_home, Vector2(0, 40))
+	home_button = home
 	home.icon = SKULL
 	home.tooltip_text = "The desktop"
 	row.add_child(home)
@@ -359,6 +374,7 @@ func _build_taskbar() -> void:
 	clock_label = UI.label("")
 	row.add_child(clock_label)
 	var off := UI.button("Close PC", close, Vector2(0, 40))
+	off_button = off
 	off.add_theme_color_override("font_color", UI.BAD)
 	row.add_child(off)
 
@@ -385,6 +401,7 @@ func _on_auto_toggled(on: bool) -> void:
 ## Turns the computer on: the desktop.
 func open() -> void:
 	visible = true
+	_focus_ready()
 	go_home()
 	_fit_girl.call_deferred()
 
@@ -419,8 +436,7 @@ func show_tab(t: Tab) -> void:
 	window_title.text = TAB_NAMES[t]
 	window_icon.texture = desktop_icons[t].icon
 	window.visible = true
-	UI.pad_focus(auto_button)  # (a controller may have been plugged in since)
-	UI.pad_focus(match_button)
+	_focus_ready()
 	_rebuild()
 	scroll.scroll_vertical = 0
 
@@ -498,7 +514,7 @@ func _refocus(i: int) -> void:
 	if buttons.is_empty():
 		var f := UI.first_focusable(window)
 		if f == null:  # nothing to press in this app right now: the X, then
-			UI.pad_focus(window_close)
+			_pc_focus(window_close)
 			f = window_close
 		f.grab_focus()
 		return
@@ -520,7 +536,10 @@ func _rebuild() -> void:
 	UI.clear(body)
 	_updaters.clear()
 	price_fields.clear()
-	if UI.has_pad() and visible:
+	# (A button outside the list, like Set all prices or the taskbar's, stays
+	# selected.)
+	var keep: bool = had != null and not body.is_ancestor_of(had) and (window.is_ancestor_of(had) or taskbar.is_ancestor_of(had))
+	if _keys() and visible and not keep:
 		_refocus.call_deferred(was)
 	news_label.text = "NEWS: " + Game.market.news if Game.market.news != "" else "No big news today."
 	match_button.visible = tab == Tab.STOCK
@@ -552,7 +571,7 @@ func _grid(columns: int) -> GridContainer:
 func _row_button(text: String, on_press: Callable, min_size := Vector2(52, 52)) -> Button:
 	var b := UI.button(text, on_press, min_size)
 	b.mouse_filter = Control.MOUSE_FILTER_PASS
-	UI.pad_focus(b)
+	_pc_focus(b)
 	return b
 
 
@@ -621,12 +640,126 @@ func _apply_typed_price(id: String, f: LineEdit) -> void:
 		_rebuild_if_open.call_deferred()
 
 
-## Clicking anywhere else finishes typing a price.
+## Left / right go from each one to the next, and stop at the ends.
+func _chain(row: Array) -> void:
+	for i in row.size():
+		var c: Control = row[i]
+		c.focus_neighbor_left = c.get_path_to(row[maxi(i - 1, 0)])
+		c.focus_neighbor_right = c.get_path_to(row[mini(i + 1, row.size() - 1)])
+
+
+## Opens app `t` with its first button selected (LB / RB, Tab, 1-4).
+func _open_app(t: int) -> void:
+	show_tab(t as Tab)
+	if _keys():
+		_refocus.call_deferred(0)
+	get_viewport().set_input_as_handled()
+
+
+## The next button left (-1) or right (1) of `c` on its row of the list,
+## or null at the end of the row.
+func _row_neighbor(c: Control, dir: int) -> Control:
+	var at := c.get_global_rect()
+	var best: Control = null
+	var best_dx := INF
+	for other in _body_buttons():
+		var r := other.get_global_rect()
+		if other == c or not other.is_visible_in_tree() or absf(r.get_center().y - at.get_center().y) > at.size.y / 2.0:
+			continue
+		var dx := (r.get_center().x - at.get_center().x) * dir
+		if dx > 0.0 and dx < best_dx:
+			best_dx = dx
+			best = other
+	return best
+
+
+## Every button on the PC can be picked with a controller's d-pad or the
+## arrow keys (and pressed with A, Enter or Space): the apps' buttons, the
+## markup, Set all prices and Auto, the window's X and the taskbar. Not on
+## a touch screen without a controller (no outlines in the way there).
+func _keys() -> bool:
+	return UI.has_pad() or not Game.touch_ui
+
+
+func _pc_focus(c: Control) -> void:
+	if _keys():
+		c.focus_mode = Control.FOCUS_ALL
+		c.add_theme_stylebox_override("focus", UI.focus_style())
+
+
+## (Checked whenever it's turned on or an app opens: a controller may have
+## been plugged in since.)
+func _focus_ready() -> void:
+	var pad := UI.has_pad()
+	pad_hint.visible = _keys()
+	if pad and not Game.touch_ui:
+		pad_hint.text = "LB / RB or Tab: other apps"
+	elif pad:
+		pad_hint.text = "LB / RB: other apps"
+	else:
+		pad_hint.text = "Tab: other apps"
+	if not _keys():
+		return
+	var buttons: Array[Control] = [match_button, auto_button, window_close, home_button, off_button]
+	buttons.append_array(markup_buttons)
+	buttons.append_array(tab_buttons)
+	for b in buttons:
+		_pc_focus(b)
+
+
 func _input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and visible:
+	if not visible:
+		return
+	# Clicking anywhere else finishes typing a price.
+	if event is InputEventMouseButton and event.pressed:
 		var f := get_viewport().gui_get_focus_owner()
 		if f is LineEdit and f in price_fields and not f.get_global_rect().has_point(f.get_global_mouse_position()):
 			f.release_focus()
+		return
+	# Left / right in an app's list stay on the row (and stop at its ends)
+	# instead of jumping off to the footer or the taskbar.
+	if event is InputEventJoypadButton or event is InputEventKey:
+		for dir: int in [-1, 1]:
+			if event.is_action_pressed("ui_left" if dir < 0 else "ui_right", true):
+				var f := get_viewport().gui_get_focus_owner()
+				if f and body.is_ancestor_of(f) and not f is LineEdit:  # (the arrows move the cursor in a price)
+					var to := _row_neighbor(f, dir)
+					if to:
+						to.grab_focus()
+					get_viewport().set_input_as_handled()
+					return
+	# LB / RB or Tab / Shift+Tab: the app to the left / right (from the
+	# desktop: the first / last). 1-4 open an app straight away.
+	var step := 0
+	if event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
+		step = -1 if event.button_index == JOY_BUTTON_LEFT_SHOULDER else 1
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_TAB:
+		step = -1 if event.shift_pressed else 1
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode >= KEY_1 and event.keycode < KEY_1 + TAB_NAMES.size():
+		if not get_viewport().gui_get_focus_owner() is LineEdit:  # (typing a price)
+			_open_app(event.keycode - KEY_1)
+			return
+	if step != 0:
+		var t: int = tab + step if window.visible else (0 if step > 0 else TAB_NAMES.size() - 1)
+		_open_app(wrapi(t, 0, TAB_NAMES.size()))
+		return
+	var picking := UI.is_pad_input(event)
+	if event is InputEventKey and event.pressed and _keys():
+		for a in ["ui_up", "ui_down", "ui_left", "ui_right", "ui_accept"]:
+			if event.is_action(a):
+				picking = true
+	if not picking:
+		return
+	# Nothing on the PC selected (it was turned on with a tap or a click, or
+	# the controller was picked up just now): the first press selects something.
+	var f := get_viewport().gui_get_focus_owner()
+	if f == null or not is_ancestor_of(f):
+		_focus_ready()
+		if window.visible:
+			_refocus(0)
+		else:
+			desktop_icons[tab].grab_focus()
+		get_viewport().set_input_as_handled()
 
 func _build_stock() -> void:
 	var rival := Game.store.town != null and not Game.rival_owned

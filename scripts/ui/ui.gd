@@ -67,10 +67,11 @@ static func focus_style() -> StyleBoxFlat:
 
 ## A controller is plugged in (or built in, like on a handheld).
 static func has_pad() -> bool:
-	return pretend_pad or not Input.get_connected_joypads().is_empty()
+	return pretend_pad or pad_seen or not Input.get_connected_joypads().is_empty()
 
 
 static var pretend_pad := false  # tests: act as if a controller was plugged in
+static var pad_seen := false  # a controller button or stick was used (see Settings)
 
 
 ## With a controller, `c` can be picked with the d-pad and A (and shows the

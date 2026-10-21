@@ -70,9 +70,19 @@ func _ready() -> void:
 		fps_limit = 60
 	load_settings()
 	apply()
-	Input.joy_connection_changed.connect(func(_device: int, _connected: bool): changed.emit())
+	Input.joy_connection_changed.connect(func(_device: int, _connected: bool):
+		if Input.get_connected_joypads().is_empty():
+			UI.pad_seen = false
+		changed.emit())
 	if is_desktop():
 		get_window().size_changed.connect(_on_window_resized)
+
+
+## A controller button or stick: there's a controller, even if the system
+## hasn't listed it (built-in controls on some handhelds), see UI.has_pad.
+func _input(event: InputEvent) -> void:
+	if not UI.pad_seen and UI.is_pad_input(event):
+		UI.pad_seen = true
 
 
 ## Phones and tablets: no window or resolution options.
