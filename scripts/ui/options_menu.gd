@@ -211,6 +211,8 @@ func _selector(parent: Control, text: String, on_change: Callable) -> Array:
 	row.add_child(value)
 	var right := UI.menu_button(">", func(): on_change.call(1), Vector2(56, 52))
 	row.add_child(right)
+	for b: Button in [left, right]:
+		b.mouse_filter = Control.MOUSE_FILTER_PASS  # a drag that starts on it still scrolls the list (touch screens)
 	if _first == null:
 		_first = right
 	return [value, left, right]
@@ -284,6 +286,7 @@ func _check(parent: Control, text: String, on_toggle: Callable) -> CheckButton:
 	row.add_child(name_label)
 	var c := CheckButton.new()
 	c.custom_minimum_size = Vector2(120, 52)
+	c.mouse_filter = Control.MOUSE_FILTER_PASS  # (so a drag on it scrolls the list)
 	c.toggled.connect(on_toggle)
 	var focus := StyleBoxFlat.new()
 	focus.draw_center = false

@@ -26,6 +26,7 @@ var speed := 4.0
 var minutes := 60.0
 var saveload := true
 var mode := "chaos"  # or "staff": set up a big store with every kind of staff, then just watch
+var touch := false  # TOUCH=1: a touch screen, with finger taps, slides and pinches too
 var frame := 0
 var game_time := 0.0
 var failures := {}  # kind -> count
@@ -102,6 +103,9 @@ func _ready() -> void:
 	saveload = OS.get_environment("SAVELOAD") != "0"
 	if OS.get_environment("MODE") != "":
 		mode = OS.get_environment("MODE")
+	touch = OS.get_environment("TOUCH") == "1"
+	if touch:
+		Input.emulate_touch_from_mouse = true  # (a touch screen, like a phone: see touch_test.gd)
 	logger = ErrorLog.new()
 	logger.driver = self
 	OS.add_logger(logger)
@@ -313,8 +317,11 @@ func _act() -> void:
 		"mop": 5.0, "computer": 3.0, "build": 1.5, "shop": 1.5, "rival": 0.5, "pause": 0.5,
 		"saveload": 0.5 if saveload else 0.0, "spawn": 2.0, "zoom": 1.0, "staff": 2.0, "teleport": 3.0,
 		"settings": 0.4, "wait": 6.0, "click": 4.0, "key": 4.0, "wheel": 0.5, "spy": 1.0,
+		"finger": 6.0 if touch else 0.0,
 	})
 	match what:
+		"finger":
+			_finger()
 		"walk":
 			var c := _random_reachable()
 			_note("walk to %s" % c)
@@ -743,6 +750,48 @@ func _click(at: Vector2, button: MouseButton) -> void:
 		if pressed:
 			e.button_mask = MOUSE_BUTTON_MASK_LEFT if button == MOUSE_BUTTON_LEFT else 0
 		get_viewport().push_input(e)
+
+
+## A finger (or two) somewhere on the screen: a tap, a slide or a pinch,
+## through Input like a real touch screen (so the mouse is emulated too).
+func _finger() -> void:
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var at := get_tree().root.get_final_transform() * Vector2(rng.randf() * size.x, rng.randf() * size.y)
+	var kind := rng.randi() % 3
+	_note("finger %s at %s" % [["tap", "slide", "pinch"][kind], at.round()])
+	_touch(at, true, 0)
+	match kind:
+		1:
+			var by := Vector2(rng.randf_range(-300, 300), rng.randf_range(-300, 300))
+			for i in 6:
+				_drag(at + by * (i + 1) / 6.0, by / 6.0, 0)
+			at += by
+		2:
+			var other := at + Vector2(rng.randf_range(40, 200), rng.randf_range(-60, 60))
+			_touch(other, true, 1)
+			var spread := rng.randf_range(-1.0, 1.0)
+			for i in 6:
+				var to := other + (other - at) * spread * (i + 1) / 6.0
+				_drag(to, (other - at) * spread / 6.0, 1)
+			_touch(other + (other - at) * spread, false, 1)
+	_touch(at, false, 0)
+
+
+func _touch(at: Vector2, down: bool, finger: int) -> void:
+	var e := InputEventScreenTouch.new()
+	e.index = finger
+	e.position = at
+	e.pressed = down
+	Input.parse_input_event(e)
+
+
+func _drag(at: Vector2, by: Vector2, finger: int) -> void:
+	var e := InputEventScreenDrag.new()
+	e.index = finger
+	e.position = at
+	e.relative = by
+	e.screen_relative = by
+	Input.parse_input_event(e)
 
 
 func _key(k: Key) -> void:

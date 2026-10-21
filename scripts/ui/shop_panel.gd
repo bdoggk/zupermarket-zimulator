@@ -88,6 +88,7 @@ func _rebuild() -> void:
 		left.custom_minimum_size.x = 96
 		grid.add_child(left)
 		var buy := UI.menu_button("", func(): Game.buy_brew(id), Vector2(170, 52))
+		buy.mouse_filter = Control.MOUSE_FILTER_PASS  # a drag that starts on it still scrolls the list (touch screens)
 		grid.add_child(buy)
 		if _first_buy == null:
 			_first_buy = buy

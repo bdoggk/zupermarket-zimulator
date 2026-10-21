@@ -49,6 +49,7 @@ var _updaters: Array[Callable] = []  # refresh numbers every frame
 var price_fields: Array[LineEdit] = []  # Stock & Prices: type a price in
 var _rebuild_later := false  # something changed while you were typing a price
 var window_close: Button  # the app window's X
+var taskbar: PanelContainer
 
 
 func _ready() -> void:
@@ -195,7 +196,7 @@ func _style_desktop_icon(b: Button) -> void:
 func _fit_girl() -> void:
 	if girl == null:
 		return
-	var room := screen.size.y - TASKBAR_HEIGHT
+	var room := screen.size.y + (taskbar.offset_top if taskbar else -TASKBAR_HEIGHT)
 	var scale := clampi(floori(room * 0.92 / GIRL.get_height()), 1, 5)
 	var sz := Vector2(GIRL.get_width(), GIRL.get_height()) * scale
 	girl.size = sz
@@ -307,9 +308,19 @@ func _build_window() -> void:
 	footer.add_child(auto_button)
 
 
+## How wide the PC's screen has to be for the open app and the taskbar to
+## fit (big touch-screen text makes Stock & Prices wider than usual). The
+## HUD makes the PC that wide, and shrinks it if the real screen isn't.
+func needed_screen_width() -> float:
+	var w := taskbar.get_combined_minimum_size().x
+	if window.visible:
+		w = maxf(w, window.get_combined_minimum_size().x + window.offset_left - window.offset_right)
+	return w
+
+
 ## Along the bottom of the screen: Home, the apps, the time and Close PC.
 func _build_taskbar() -> void:
-	var taskbar := PanelContainer.new()
+	taskbar = PanelContainer.new()
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.09, 0.09, 0.11, 0.97)
 	style.border_color = Color(0.32, 0.34, 0.4)
@@ -444,6 +455,13 @@ func _process(_delta: float) -> void:
 	else:
 		level_label.text = "Lv %d  %d/%d XP" % [Game.level, int(Game.xp - Game.level_start_xp()), int(next - Game.level_start_xp())]
 	clock_label.text = Game.clock_text()
+	# The taskbar is as tall as its buttons (taller with touch-screen text).
+	var bar_h := maxf(TASKBAR_HEIGHT, taskbar.get_combined_minimum_size().y)
+	if not is_equal_approx(taskbar.offset_top, -bar_h):
+		taskbar.offset_top = -bar_h
+		desktop.offset_bottom = -bar_h
+		window.offset_bottom = -bar_h - 8
+		_fit_girl()
 	if window.visible:
 		for u in _updaters:
 			u.call()
@@ -553,8 +571,44 @@ func _price_field(id: String) -> LineEdit:
 	f.tooltip_text = "Type a price and press Enter"
 	f.text_submitted.connect(func(_t: String): f.release_focus())
 	f.focus_exited.connect(func(): _apply_typed_price(id, f))
+	f.focus_exited.connect(_show_type_room.bind(false))
+	if Game.touch_ui:
+		# A finger that lands on a price is often just scrolling the list:
+		# the box itself ignores touches, and a see-through button over it
+		# starts typing once a tap is let go (a drag scrolls instead).
+		f.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var tap := Button.new()
+		tap.flat = true
+		tap.focus_mode = Control.FOCUS_NONE
+		tap.mouse_filter = Control.MOUSE_FILTER_PASS
+		tap.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tap.pressed.connect(_type_price.bind(f))
+		f.add_child(tap)
 	price_fields.append(f)
 	return f
+
+
+## Touch screens: starts typing a price, with its row moved to the top of
+## the list so the on-screen keyboard doesn't cover it.
+func _type_price(f: LineEdit) -> void:
+	_show_type_room(true)
+	f.edit()  # (selects it all and brings up the keyboard)
+	await get_tree().process_frame  # (the room at the bottom of the list, laid out)
+	if is_instance_valid(f) and f.has_focus():
+		var row_top := (body.get_global_transform().affine_inverse() * f.global_position).y
+		scroll.scroll_vertical = maxi(0, int(row_top) - 8)
+
+
+## Room under the last row while typing, so even it can scroll up to the top.
+func _show_type_room(on: bool) -> void:
+	var room := body.get_node_or_null("TypeRoom")
+	if room == null and on:
+		room = Control.new()
+		room.name = "TypeRoom"
+		room.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		body.add_child(room)
+	if room:
+		room.custom_minimum_size.y = scroll.size.y if on else 0.0
 
 
 func _apply_typed_price(id: String, f: LineEdit) -> void:

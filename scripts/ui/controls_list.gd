@@ -25,10 +25,10 @@ static func rows() -> Array:
 		["Place / confirm (build mode)", "Click", "A (on the tile in the middle of the screen)", "Tap twice"],
 		["Cancel (build mode)", "Right-click or Esc", "B", "Back button"],
 		["Look around (build mode)", "Drag, or WASD", "Left stick", "Drag"],
-		["Zoom", "Mouse wheel, or the - / + buttons", "", "- / + buttons"],
+		["Zoom", "Mouse wheel, or the - / + buttons", "", "Pinch with two fingers, or - / +"],
 		["Pause menu", "Esc or P", "Start", "II button"],
 		["Recent messages", "M, or the Log button", "Back / View", "Log button"],
-		["Menus", "Arrow keys, Enter, Esc", "D-pad, A, B", "Tap"],
+		["Menus", "Arrow keys, Enter, Esc", "D-pad, A, B", "Tap; drag a list to scroll it"],
 	]
 
 

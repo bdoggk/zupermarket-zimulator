@@ -59,7 +59,7 @@ var use_button: Button
 var scan_button: Button
 var run_button: Button  # touch screens: sprint on/off
 var message_box: VBoxContainer
-var computer: PanelContainer
+var computer: ComputerMenu
 var rival_panel: PanelContainer
 var shop_panel: PanelContainer  # a little shop's wares (the witch's, the vampire's)
 var message_log: MessageLog  # M / Back / Log: the recent messages
@@ -91,6 +91,7 @@ var _prompt := ["", false, ""]
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS  # keeps working in build mode
+	add_child(PinchZoom.new())  # two fingers zoom (touch screens)
 	is_touch = force_touch_ui or DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
 	Game.touch_ui = is_touch
 	root = Control.new()
@@ -209,7 +210,15 @@ func _process(delta: float) -> void:
 
 	# Keep things pinned to the screen edges whatever the window size.
 	var s := root.size
-	computer.custom_minimum_size = Vector2(minf(1100.0, s.x - 2 * MARGIN), minf(660.0, s.y - 2 * MARGIN))
+	var room := s - Vector2(2, 2) * MARGIN
+	# The store computer is as wide as the open app needs, and shrinks to
+	# fit if that's more than the screen has (big text on a small screen).
+	var pc_w := minf(1100.0, room.x)
+	if computer.visible and computer.screen.size.x > 0.0:
+		pc_w = maxf(pc_w, computer.needed_screen_width() + computer.size.x - computer.screen.size.x)
+	var pc_f := minf(1.0, room.x / pc_w)
+	computer.custom_minimum_size = Vector2(pc_w, minf(660.0, room.y) / pc_f).floor()
+	_set_scale(computer, pc_f)
 	rival_panel.custom_minimum_size = Vector2(minf(860.0, s.x - 2 * MARGIN), minf(600.0, s.y - 2 * MARGIN))
 	shop_panel.custom_minimum_size = Vector2(minf(820.0, s.x - 2 * MARGIN), minf(560.0, s.y - 2 * MARGIN))
 	build_bar.custom_minimum_size.x = minf(1180.0, s.x - 2 * MARGIN)
@@ -222,19 +231,23 @@ func _process(delta: float) -> void:
 	_place(use_button, Vector2(s.x - use_button.size.x - MARGIN, s.y - use_button.size.y - MARGIN))
 	_place(scan_button, Vector2(s.x - use_button.size.x - scan_button.size.x - 2 * MARGIN, s.y - scan_button.size.y - MARGIN))
 	_place(run_button, Vector2(MARGIN, s.y - run_button.size.y - MARGIN))
-	_place(computer, (s - computer.size) / 2.0)
-	_place(rival_panel, (s - rival_panel.size) / 2.0)
-	_place(shop_panel, (s - shop_panel.size) / 2.0)
+	_place(computer, (s - computer.size * computer.scale) / 2.0)
+	_center(rival_panel, s)
+	_center(shop_panel, s)
 	effects_box.visible = not effects_box.get_children().is_empty() and not paused
 	_place(effects_box, Vector2(s.x - effects_box.size.x - MARGIN, corner_box.position.y + corner_box.size.y + 8))
 	for id: String in _effect_rows:
 		(_effect_rows[id] as Label).text = "%s  %s" % [Brand.BREWS[id].name, ShopPanel.time_text(float(Game.effects.get(id, 0.0)))]
-	_place(build_bar, Vector2((s.x - build_bar.size.x) / 2.0, s.y - build_bar.size.y - MARGIN))
+	if build_bar.visible:
+		build_bar.reset_size()
+		_shrink_to_fit(build_bar, Vector2(room.x, s.y * 0.5))
+		var bar := build_bar.size * build_bar.scale
+		_place(build_bar, Vector2((s.x - bar.x) / 2.0, s.y - bar.y - MARGIN))
 	if summary_panel.visible:
 		_fit_summary(s)
-	_place(summary_panel, (s - summary_panel.size) / 2.0)
+	_center(summary_panel, s)
 	message_log.custom_minimum_size = Vector2(minf(820.0, s.x - 2 * MARGIN), minf(560.0, s.y - 2 * MARGIN))
-	_place(message_log, (s - message_log.size) / 2.0)
+	_center(message_log, s)
 	_tick_messages(delta)
 	# Above whatever is along the bottom (the E prompt, or the big touch buttons).
 	var bottom := s.y - MARGIN
@@ -243,9 +256,12 @@ func _process(delta: float) -> void:
 	elif is_touch:
 		bottom = s.y - use_button.size.y - 2 * MARGIN
 	_place(day_over_bar, Vector2((s.x - day_over_bar.size.x) / 2.0, bottom - day_over_bar.size.y))
-	_place(levelup_panel, Vector2((s.x - levelup_panel.size.x) / 2.0, roundf(s.y * 0.2)))
-	_place(pause_menu, (s - pause_menu.size) / 2.0)
-	_place(options, (s - options.size) / 2.0)
+	if levelup_panel.visible:
+		levelup_panel.reset_size()
+		_shrink_to_fit(levelup_panel, Vector2(room.x, s.y * 0.8 - MARGIN))
+		_place(levelup_panel, Vector2((s.x - levelup_panel.size.x * levelup_panel.scale.x) / 2.0, roundf(s.y * 0.2)))
+	_center(pause_menu, s)
+	_center(options, s)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -649,6 +665,28 @@ func _place(c: Control, pos: Vector2) -> void:
 	if c.visible:
 		c.reset_size()
 		c.position = pos.round()
+
+
+## In the middle of the screen, shrunk to fit if even its smallest layout
+## is bigger than the screen.
+func _center(c: Control, s: Vector2) -> void:
+	if not c.visible:
+		return
+	c.reset_size()
+	_shrink_to_fit(c, s - Vector2(2, 2) * MARGIN)
+	c.position = ((s - c.size * c.scale) / 2.0).round()
+
+
+## Shrinks `c` (its scale: clicks and taps still land right) when it's
+## bigger than `room`, as big text on a small screen can make it.
+func _shrink_to_fit(c: Control, room: Vector2) -> void:
+	var f := minf(1.0, minf(room.x / maxf(c.size.x, 1.0), room.y / maxf(c.size.y, 1.0)))
+	_set_scale(c, f)
+
+
+func _set_scale(c: Control, f: float) -> void:
+	if not is_equal_approx(c.scale.x, f):
+		c.scale = Vector2(f, f)
 
 
 func _on_prompt_changed(text: String, can_act: bool, scan_text: String) -> void:

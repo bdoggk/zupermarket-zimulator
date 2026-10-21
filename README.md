@@ -38,6 +38,27 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.9.7
+
+Touch-screen fixes (Android, the AYN Thor):
+- **Stock & Prices fits on the screen.** With the bigger touch-screen text it was cut
+  off on the right, hiding the window's X, the Order box buttons and Auto. The store
+  computer now gets as wide as the app needs, and shrinks to fit when the screen
+  isn't wide enough (at a big UI size, say). The computer's taskbar isn't cut off at
+  the bottom anymore either.
+- **Everything fits at bigger UI sizes**: the build bar, the shops, Bone Mart's price
+  list, the message log, the pause menu and Options shrink to fit instead of running
+  off the screen.
+- **Drag a list to scroll it, wherever your finger lands**: on a button in Options
+  (the < > arrows and switches), a Buy button in the shops, or a price in Stock &
+  Prices. Dragging no longer presses the button or brings up the keyboard.
+- **Tapping a price** selects it all, brings up the keyboard and moves that row to
+  the top of the list, so the keyboard doesn't cover it.
+- **Pinch to zoom**: spread two fingers to zoom in, pinch them to zoom out, in build
+  mode too.
+- **A tap walks when your finger lifts**, so sliding a finger or pinching doesn't
+  send you walking off somewhere.
+
 ## What's new in 0.9.6
 
 - **UI size** in Options: make the menus, buttons and text bigger or smaller, from
@@ -701,14 +722,14 @@ computer. A scanner icon appears next to your money once you own it.
 
 | | PC | Android |
 |---|---|---|
-| Move | WASD / arrow keys, or click a spot | Tap a spot |
+| Move | WASD / arrow keys, or click a spot | Tap a spot (sliding a finger just looks, it doesn't walk) |
 | Sprint | Hold Shift | RUN button (tap again to stop) |
 | Interact: pick up / drop boxes, stock or empty shelves, ring up shoppers, take over a register, racks, the computer, the OPEN sign, the mop, a jammed self-checkout, Bone Mart's prices, the shop counters across the road, throwing out Bone Mart's spies | E (or click the thing) | Tap it, or the big button |
 | Scan a shelf | Q | SCAN button |
 | Next day (end of the day) | Space (only Space: you can keep working after closing) | Tap the bar at the bottom |
 | Build mode | B | Build button |
 | Turn something (build mode) | R | Rotate button, then tap it |
-| Zoom | Mouse wheel or the +/- buttons | +/- buttons |
+| Zoom | Mouse wheel or the +/- buttons | Pinch with two fingers, or the +/- buttons |
 | Pause menu | Esc or P | II button / back button |
 | Recent messages | M, or the Log button | Log button |
 | Close / cancel | Esc | Back button |
@@ -885,6 +906,7 @@ godot --headless --path . --fixed-fps 60 res://tests/rotate_test.tscn   # turnin
 godot --headless --path . --fixed-fps 60 res://tests/controls_test.tscn # sprinting, zoom steps, Controls list, frame rate + window settings
 xvfb-run -s "-screen 0 1920x1080x24" godot --path . --rendering-driver opengl3 res://tests/controls_test.tscn  # + zoom in a real window
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn  # build mode view
+xvfb-run godot --path . --rendering-driver opengl3 res://tests/touch_test.tscn   # real finger taps, slides and pinches on a 1920x1080 touch screen
 DAYS=5 godot --headless --path . --fixed-fps 60 res://tests/bot_test.tscn   # a bot plays 5 days
 STAFF=1 SHUFFLE=1 godot --headless --path . --fixed-fps 60 res://tests/stuck_test.tscn  # busy-store stress test
 godot --headless --path . --fixed-fps 60 res://tests/shops_test.tscn   # the little shops, brews, witches and vampires, favorite products
@@ -893,7 +915,7 @@ godot --headless --path . --fixed-fps 60 res://tests/pad_test.tscn     # menus, 
 SEED=1 godot --headless --path . --fixed-fps 60 res://tests/walk_test.tscn  # walking between random spots in random layouts
 godot --headless --path . res://tests/update_test.tscn  # the updater, against a stand-in GitHub (needs python3)
 godot --headless --path . --fixed-fps 60 res://tests/fixes_test.tscn  # 0.9.5's fixes from players' notes
-SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below)
+SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)
 ```
 
 The flow and chaos tests back up your real saves and settings first and put them back

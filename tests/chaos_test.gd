@@ -11,6 +11,7 @@ extends SceneTree
 #   MINUTES  game minutes to play (default 60; a day is 6 minutes)
 #   SPEED    how fast the game runs (default 4)
 #   SAVELOAD 0 to never save and reload (default 1)
+#   TOUCH    1 for a touch screen, with finger taps, slides and pinches too
 
 
 func _initialize() -> void:

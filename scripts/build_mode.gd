@@ -131,7 +131,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				elif _pressed:
 					var was_drag := _dragging
 					_end_drag()
-					if not was_drag:
+					if not was_drag and not PinchZoom.pinching:  # (two fingers zoom)
 						var touch: bool = event.device == InputEvent.DEVICE_ID_EMULATION
 						tap(_to_world(event.position), touch)
 			MOUSE_BUTTON_RIGHT:

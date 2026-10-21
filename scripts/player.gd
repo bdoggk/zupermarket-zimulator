@@ -36,6 +36,9 @@ var tap_target: Interactable = null  # object to use when we arrive
 var run_toggle := false  # the RUN button on touch screens
 var sprinting := false  # moving at SPRINT_SPEED right now
 var _zoom_goal := DEFAULT_ZOOM  # the zoom you picked (before rounding to whole pixels)
+const NO_FINGER := Vector2(INF, INF)
+const TAP_SLOP := 28.0  # a finger that slides farther than this isn't tapping
+var _finger_down := NO_FINGER  # where a finger came down on the store
 
 # Timed action (the Project Zomboid style progress bar)
 var action_target: Interactable = null
@@ -104,7 +107,17 @@ func is_typing() -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT \
+			and event.device == InputEvent.DEVICE_ID_EMULATION:
+		# A finger: walk there (or use what's there) once it lifts, unless it
+		# slid (just looking) or a second finger joined it (zooming).
+		if event.pressed:
+			_finger_down = event.position
+		elif _finger_down != NO_FINGER:
+			if not PinchZoom.pinching and event.position.distance_to(_finger_down) < TAP_SLOP:
+				_on_tap(get_canvas_transform().affine_inverse() * _finger_down)
+			_finger_down = NO_FINGER
+	elif event is InputEventMouseButton and event.pressed:
 		match event.button_index:
 			MOUSE_BUTTON_LEFT:
 				_on_tap(get_canvas_transform().affine_inverse() * event.position)
