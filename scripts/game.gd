@@ -29,6 +29,7 @@ signal rival_requested  # open the rival's price list
 signal rival_bought
 signal rival_spy_sent  # Bone Mart sends a spy over to your store (the town does the walking)
 signal shop_requested(shop: String)  # use a little shop's counter (Brand.SHOPS)
+signal rack_requested(rack: StorageRack)  # pick which box to take off a storage rack
 signal effects_changed  # a brew started or wore off
 signal tutorial_changed
 

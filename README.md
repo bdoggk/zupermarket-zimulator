@@ -38,6 +38,14 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.9.9
+
+- **Take the box you want off a storage rack.** With more than one product on a rack,
+  using it brings up a list: each product, how many boxes and how full they are, and a
+  **Take** button. You get the fullest box of the product you pick. It works with a tap,
+  a click, the arrow keys and Enter, or the d-pad and A, and closes if you walk away.
+  A rack with only one product hands its fullest box over straight away.
+
 ## What's new in 0.9.8
 
 - **Every button on the store computer works without the mouse or touch screen.**
@@ -667,8 +675,10 @@ a general manager fixes jams for you.
 
 ### Storage racks
 A **storage rack** ($120) holds up to 6 boxes of anything. Use it while carrying a box
-to put the box away, or with empty hands to take the top box. Great for keeping the
-delivery zone clear.
+to put the box away, or with empty hands to take one out. With more than one product
+on it, a list comes up to **pick which product** you want (tap or click Take, or use the
+arrow keys or d-pad and Enter / A), and you get the fullest box of it. With just one
+product on it, you get that straight away. Great for keeping the delivery zone clear.
 
 ### Making the store bigger
 In build mode, press **Expand** and tap the outlined lot next door to buy it. Each lot
@@ -932,6 +942,7 @@ godot --headless --path . --fixed-fps 60 res://tests/pad_test.tscn     # menus, 
 SEED=1 godot --headless --path . --fixed-fps 60 res://tests/walk_test.tscn  # walking between random spots in random layouts
 godot --headless --path . res://tests/update_test.tscn  # the updater, against a stand-in GitHub (needs python3)
 godot --headless --path . --fixed-fps 60 res://tests/fixes_test.tscn  # 0.9.5's fixes from players' notes
+godot --headless --path . --fixed-fps 60 res://tests/rack_test.tscn   # picking which box to take off a storage rack
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)
 ```
 

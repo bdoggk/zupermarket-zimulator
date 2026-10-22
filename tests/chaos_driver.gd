@@ -317,6 +317,18 @@ func _act() -> void:
 	if rng.randf() < 0.004:
 		Game.add_xp(rng.randf_range(100.0, 600.0))
 		_note("xp boost -> level %d" % Game.level)
+	# A storage rack's "which box?" list is up: pick one, or close it.
+	if hud.rack_panel.visible and rng.randf() < 0.5:
+		var rp: Node = hud.rack_panel
+		var kinds: Array = rp.rack.products() if is_instance_valid(rp.rack) else []
+		if kinds.is_empty() or rng.randf() < 0.25:
+			_note("close the rack list")
+			rp.close()
+		else:
+			var id: String = kinds[rng.randi() % kinds.size()]
+			_note("take %s off the rack" % id)
+			rp._take(id)
+		return
 	var what := _pick({
 		"walk": 10.0, "tap": 14.0, "use": 10.0, "scan": 3.0, "stock": 8.0, "serve": 8.0,
 		"mop": 5.0, "computer": 3.0, "build": 1.5, "shop": 1.5, "rival": 0.5, "pause": 0.5,

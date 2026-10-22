@@ -2,7 +2,9 @@ class_name StorageRack
 extends Interactable
 ## Storage for spare boxes (buy one in Build mode). Holds up to CAPACITY
 ## boxes of anything. Use it while carrying a box to put the box away, or
-## with empty hands to take the top box out.
+## with empty hands to take one out: with more than one product on it, a
+## list comes up to pick which (the HUD's RackPanel), and you get the
+## fullest box of that product.
 ##
 ## Stockers use racks too: boxes that have no shelf to go on get moved off
 ## the delivery zone into a rack, and come back out once a shelf has room.
@@ -70,6 +72,41 @@ func take(b: Box) -> bool:
 	return true
 
 
+## The products on the rack, in the order their first box went on.
+func products() -> Array[String]:
+	var out: Array[String] = []
+	for b in boxes:
+		if not b.product_id in out:
+			out.append(b.product_id)
+	return out
+
+
+## The fullest box of `product_id` on the rack (null if there's none).
+func fullest(product_id: String) -> Box:
+	var best: Box = null
+	for b in boxes:
+		if b.product_id == product_id and (best == null or b.count > best.count):
+			best = b
+	return best
+
+
+## Takes the fullest box of `product_id` off the rack into your hands.
+func take_product(p: Player, product_id: String) -> bool:
+	if p.is_carrying() or p.holding_mop:
+		return false
+	var b := fullest(product_id)
+	if b == null or not take(b):
+		return false
+	p.pick_up(b.product_id, b.count)
+	Settings.vibrate(0.2, 0.04)
+	return true
+
+
+## Picking from a list (more than one product on the rack).
+func asks_which(p: Player) -> bool:
+	return not p.is_carrying() and products().size() > 1
+
+
 func count_of(product_id: String) -> int:
 	var n := 0
 	for b in boxes:
@@ -87,8 +124,11 @@ func get_prompt(p: Player) -> String:
 		return "Store %s x%d (%d/%d)" % [Game.product_name(p.carry_product), p.carry_count, boxes.size(), CAPACITY]
 	if boxes.is_empty():
 		return "Empty storage rack"
-	var top: Box = boxes[-1]
-	return "Take %s x%d (%d/%d)" % [Game.product_name(top.product_id), top.count, boxes.size(), CAPACITY]
+	var kinds := products()
+	if kinds.size() > 1:
+		return "Take a box: pick from %d products (%d/%d)" % [kinds.size(), boxes.size(), CAPACITY]
+	var b := fullest(kinds[0])
+	return "Take %s x%d (%d/%d)" % [Game.product_name(b.product_id), b.count, boxes.size(), CAPACITY]
 
 
 func can_interact(p: Player) -> bool:
@@ -97,8 +137,8 @@ func can_interact(p: Player) -> bool:
 	return has_room() if p.is_carrying() else not boxes.is_empty()
 
 
-func get_action_time(_p: Player) -> float:
-	return ACTION_SECONDS
+func get_action_time(p: Player) -> float:
+	return 0.0 if asks_which(p) else ACTION_SECONDS  # (the list comes up straight away)
 
 
 func get_action_label(p: Player) -> String:
@@ -111,11 +151,11 @@ func interact(p: Player) -> void:
 	if p.is_carrying():
 		store_box(p.carry_product, p.carry_count)
 		p.drop_carry()
+		Settings.vibrate(0.2, 0.04)
+	elif asks_which(p):
+		Game.rack_requested.emit(self)
 	else:
-		var top: Box = boxes[-1]
-		take(top)
-		p.pick_up(top.product_id, top.count)
-	Settings.vibrate(0.2, 0.04)
+		take_product(p, products()[0])
 
 
 func get_pick_rect() -> Rect2:

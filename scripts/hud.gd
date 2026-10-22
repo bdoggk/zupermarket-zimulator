@@ -8,6 +8,7 @@ const ComputerMenu := preload("res://scripts/ui/computer_menu.gd")
 const BuildBar := preload("res://scripts/ui/build_bar.gd")
 const RivalPanel := preload("res://scripts/ui/rival_panel.gd")
 const ShopPanel := preload("res://scripts/ui/shop_panel.gd")
+const RackPanel := preload("res://scripts/ui/rack_panel.gd")
 const Tutorial := preload("res://scripts/ui/tutorial.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
@@ -62,6 +63,7 @@ var message_box: VBoxContainer
 var computer: ComputerMenu
 var rival_panel: PanelContainer
 var shop_panel: PanelContainer  # a little shop's wares (the witch's, the vampire's)
+var rack_panel: PanelContainer  # which box to take off a storage rack
 var message_log: MessageLog  # M / Back / Log: the recent messages
 var log_button: Button
 var _messages: Array = []  # on screen, oldest first: [label, seconds left, seconds shown]
@@ -115,6 +117,8 @@ func _ready() -> void:
 	root.add_child(message_log)
 	shop_panel = ShopPanel.new()
 	root.add_child(shop_panel)
+	rack_panel = RackPanel.new()
+	root.add_child(rack_panel)
 	effects_box = VBoxContainer.new()
 	effects_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	effects_box.add_theme_constant_override("separation", 4)
@@ -139,7 +143,7 @@ func _ready() -> void:
 	options.closed.connect(_on_options_closed)
 	# Panels keep the mouse to themselves: scrolling or clicking on a menu
 	# mustn't zoom the view or walk you somewhere behind it.
-	for panel: Control in [status_panel, tutorial, computer, rival_panel, shop_panel, build_bar, summary_panel, pause_menu, options, day_over_bar, levelup_panel, message_log]:
+	for panel: Control in [status_panel, tutorial, computer, rival_panel, shop_panel, rack_panel, build_bar, summary_panel, pause_menu, options, day_over_bar, levelup_panel, message_log]:
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	Game.message.connect(show_message)
@@ -150,7 +154,9 @@ func _ready() -> void:
 	Game.day_ended.connect(_on_day_ended)
 	Game.leveled_up.connect(_on_leveled_up)
 	Game.effects_changed.connect(_rebuild_effects)
-	Game.shop_requested.connect(func(_id): computer.close(); rival_panel.close())
+	Game.shop_requested.connect(func(_id): computer.close(); rival_panel.close(); rack_panel.close())
+	Game.rack_requested.connect(func(_r): computer.close(); rival_panel.close(); shop_panel.close())
+	Game.rival_requested.connect(func(): rack_panel.close())
 	_rebuild_effects()
 	Game.build_mode.changed.connect(_on_build_changed)
 
@@ -195,7 +201,7 @@ func _process(delta: float) -> void:
 	message_box.visible = not paused and not summary_panel.visible and not message_log.visible  # (it would show through)
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
-	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or summary_panel.visible or message_log.visible
+	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or rack_panel.visible or summary_panel.visible or message_log.visible
 	Game.menu_open = menu_open  # (the arrow keys pick buttons, not walk you away)
 	# After closing you can keep working (stock, order, build...) until you
 	# press Space for the summary and the next day.
@@ -203,9 +209,10 @@ func _process(delta: float) -> void:
 	day_over_bar.visible = Game.day_over and not _summary.is_empty() and not summing_up and not paused and not building
 	tutorial.visible = tutorial.current != "" and not building and not paused and not menu_open and not Game.day_over
 	prep_panel.visible = not Game.opened and not Game.day_over and not building and not paused and not tutorial.visible
-	prompt_panel.visible = not is_touch and not building and not summing_up and (_prompt[0] != "" or _prompt[2] != "")
-	use_button.visible = is_touch and not building and not summing_up and _prompt[0] != ""
-	scan_button.visible = is_touch and not building and not summing_up and _prompt[2] != ""
+	# (Not under a window: the computer, a shop, a rack's list...)
+	prompt_panel.visible = not is_touch and not building and not summing_up and not menu_open and (_prompt[0] != "" or _prompt[2] != "")
+	use_button.visible = is_touch and not building and not summing_up and not menu_open and _prompt[0] != ""
+	scan_button.visible = is_touch and not building and not summing_up and not menu_open and _prompt[2] != ""
 	run_button.visible = is_touch and not building and not paused and not summing_up and not menu_open
 	_update_shopper_card(delta, building or paused or menu_open or levelup_panel.visible or Game.day_over)
 
@@ -235,6 +242,7 @@ func _process(delta: float) -> void:
 	_place(computer, (s - computer.size * computer.scale) / 2.0)
 	_center(rival_panel, s)
 	_center(shop_panel, s)
+	_center(rack_panel, s)
 	effects_box.visible = not effects_box.get_children().is_empty() and not paused
 	_place(effects_box, Vector2(s.x - effects_box.size.x - MARGIN, corner_box.position.y + corner_box.size.y + 8))
 	for id: String in _effect_rows:
@@ -325,6 +333,8 @@ func _back(or_pause := true) -> void:
 		rival_panel.close()
 	elif shop_panel.visible:
 		shop_panel.close()
+	elif rack_panel.visible:
+		rack_panel.close()
 	elif or_pause:
 		open_pause()
 
@@ -333,6 +343,7 @@ func open_pause() -> void:
 	computer.close()
 	rival_panel.close()
 	shop_panel.close()
+	rack_panel.close()
 	pause_menu.open()
 
 
@@ -426,6 +437,7 @@ func _tick_messages(delta: float) -> void:
 func open_computer() -> void:
 	rival_panel.close()
 	shop_panel.close()
+	rack_panel.close()
 	computer.open()
 
 
@@ -707,6 +719,7 @@ func _on_build_changed() -> void:
 		computer.close()
 		rival_panel.close()
 		shop_panel.close()
+		rack_panel.close()
 
 
 func _show_popup(world_pos: Vector2, text: String, color: Color) -> void:
