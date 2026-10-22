@@ -597,7 +597,7 @@ func add_furniture(furniture_id: String, cell: Vector2i, step := -1) -> Interact
 		"storage":
 			obj = StorageRack.new()
 		_:
-			obj = Lantern.new() if Game.FURNITURE[furniture_id].get("light", false) else Decoration.new()
+			obj = Lantern.new() if Game.FURNITURE[furniture_id].has("light") else Decoration.new()
 	obj.furniture_id = furniture_id
 	if step >= 0:
 		obj.rotation_step = step
@@ -1027,7 +1027,11 @@ func plant_count() -> int:
 func traffic_multiplier() -> float:
 	var appeal := 1.0 + PLANT_APPEAL * mini(plant_count(), MAX_PLANTS_COUNTED)
 	var charm := Game.CHARM_TRAFFIC if Game.has_effect("charm") else 1.0
-	return appeal * mess_multiplier() * (1.0 + LEVEL_TRAFFIC * (Game.level - 1)) * (1.0 + variety_bonus()) * charm
+	var ads := 1.0
+	for id in ["billboard", "neon"]:
+		if Game.has_upgrade(id):
+			ads *= Game.BILLBOARD_TRAFFIC
+	return appeal * mess_multiplier() * (1.0 + LEVEL_TRAFFIC * (mini(Game.level, Game.TRAFFIC_LEVELS) - 1)) * (1.0 + variety_bonus()) * charm * ads
 
 
 ## How many shoppers the blood still lets in (1 = all of them).
@@ -1149,12 +1153,16 @@ func shelves_with(product_id: String) -> Array[Shelf]:
 ## only if none of those has room. Skips shelves another stocker is already
 ## filling and ones nobody can get to.
 func best_shelf_for(product_id: String, from: Vector2, who: Staff) -> Shelf:
+	if not Game.staff_stock(product_id):
+		return null  # its Stock switch is off (Stock & Prices)
 	var best: Shelf = null
 	var best_score := INF
 	var from_cell := Iso.world_to_cell(from)
 	for s in shelves:
 		if not s.accepts(product_id) or s.stock >= Shelf.CAPACITY or is_claimed(s, who):
 			continue
+		if s.product_id == "" and not Game.fill_empty_shelves:
+			continue  # the Staff app says: only shelves that already have a label
 		if stand_cell_for(s.cell, from_cell) == NO_CELL:
 			continue
 		var rank := 2  # an empty shelf with no label yet: last
@@ -1209,9 +1217,13 @@ func reorder_list(at := Staff.REORDER_AT, new_products := true) -> Dictionary:
 	for id: String in coming:
 		if have.has(id):
 			have[id] += coming[id]
+	var share: float = Game.REORDER_POINTS[Game.reorder_at].share  # (the Staff app)
 	var ids: Array = room.keys().filter(func(id: String) -> bool:
-		return Game.is_licensed(id) and (have[id] <= maxi(at, floori(room[id] * Staff.REORDER_SHARE)) \
-			or room[id] - have[id] >= int(Game.PRODUCTS[id].box_size)))
+		if not Game.staff_stock(id):
+			return false
+		if share < 0.0:  # as soon as a whole box fits (or a third full)
+			return have[id] <= maxi(at, floori(room[id] * Staff.REORDER_SHARE)) or room[id] - have[id] >= int(Game.PRODUCTS[id].box_size)
+		return have[id] <= maxi(at, floori(room[id] * share)))
 	ids.sort_custom(func(a: String, b: String) -> bool: return float(have[a]) / room[a] < float(have[b]) / room[b])
 	var out := {}
 	for id: String in ids:
@@ -1222,13 +1234,13 @@ func reorder_list(at := Staff.REORDER_AT, new_products := true) -> Dictionary:
 		out[id] = n
 	# Licensed, but on no shelf (and none coming): one box each, the most
 	# wanted first, while there are empty shelves (or coolers) to put it on.
-	if not new_products:
+	if not new_products or not Game.fill_empty_shelves:
 		return out
 	for id: String in Game.unlocked_ids():
 		if not room.has(id) and int(coming.get(id, 0)) > 0:  # its box will take one of those shelves
 			free[Game.is_cold(id)] = maxi(0, free[Game.is_cold(id)] - 1)
 	var unshelved: Array = Game.unlocked_ids().filter(func(id: String) -> bool:
-		return not room.has(id) and int(coming.get(id, 0)) == 0)
+		return Game.staff_stock(id) and not room.has(id) and int(coming.get(id, 0)) == 0)
 	unshelved.sort_custom(func(a: String, b: String) -> bool: return Game.market.demand[a] > Game.market.demand[b])
 	for id: String in unshelved:
 		var cold := Game.is_cold(id)
@@ -1659,7 +1671,8 @@ func _update_deliveries(delta: float) -> void:
 
 func max_customers() -> int:
 	var extra := EXTRA_CUSTOMERS_PER_REGISTER * (registers.size() - 1)
-	return mini(BASE_MAX_CUSTOMERS + Game.level + extra, MAX_CUSTOMERS + extra)
+	var bigger := clampi(Game.level - 6, 0, 4)  # levels 7 to 10 make room for one more each
+	return mini(BASE_MAX_CUSTOMERS + Game.level + extra, MAX_CUSTOMERS + bigger + extra)
 
 
 func _update_customers(delta: float) -> void:

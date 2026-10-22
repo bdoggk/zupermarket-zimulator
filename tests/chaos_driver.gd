@@ -269,13 +269,14 @@ func _pick(weights: Dictionary) -> String:
 ## Staff mode: a big store with every kind of staff working it, all
 ## products licensed, extra registers, self-checkouts and racks.
 func _set_up_big_store() -> void:
-	Game.money = 20000.0
-	Game.add_xp(5000.0)
+	Game.money = 60000.0
+	Game.add_xp(Game.xp_for_level(Game.LAST_UNLOCK_LEVEL) + 1.0)  # everything unlocked
 	for id in Game.PRODUCTS:
 		Game.buy_license(id)
 	for id in Game.UPGRADES:
 		Game.buy_upgrade(id)
-	var wants := ["register", "register", "selfcheckout", "selfcheckout", "storage", "storage", "fridge", "fridge", "shelf", "shelf", "shelf", "lantern", "plant"]
+	var wants := ["register", "register", "selfcheckout", "selfcheckout", "storage", "storage", "fridge", "fridge", "shelf", "shelf", "shelf", "lantern", "plant"] \
+		+ Game.FURNITURE.keys().filter(func(id): return Game.FURNITURE[id].has("pulls"))
 	var cells: Array = store.floor_cells.keys()
 	cells.shuffle()
 	for id: String in wants:

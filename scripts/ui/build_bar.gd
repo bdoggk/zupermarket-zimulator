@@ -9,6 +9,10 @@ var tool_buttons := {}  # furniture id / "move" / "rotate" / "sell" / "expand" -
 var paint_button: Button
 var expand_button: Button
 var paint_box: VBoxContainer
+var decor_button: Button  # opens the decorations' own row
+var decor_box: VBoxContainer
+var locks := {}  # furniture id -> its "Lv 7" label, while it's locked
+var _placing := ""  # what build mode was placing last time (to open the decor row when that changes)
 var floor_buttons: Array[Button] = []
 var wall_buttons: Array[Button] = []
 
@@ -51,11 +55,30 @@ func _ready() -> void:
 	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(status_label)
 
+	# Decorations (gravestones, lanterns, cauldrons...) have a row of their
+	# own above the main one, opened with the Decor button.
+	decor_box = VBoxContainer.new()
+	decor_box.visible = false
+	col.add_child(decor_box)
+	decor_box.add_child(UI.label("DECORATIONS: every one brings more shoppers; some bring more of one kind", UI.DIM))
+	var decor_row := HBoxContainer.new()
+	decor_row.add_theme_constant_override("separation", 6)
+	decor_box.add_child(decor_row)
+	decor_box.add_child(HSeparator.new())
+	col.move_child(decor_box, 0)
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	col.add_child(row)
 	for id: String in Game.FURNITURE:
-		row.add_child(_furniture_button(id))
+		var b := _furniture_button(id)
+		if Game.FURNITURE[id].kind == "decor":
+			decor_row.add_child(b)
+		else:
+			row.add_child(b)
+	decor_button = _furniture_button("plant", "Decor", _toggle_decor)
+	decor_button.tooltip_text = "Gravestones, lanterns, cauldrons..."
+	row.add_child(decor_button)
 	row.add_child(VSeparator.new())
 	tool_buttons["move"] = _tool_button("Move", func(): _toggle_tool(BuildMode.Tool.MOVE))
 	row.add_child(tool_buttons["move"])
@@ -79,6 +102,7 @@ func _ready() -> void:
 
 	build.changed.connect(_refresh)
 	Game.decor_changed.connect(_refresh)
+	Game.unlocks_changed.connect(_refresh)
 
 
 ## The furniture sprite without the empty space around it, so it shows up
@@ -95,9 +119,9 @@ static func _cropped(tex: Texture2D) -> Texture2D:
 
 ## A button to buy a piece of furniture: its name on top, its picture,
 ## then the price.
-func _furniture_button(id: String) -> Button:
+func _furniture_button(id: String, title := "", on_press := Callable()) -> Button:
 	var f: Dictionary = Game.FURNITURE[id]
-	var b := _tool_button("", func(): _toggle_place(id))
+	var b := _tool_button("", on_press if on_press.is_valid() else func(): _toggle_place(id))
 	b.custom_minimum_size = Vector2(84, 100)
 	b.tooltip_text = "%s  $%d" % [f.name, int(f.cost)]
 	var box := VBoxContainer.new()
@@ -105,8 +129,9 @@ func _furniture_button(id: String) -> Button:
 	box.add_theme_constant_override("separation", 0)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(box)
-	var name_label := UI.label(f.name)
-	name_label.add_theme_font_size_override("font_size", 13)
+	var name_label := UI.label(title if title != "" else f.name)
+	var longest: int = Array(name_label.text.split(" ")).map(func(w): return w.length()).max()
+	name_label.add_theme_font_size_override("font_size", 13 if longest <= 10 else 11)  # ("Sarcophagus" on one line)
 	name_label.add_theme_constant_override("line_spacing", -3)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -122,13 +147,23 @@ func _furniture_button(id: String) -> Button:
 	pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(pic)
-	var price := UI.label("$%d" % int(f.cost), UI.WARN)
+	var price := UI.label("$%d" % int(f.cost) if title == "" else "", UI.WARN)
 	price.add_theme_font_size_override("font_size", 15)
 	price.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	price.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(price)
+	if title != "":
+		return b  # (the Decor button)
 	tool_buttons[id] = b
+	if Game.furniture_level(id) > 1:
+		locks[id] = price
 	return b
+
+
+func _toggle_decor() -> void:
+	decor_box.visible = not decor_box.visible
+	paint_box.visible = false
+	_refresh()
 
 
 func _tool_button(text: String, on_press: Callable) -> Button:
@@ -146,6 +181,7 @@ func _toggle_place(id: String) -> void:
 
 func _toggle_paint() -> void:
 	paint_box.visible = not paint_box.visible
+	decor_box.visible = false
 	_refresh()
 
 
@@ -157,7 +193,21 @@ func _refresh() -> void:
 	visible = build.active
 	if not visible:
 		paint_box.visible = false
+		decor_box.visible = false
 		return
+	# Locked furniture shows the store level it comes with.
+	for id: String in locks:
+		var lv := Game.furniture_level(id)
+		var locked := Game.level < lv
+		tool_buttons[id].disabled = locked
+		(locks[id] as Label).text = "Lv %d" % lv if locked else "$%d" % int(Game.FURNITURE[id].cost)
+		UI.set_color(locks[id], UI.DIM if locked else UI.WARN)
+	# Picking a decoration (a controller's d-pad) shows its row.
+	var placing := build.place_id if build.tool == BuildMode.Tool.PLACE else ""
+	if placing != _placing and Game.FURNITURE.get(placing, {}).get("kind", "") == "decor":
+		decor_box.visible = true
+		paint_box.visible = false
+	_placing = placing
 	status_label.text = build.status
 	for key: String in tool_buttons:
 		var on := false
@@ -174,6 +224,7 @@ func _refresh() -> void:
 				on = build.tool == BuildMode.Tool.PLACE and build.place_id == key
 		tool_buttons[key].set_pressed_no_signal(on)
 	paint_button.set_pressed_no_signal(paint_box.visible)
+	decor_button.set_pressed_no_signal(decor_box.visible)
 	if expand_button:
 		var e := Game.next_expansion()
 		expand_button.text = "Expand\n$%d" % int(e.cost) if not e.is_empty() else "Expand\n(done)"

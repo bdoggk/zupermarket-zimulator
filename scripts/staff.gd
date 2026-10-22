@@ -7,16 +7,21 @@ extends Node2D
 ##            whatever's emptiest on the shelves first, onto the emptiest
 ##            shelf for it (new, unlabeled shelves last). Whatever doesn't fit
 ##            goes on a storage rack (racks are shared), or back on the
-##            delivery zone if every rack is full.
+##            delivery zone if every rack is full. You decide (Staff app,
+##            and each product's Stock switch) whether they use shelves with
+##            no label, take the label off an empty shelf of something you've
+##            stopped stocking, and what they stock at all.
 ##   Cashier  walks to a register (one each) and checks out the customers
 ##            in its line. While a cashier is at a register, you can't use
 ##            it yourself, so you're free to do other things.
 ##   Janitor  (zombie game) mops up the blood shoppers leave behind.
-##   General manager  walks around checking the shelves and the staff.
-##            Orders more of anything whose shelves are down to a third full
-##            (Store.reorder_list: enough boxes to fill them back up), gets
-##            anyone who's stuck or slacking back to work, and while they're
-##            on the payroll everyone else works MANAGED_BOOST faster.
+##   General manager  orders more of anything that's running low before
+##            doing anything else (Store.reorder_list: when, is up to you in
+##            the Staff app), with the Handheld Scanner by scanning the
+##            nearest shelf instead of walking to the computer. Otherwise
+##            walks around checking the shelves and the staff, gets anyone
+##            who's stuck or slacking back to work, and while they're on the
+##            payroll everyone else works MANAGED_BOOST faster.
 ##   Spy      (zombie game) sneaks over to the rival store every couple of
 ##            game hours, snoops around its shelves and counter, and comes
 ##            back to the computer with a report (Game.spy_report: its
@@ -32,7 +37,7 @@ extends Node2D
 ## actually gets something done.
 
 enum Job { IDLE, TO_BOX, PICKING_UP, TO_SHELF, STOCKING, TO_DROP, TO_RACK, STORING, TO_POST, AT_POST, SCANNING, NO_POST, TO_SPILL, MOPPING, TO_CHECK, CHECKING, TO_COMPUTER, ORDERING,
-	TO_RIVAL, SNOOPING, TO_REPORT, REPORTING, CHASING }
+	TO_RIVAL, SNOOPING, TO_REPORT, REPORTING, CHASING, TO_UNLABEL, UNLABELING, TO_SCAN_ORDER, SCAN_ORDERING }
 
 const SPEED := 2.8  # cells per second
 const PICKUP_SECONDS := 0.4
@@ -52,6 +57,9 @@ const NUDGE_CREDIT_SECONDS := 60.0  # ...if they do within this long
 const MANAGED_BOOST := 1.15  # everyone works this much faster with a manager around
 const CHECK_SECONDS := 1.5  # the manager looking over a shelf or a worker
 const ORDER_SECONDS := 1.5  # the manager placing orders at the computer
+const SCAN_ORDER_SECONDS := 0.5  # ...or with the Handheld Scanner, at the nearest shelf
+const ORDER_CHECK_EVERY := 1.0  # the manager, out on the floor, checks whether anything needs ordering this often
+const UNLABEL_SECONDS := 0.6  # a stocker peeling a label off a shelf
 const SLACK_SECONDS := 20.0  # on the same job this long = stuck or slacking
 const SHOUT_EVERY := 12.0  # the manager checks on everyone from afar this often
 const SNOOP_SECONDS := 1.6  # the spy, at each of the rival's shelves
@@ -59,7 +67,7 @@ const REPORT_SECONDS := 1.5  # the spy, writing it up at the computer
 const CHASE_REPATH := 0.4  # the spy, chasing a rival spy: look where it went this often
 ## Jobs that mean you're getting something done (waiting for work isn't slacking).
 const BUSY_JOBS := [Job.TO_BOX, Job.PICKING_UP, Job.TO_SHELF, Job.STOCKING, Job.TO_DROP, Job.TO_RACK,
-	Job.STORING, Job.TO_POST, Job.NO_POST, Job.TO_SPILL, Job.MOPPING]
+	Job.STORING, Job.TO_POST, Job.NO_POST, Job.TO_SPILL, Job.MOPPING, Job.TO_UNLABEL, Job.UNLABELING]
 const BOX_SMALL := preload("res://assets/sprites/box_small.png")
 const MOP := preload("res://assets/sprites/mop_held.png")
 
@@ -96,6 +104,8 @@ var target_spill: Spill = null
 var watching: Staff = null  # who they're checking on
 var fixing: SelfCheckout = null  # a jammed self-checkout they're going to fix
 var _shout_timer := SHOUT_EVERY
+var _order_check := 0.0  # the manager: time to see if anything needs ordering
+var scan_shelf: Shelf = null  # the shelf the manager scans to order (Handheld Scanner)
 var _broke_timer := 0.0  # don't keep saying we can't afford something
 
 # Spy
@@ -249,7 +259,14 @@ func _draw() -> void:
 	if carry_count > 0:
 		draw_texture(BOX_SMALL, Vector2(-10, -24 + sprite.position.y))
 		draw_texture(Game.icon(carry_product), Vector2(-4, -56))
-	if job in [Job.PICKING_UP, Job.STOCKING, Job.STORING, Job.SCANNING, Job.MOPPING, Job.CHECKING, Job.ORDERING, Job.SNOOPING, Job.REPORTING] and duration > 0.0:
+	if job == Job.SCAN_ORDERING and is_instance_valid(scan_shelf):
+		# the scanner's red laser, from their hand to the shelf
+		var hand := Vector2(-5.0 if sprite.flip_h else 5.0, -19.0 + sprite.position.y)
+		var to := scan_shelf.position - position + Vector2(0, -22)
+		var flicker := 0.55 + 0.45 * sin(timer * 60.0)
+		draw_line(hand, to, Color(1.0, 0.15, 0.1, 0.8 * flicker), 1.0)
+		draw_circle(to, 2.0, Color(1.0, 0.3, 0.2, flicker))
+	if job in [Job.PICKING_UP, Job.STOCKING, Job.STORING, Job.SCANNING, Job.MOPPING, Job.CHECKING, Job.ORDERING, Job.SNOOPING, Job.REPORTING, Job.UNLABELING, Job.SCAN_ORDERING] and duration > 0.0:
 		var f := clampf(1.0 - timer / duration, 0.0, 1.0)
 		draw_rect(Rect2(-11, -44, 22, 5), Color(0.08, 0.08, 0.1, 0.9))
 		draw_rect(Rect2(-10, -43, 20 * f, 3), Color(0.45, 0.75, 0.95))
@@ -290,6 +307,12 @@ func status_text() -> String:
 			return "Going to order more stock"
 		Job.ORDERING:
 			return "Ordering stock"
+		Job.TO_SCAN_ORDER:
+			return "Going to scan a shelf to order more stock"
+		Job.SCAN_ORDERING:
+			return "Ordering stock with the scanner"
+		Job.TO_UNLABEL, Job.UNLABELING:
+			return "Taking the %s label off a shelf" % Game.product_name(target_shelf.product_id) if is_instance_valid(target_shelf) and target_shelf.product_id != "" else "Taking a label off a shelf"
 		Job.TO_RIVAL:
 			return "Sneaking over to %s" % Brand.RIVAL.name
 		Job.SNOOPING:
@@ -347,6 +370,8 @@ func _stocker(delta: float) -> void:
 				_deliver()
 			else:
 				_find_box()
+				if job == Job.IDLE:
+					_plan_unlabel()
 			if job == Job.IDLE and path.is_empty():
 				_go_home()
 		Job.TO_BOX:
@@ -435,6 +460,60 @@ func _stocker(delta: float) -> void:
 					carry_count = 0
 				job = Job.IDLE
 				timer = 2.0
+		Job.TO_UNLABEL:
+			if not _unlabel_ok():
+				_give_up()
+			elif _walk(delta):
+				if Iso.chebyshev(current_cell(), target_shelf.cell) <= 1:
+					_start(Job.UNLABELING, UNLABEL_SECONDS / speed)
+					_face(target_shelf.position)
+				else:
+					_give_up()
+		Job.UNLABELING:
+			if not _unlabel_ok():
+				_give_up()
+				return
+			timer -= delta
+			if timer <= 0.0:
+				Game.show_popup(target_shelf.position + Vector2(0, -64), "%s label removed" % Game.product_name(target_shelf.product_id), Color(1.0, 0.85, 0.6))
+				target_shelf.product_id = ""
+				target_shelf.queue_redraw()
+				_earn(1.0)
+				store.release(target_shelf)
+				target_shelf = null
+				job = Job.IDLE
+				timer = 0.1
+
+
+## Nothing to stock: take the label off an empty shelf of something you've
+## stopped stocking (its Stock switch is off, or you no longer sell it), so
+## it can hold something else. Only if the Staff app says so.
+func _plan_unlabel() -> void:
+	if not Game.take_labels_off:
+		return
+	var best: Shelf = null
+	var best_d := INF
+	for s in store.shelves:
+		if s.stock > 0 or s.product_id == "" or Game.staff_stock(s.product_id) or store.is_claimed(s, self):
+			continue
+		var d := position.distance_to(s.position)
+		if d < best_d:
+			best_d = d
+			best = s
+	if best == null:
+		return
+	var stand := store.stand_cell_for(best.cell, current_cell())
+	if stand == Store.NO_CELL or not _go_to(stand):
+		return
+	target_shelf = best
+	store.claim(best, self)
+	job = Job.TO_UNLABEL
+
+
+func _unlabel_ok() -> bool:
+	return Game.take_labels_off and is_instance_valid(target_shelf) and not target_shelf.is_queued_for_deletion() \
+		and target_shelf in store.shelves and target_shelf.stock == 0 and target_shelf.product_id != "" \
+		and not Game.staff_stock(target_shelf.product_id)
 
 
 ## Looks for a box (on the floor or in a storage rack) that has a shelf to
@@ -576,7 +655,9 @@ func _box_ok() -> bool:
 
 func _shelf_ok() -> bool:
 	return is_instance_valid(target_shelf) and not target_shelf.is_queued_for_deletion() \
-		and target_shelf.accepts(carry_product) and target_shelf.stock < Shelf.CAPACITY
+		and target_shelf.accepts(carry_product) and target_shelf.stock < Shelf.CAPACITY \
+		and (carry_product == "" or Game.staff_stock(carry_product)) \
+		and (target_shelf.product_id != "" or Game.fill_empty_shelves)  # (the rules may have changed on the way)
 
 
 func _put_rack_ok() -> bool:
@@ -596,6 +677,7 @@ func _give_up() -> void:
 	target_spill = null
 	watching = null
 	fixing = null
+	scan_shelf = null
 	chasing = null
 	snoop_stops.clear()
 	snooping_at = Store.NO_CELL
@@ -754,6 +836,17 @@ func _manager(delta: float) -> void:
 		for s in store.staff:  # anyone stuck for a long time gets told off from across the store
 			if s != self and s.is_slacking(SLACK_SECONDS * 2.0):
 				_nudge(s)
+	# Ordering comes before anything else: out on the floor (looking around,
+	# not fixing a self-checkout), they keep an eye on the stock.
+	if job == Job.TO_CHECK and not is_instance_valid(fixing):
+		_order_check -= delta
+		if _order_check <= 0.0:
+			_order_check = ORDER_CHECK_EVERY
+			if _broke_timer <= 0.0 and not store.reorder_list().is_empty():
+				watching = null
+				path.clear()
+				if not _plan_order():
+					job = Job.IDLE
 	match job:
 		Job.IDLE:
 			if not path.is_empty():
@@ -761,8 +854,8 @@ func _manager(delta: float) -> void:
 			timer -= delta
 			if timer > 0.0:
 				return
-			timer = 1.0
-			if not _plan_fix() and not _plan_order():
+			timer = 0.5
+			if not _plan_order() and not _plan_fix():
 				_patrol()
 		Job.TO_CHECK:
 			if _walk(delta):
@@ -798,6 +891,23 @@ func _manager(delta: float) -> void:
 				_place_orders()
 				job = Job.IDLE
 				timer = 1.0
+		Job.TO_SCAN_ORDER:
+			if not is_instance_valid(scan_shelf) or not scan_shelf in store.shelves:
+				_give_up()
+			elif _walk(delta):
+				if Iso.chebyshev(current_cell(), scan_shelf.cell) <= 1:
+					_start(Job.SCAN_ORDERING, SCAN_ORDER_SECONDS / speed)
+					_face(scan_shelf.position)
+				else:
+					_give_up()
+		Job.SCAN_ORDERING:
+			timer -= delta
+			queue_redraw()  # (the laser flickers)
+			if timer <= 0.0:
+				_place_orders()
+				scan_shelf = null
+				job = Job.IDLE
+				timer = 1.0
 
 
 ## A self-checkout is jammed: go fix it (before anything else).
@@ -814,9 +924,26 @@ func _plan_fix() -> bool:
 	return false
 
 
-## Something's running low: head to the computer to order more.
+## Something's running low: head to the computer to order more. With the
+## Handheld Scanner, scan the nearest shelf of something that's low instead
+## (any shelf, for a product that isn't on one yet): quicker, and usually
+## closer.
 func _plan_order() -> bool:
-	if store.computer == null or _broke_timer > 0.0 or store.reorder_list().is_empty():
+	if _broke_timer > 0.0:
+		return false
+	var wants := store.reorder_list()
+	if wants.is_empty():
+		return false
+	if Game.has_upgrade("scanner"):
+		var shelf := _shelf_to_scan(wants)
+		if shelf:
+			var at := store.stand_cell_for(shelf.cell, current_cell())
+			if at != Store.NO_CELL and _go_to(at):
+				scan_shelf = shelf
+				watching = null
+				job = Job.TO_SCAN_ORDER
+				return true
+	if store.computer == null:
 		return false
 	var stand := store.stand_cell_for(store.computer.cell, current_cell())
 	if stand == Store.NO_CELL or not _go_to(stand):
@@ -825,7 +952,20 @@ func _plan_order() -> bool:
 	return true
 
 
-## At the computer: orders what's running low. One box of each first (the
+## The nearest shelf of something on the order list (or the nearest shelf
+## at all, for products that aren't on one yet).
+func _shelf_to_scan(wants: Dictionary) -> Shelf:
+	var best: Shelf = null
+	var best_d := INF
+	for s in store.shelves:
+		var d := position.distance_to(s.position) + (0.0 if wants.has(s.product_id) else 100000.0)
+		if d < best_d:
+			best_d = d
+			best = s
+	return best
+
+
+## At the computer (or scanning a shelf): orders what's running low. One box of each first (the
 ## emptiest first), then more to fill the shelves back up, as long as they
 ## fit on the delivery zone.
 func _place_orders() -> void:
@@ -1040,7 +1180,8 @@ func on_layout_changed() -> void:
 		Job.TO_DROP:
 			path.clear()
 			job = Job.IDLE
-		Job.TO_SPILL, Job.MOPPING, Job.TO_RACK, Job.STORING, Job.TO_CHECK, Job.CHECKING, Job.TO_COMPUTER, Job.TO_REPORT, Job.CHASING:
+		Job.TO_SPILL, Job.MOPPING, Job.TO_RACK, Job.STORING, Job.TO_CHECK, Job.CHECKING, Job.TO_COMPUTER, Job.TO_REPORT, Job.CHASING, \
+				Job.TO_UNLABEL, Job.UNLABELING, Job.TO_SCAN_ORDER, Job.SCAN_ORDERING:
 			_give_up()
 		Job.TO_RIVAL:
 			if not path.is_empty():

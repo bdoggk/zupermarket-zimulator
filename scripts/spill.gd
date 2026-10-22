@@ -63,6 +63,10 @@ func is_settled() -> bool:
 func _process(delta: float) -> void:
 	if Game.is_open:
 		age += delta
+		if age >= Game.DRAIN_MINUTES * Game.SECONDS_PER_GAME_MINUTE and Game.has_upgrade("drains") and Game.in_game():
+			Game.show_popup(position + Vector2(0, -20), "Drained away", Color(0.7, 0.85, 1.0))
+			Game.store.remove_spill(self)
+			return
 	var wet := 1.0 - clampf(age / Store.spill_settle_seconds(), 0.0, 1.0)  # fresh blood shines, then dries darker
 	var b := 1.25 if highlighted else 1.0
 	modulate = Color(b * (1.0 + 0.45 * wet), b * (1.0 + 0.15 * wet), b * (1.0 + 0.15 * wet))

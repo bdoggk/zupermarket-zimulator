@@ -6,3 +6,4 @@ build/
 # Android signing key: keep it safe, never commit it
 keys/
 *.keystore
+__pycache__/

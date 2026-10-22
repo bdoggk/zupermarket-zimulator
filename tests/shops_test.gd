@@ -226,7 +226,7 @@ func _ready() -> void:
 
 	# ---- favorite products: stock what skeletons, witches and vampires love
 	var fav_kinds := Brand.SHOPPERS.values().filter(func(k): return k.has("likes"))
-	check(fav_kinds.size() == 3 and fav_kinds.all(func(k): return (k.likes as Array).size() >= 2 \
+	check(fav_kinds.size() >= 3 and ["skeleton", "witch", "vampire"].all(func(k): return fav_kinds.has(Brand.SHOPPERS[k])) and fav_kinds.all(func(k): return (k.likes as Array).size() >= 2 \
 		and k.likes.all(func(id): return Game.PRODUCTS.has(id) and Game.PRODUCTS[id].license > 0.0)),
 		"skeletons, witches and vampires each have favorite products: %s" % [fav_kinds.map(func(k): return "%s: %s" % [k.name, ", ".join(k.likes.map(func(id): return Game.product_name(id)))])])
 	check(fav_kinds.all(func(k): return k.likes.all(func(id): return Game.fans_of(id).size() == 1 and Game.fans_of(id)[0].name == k.name)), "(nobody shares a favorite)")
@@ -240,8 +240,8 @@ func _ready() -> void:
 	Game.minute = 11 * 60
 	Game.effects.erase("stake")
 	var was_licensed: Dictionary = Game.licensed.duplicate()
-	for id: String in Game.PRODUCTS:
-		Game.licensed[id] = true  # (selling everything, so the favorites don't win by default)
+	for id: String in Game.PRODUCTS.keys().filter(func(id): return Game.PRODUCTS[id].level <= 6):
+		Game.licensed[id] = true  # (selling everything a level 6 store can, so the favorites don't win by default)
 		Game.prices[id] = Game.market_price(id)
 	for s in store.shelves:
 		if fav_kinds.any(func(k): return k.likes.has(s.product_id)):

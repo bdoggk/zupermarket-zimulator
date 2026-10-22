@@ -275,7 +275,7 @@ const SHOPPERS := {
 	},
 	"rich": {
 		"name": "Rich Zombie", "weight": 1.2, "level": 3, "speed": 0.9, "patience": 0.8,
-		"items": [2, 4], "qty": [1, 2], "tolerance": 1.5, "leaky": 0.0, "rival": -0.1,
+		"items": [2, 4], "qty": [1, 2], "tolerance": 1.5, "leaky": 0.0, "rival": -0.1, "likes": ["brains", "goldbrains"],
 		"looks": [preload("res://assets/sprites/shopper_rich.png")],
 	},
 	"witch": {
@@ -287,6 +287,22 @@ const SHOPPERS := {
 		"name": "Vampire", "weight": 1.5, "level": 3, "speed": 1.25, "patience": 1.5,
 		"items": [2, 4], "qty": [1, 2], "tolerance": 1.3, "leaky": 0.0, "rival": -0.05, "night": 3.0, "likes": ["batwings", "bloodbag"],
 		"looks": [preload("res://assets/sprites/shopper_vampire_0.png"), preload("res://assets/sprites/shopper_vampire_1.png")],
+	},
+	# Store levels 7 and up:
+	"mummy": {
+		"name": "Mummy", "plural": "mummies", "weight": 1.5, "level": 7, "speed": 0.7, "patience": 1.5,
+		"items": [2, 4], "qty": [1, 2], "tolerance": 1.15, "leaky": 0.0, "rival": 0.0, "likes": ["scarabs", "canopic"],
+		"looks": [preload("res://assets/sprites/shopper_mummy_0.png"), preload("res://assets/sprites/shopper_mummy_1.png")],
+	},
+	"ghost": {
+		"name": "Ghost", "weight": 1.8, "level": 9, "speed": 1.4, "patience": 0.7,
+		"items": [1, 3], "qty": [1, 2], "tolerance": 1.05, "leaky": 0.0, "rival": 0.05, "night": 2.5, "likes": ["ecto", "cobweb"],
+		"looks": [preload("res://assets/sprites/shopper_ghost_0.png"), preload("res://assets/sprites/shopper_ghost_1.png")],
+	},
+	"werewolf": {
+		"name": "Werewolf", "plural": "werewolves", "weight": 1.4, "level": 11, "speed": 1.3, "patience": 0.9,
+		"items": [3, 6], "qty": [1, 3], "tolerance": 1.1, "leaky": 0.45, "rival": 0.0, "night": 3.0, "likes": ["moonsteak", "howljerky"],
+		"looks": [preload("res://assets/sprites/shopper_werewolf_0.png"), preload("res://assets/sprites/shopper_werewolf_1.png")],
 	},
 }
 
@@ -392,6 +408,57 @@ const PRODUCTS := {
 		"level": 5, "license": 250.0, "cold": false,
 		"icon": preload("res://assets/sprites/item_spine.png"),
 	},
+	# Store levels 7 and up:
+	"scarabs": {
+		"name": "Scarab Crunch", "box_size": 10, "unit_cost": 1.5, "base_price": 3.5,
+		"level": 7, "license": 280.0, "cold": false,
+		"icon": preload("res://assets/sprites/item_scarabs.png"),
+	},
+	"canopic": {
+		"name": "Canopic Pâté", "box_size": 6, "unit_cost": 4.0, "base_price": 9.5,
+		"level": 7, "license": 320.0, "cold": true,
+		"icon": preload("res://assets/sprites/item_canopic.png"),
+	},
+	"spleen": {
+		"name": "Spleen Smoothie", "box_size": 6, "unit_cost": 3.5, "base_price": 8.0,
+		"level": 8, "license": 300.0, "cold": true,
+		"icon": preload("res://assets/sprites/item_spleen.png"),
+	},
+	"nails": {
+		"name": "Nail Clippings", "box_size": 12, "unit_cost": 0.6, "base_price": 1.5,
+		"level": 8, "license": 200.0, "cold": false,
+		"icon": preload("res://assets/sprites/item_nails.png"),
+	},
+	"ecto": {
+		"name": "Ectoplasm Soda", "box_size": 8, "unit_cost": 2.5, "base_price": 6.0,
+		"level": 9, "license": 350.0, "cold": true,
+		"icon": preload("res://assets/sprites/item_ecto.png"),
+	},
+	"cobweb": {
+		"name": "Cobweb Candy", "box_size": 10, "unit_cost": 2.0, "base_price": 5.0,
+		"level": 9, "license": 330.0, "cold": false,
+		"icon": preload("res://assets/sprites/item_cobweb.png"),
+	},
+	"tongue": {
+		"name": "Tongue Tacos", "box_size": 6, "unit_cost": 4.5, "base_price": 10.5,
+		"level": 10, "license": 420.0, "cold": false,
+		"icon": preload("res://assets/sprites/item_tongue.png"),
+	},
+	"moonsteak": {
+		"name": "Moon Steak", "box_size": 6, "unit_cost": 5.0, "base_price": 12.0,
+		"level": 11, "license": 480.0, "cold": true,
+		"icon": preload("res://assets/sprites/item_moonsteak.png"),
+	},
+	"howljerky": {
+		"name": "Howl Jerky", "box_size": 8, "unit_cost": 4.0, "base_price": 9.5,
+		"level": 11, "license": 450.0, "cold": false,
+		"icon": preload("res://assets/sprites/item_howljerky.png"),
+	},
+	"goldbrains": {
+		"name": "Golden Brains", "box_size": 4, "unit_cost": 12.0, "base_price": 28.0,
+		"level": 12, "license": 900.0, "cold": true,
+		"icon": preload("res://assets/sprites/item_goldbrains.png"),
+	},
 }
 
 ## One-time purchases at the computer.
@@ -442,6 +509,49 @@ const UPGRADES := {
 		"desc": "A huge delivery zone: room for 16 boxes.",
 		"icon": preload("res://assets/sprites/upgrade_zone_3.png"),
 	},
+	# Store levels 7 and up:
+	"conveyor": {
+		"name": "Conveyor Belts",
+		"cost": 1200.0, "level": 7,
+		"desc": "Every register and self-checkout rings shoppers up 25% faster (yours and your cashiers').",
+		"icon": preload("res://assets/sprites/upgrade_conveyor.png"),
+	},
+	"zone_4": {
+		"name": "Mass Grave",
+		"cost": 1400.0, "level": 8, "requires": "zone_3", "zone": Vector2i(5, 4),
+		"desc": "The biggest delivery zone: room for 20 boxes.",
+		"icon": preload("res://assets/sprites/upgrade_zone_4.png"),
+	},
+	"billboard": {
+		"name": "Billboard",
+		"cost": 1500.0, "level": 9,
+		"desc": "A billboard by the road: 15% more shoppers.",
+		"icon": preload("res://assets/sprites/upgrade_billboard.png"),
+	},
+	"training": {
+		"name": "Staff Training",
+		"cost": 1800.0, "level": 10,
+		"desc": "Staff earn XP twice as fast and can reach level 7 (two more levels, each one faster).",
+		"icon": preload("res://assets/sprites/upgrade_training.png"),
+	},
+	"drains": {
+		"name": "Floor Drains",
+		"cost": 2200.0, "level": 12,
+		"desc": "Blood that's been on the floor for 2 hours drains away by itself.",
+		"icon": preload("res://assets/sprites/upgrade_drains.png"),
+	},
+	"golden_sign": {
+		"name": "Golden Sign",
+		"cost": 2500.0, "level": 13,
+		"desc": "A store this fancy: shoppers pay up to 10% more before it feels pricey.",
+		"icon": preload("res://assets/sprites/upgrade_golden_sign.png"),
+	},
+	"neon": {
+		"name": "Neon Billboard",
+		"cost": 3000.0, "level": 14, "requires": "billboard",
+		"desc": "Light up the billboard: another 15% more shoppers.",
+		"icon": preload("res://assets/sprites/upgrade_neon.png"),
+	},
 }
 
 ## Furniture you can buy in build mode. kind is shelf, fridge, storage,
@@ -456,6 +566,21 @@ const FURNITURE := {
 	"lantern": {"name": "Lantern", "cost": 40.0, "kind": "decor", "light": true, "texture": preload("res://assets/sprites/lantern.png")},
 	"register": {"name": "Register", "cost": 250.0, "kind": "register", "texture": preload("res://assets/sprites/register.png")},
 	"selfcheckout": {"name": "Self-Checkout", "cost": 400.0, "kind": "selfcheckout", "texture": preload("res://assets/sprites/selfcheckout.png")},
+	# Decorations that bring in one kind of shopper ("pulls", see
+	# Game.shopper_weight), from the store level in "level". "light": a
+	# Color it glows (at "glow", from its foot); "steady": no flicker.
+	"cauldron": {"name": "Cauldron", "cost": 60.0, "kind": "decor", "level": 2, "pulls": "witch",
+		"light": Color(0.45, 1.0, 0.45), "glow": Vector2(0, -18), "texture": preload("res://assets/sprites/prop_cauldron.png")},
+	"coffin": {"name": "Coffin", "cost": 90.0, "kind": "decor", "level": 6, "pulls": "vampire",
+		"texture": preload("res://assets/sprites/prop_coffin.png")},
+	"bones": {"name": "Bone Pile", "cost": 80.0, "kind": "decor", "level": 8, "pulls": "skeleton",
+		"texture": preload("res://assets/sprites/rival_skulls.png")},
+	"spiritlamp": {"name": "Spirit Lamp", "cost": 110.0, "kind": "decor", "level": 9, "pulls": "ghost",
+		"light": Color(0.55, 0.8, 1.0), "glow": Vector2(0, -26), "texture": preload("res://assets/sprites/decor_spirit_lamp.png")},
+	"sarcophagus": {"name": "Sarcophagus", "cost": 140.0, "kind": "decor", "level": 10, "pulls": "mummy",
+		"texture": preload("res://assets/sprites/decor_sarcophagus.png")},
+	"moonlamp": {"name": "Moon Lamp", "cost": 160.0, "kind": "decor", "level": 11, "pulls": "werewolf",
+		"light": Color(1.0, 0.95, 0.75), "glow": Vector2(0, -44), "steady": true, "texture": preload("res://assets/sprites/decor_moon_lamp.png")},
 }
 
 ## Paint jobs in build mode. Each id matches sprites in assets/sprites:
@@ -497,7 +622,7 @@ const STAFF := {
 	},
 	"manager": {
 		"name": "General Manager", "hire": 100.0, "wage": 45.0, "max": 1,
-		"desc": "Checks the stock and orders more boxes of anything whose shelves are down to a third full. Keeps the other staff working (15% faster) and gets anyone who's stuck moving again.",
+		"desc": "Orders more boxes before doing anything else, as soon as a shelf has room (or when you say, below). Keeps the other staff working (15% faster) and gets anyone who's stuck moving again.",
 		"texture": preload("res://assets/sprites/staff_manager.png"),
 	},
 	"spy": {

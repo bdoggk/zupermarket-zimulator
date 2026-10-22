@@ -2923,6 +2923,437 @@ def app_icon(beans):
     return bg.resize((128, 128), Image.NEAREST)
 
 
+# --------------------------------------------------------------------------
+# Store levels 7 and up (zombie game): mummies, ghosts and werewolves, what
+# they come in for, their decorations, and the new upgrades
+# --------------------------------------------------------------------------
+def mummy(wrap=(214, 200, 160), eyes=(250, 190, 60), seed=81):
+    """A mummy, wrapped head to toe, a loose bandage trailing (16x36)."""
+    random.seed(seed)
+    body = new(16, 36)
+    dark = shade(wrap, 0.78)
+    rect(body, 5, 24, 7, 31, wrap)  # legs
+    rect(body, 8, 24, 10, 31, shade(wrap, 0.86))
+    rect(body, 4, 32, 7, 33, dark)
+    rect(body, 8, 32, 11, 33, shade(dark, 0.9))
+    rect(body, 4, 13, 11, 24, wrap)  # body
+    rect(body, 10, 13, 11, 24, shade(wrap, 0.86))
+    rect(body, 1, 14, 3, 16, wrap)  # arms out in front
+    rect(body, 12, 14, 14, 16, shade(wrap, 0.86))
+    rect(body, 7, 11, 8, 12, dark)
+    rect(body, 5, 3, 10, 10, wrap)  # head
+    rect(body, 10, 3, 10, 10, shade(wrap, 0.88))
+    for y in range(3, 32, 3):  # the wrapping, row by row
+        off = (y // 3) % 2
+        for x in range(4 + off, 12, 3):
+            if body.load()[x, y][3]:
+                dot(body, x, y, dark)
+                if body.load()[x + 1, y][3]:
+                    dot(body, x + 1, y, dark)
+    rect(body, 6, 6, 9, 6, (40, 30, 26))  # the gap for the eyes
+    dot(body, 6, 6, eyes)
+    dot(body, 9, 6, eyes)
+    for y in range(17, 23):  # a loose end trailing from one arm
+        dot(body, 13 + (y % 2), y, wrap)
+    outline_outside(body)
+    return _with_shadow(body)
+
+
+def ghost(sheet=(226, 234, 244), eyes=(30, 34, 52), seed=91):
+    """A ghost in a sheet, floating, see-through (16x36)."""
+    random.seed(seed)
+    body = new(16, 36)
+    px = body.load()
+    a = 215
+    for y in range(4, 31):
+        half = 6 if y > 9 else int(6 * math.sqrt(max(0.0, 1 - ((10 - y) / 6.5) ** 2))) + (1 if y > 6 else 0)
+        for x in range(8 - half, 8 + half):
+            c = sheet if x < 10 else shade(sheet, 0.88)
+            px[x, y] = (c[0], c[1], c[2], a)
+    for x in range(2, 14):  # a wavy hem
+        if (x // 2) % 2 == 0:
+            px[x, 30] = (0, 0, 0, 0)
+            px[x, 29] = (sheet[0], sheet[1], sheet[2], a)
+        else:
+            px[x, 31] = (sheet[0], sheet[1], sheet[2], a)
+    for ex in (5, 9):  # hollow eyes
+        rect(body, ex, 9, ex + 1, 11, eyes)
+    rect(body, 7, 14, 8, 16, eyes)  # an "oooo" mouth
+    dot(body, 2, 17, sheet)  # little arms under the sheet
+    dot(body, 13, 17, shade(sheet, 0.88))
+    outline_outside(body, (120, 130, 160, 160))
+    img = new(16, 36)
+    shadow = img.load()
+    for y in range(33, 36):  # a small shadow well below: it floats
+        for x in range(16):
+            if ((x + 0.5 - 8) / 5.0) ** 2 + ((y + 0.5 - 34.5) / 1.5) ** 2 <= 1:
+                shadow[x, y] = (0, 0, 0, 50)
+    img.alpha_composite(body)
+    return img
+
+
+def werewolf(fur=(112, 84, 60), shirt=(150, 50, 44), pants=(60, 66, 90), seed=101):
+    """A werewolf in a ripped shirt (16x36)."""
+    random.seed(seed)
+    body = new(16, 36)
+    fur_d, fur_l = shade(fur, 0.8), shade(fur, 1.25)
+    rect(body, 4, 24, 7, 30, pants)  # torn jeans, furry shins
+    rect(body, 8, 24, 11, 30, shade(pants, 0.82))
+    rect(body, 4, 31, 7, 31, fur)
+    rect(body, 8, 31, 11, 31, fur_d)
+    rect(body, 3, 32, 7, 33, fur_d)  # big clawed feet
+    rect(body, 8, 32, 12, 33, shade(fur_d, 0.9))
+    dot(body, 3, 33, (236, 230, 210))
+    dot(body, 12, 33, (236, 230, 210))
+    rect(body, 3, 12, 12, 24, shirt)  # broad shoulders
+    rect(body, 11, 12, 12, 24, shade(shirt, 0.82))
+    for x, y in ((5, 14), (6, 15), (9, 18), (10, 19), (6, 21)):  # rips, fur showing through
+        dot(body, x, y, fur)
+    rect(body, 6, 12, 9, 14, fur_l)  # chest fur at the collar
+    rect(body, 1, 13, 2, 20, fur)  # hairy arms
+    rect(body, 13, 13, 14, 20, fur_d)
+    rect(body, 1, 21, 2, 22, fur_d)
+    rect(body, 13, 21, 14, 22, shade(fur_d, 0.9))
+    dot(body, 1, 23, (236, 230, 210))  # claws
+    dot(body, 14, 23, (236, 230, 210))
+    rect(body, 4, 3, 11, 10, fur)  # head
+    rect(body, 11, 3, 11, 10, fur_d)
+    rect(body, 4, 0, 5, 3, fur)  # pointy ears
+    rect(body, 10, 0, 11, 3, fur_d)
+    dot(body, 5, 1, (150, 90, 90))
+    dot(body, 10, 1, (150, 90, 90))
+    rect(body, 6, 7, 9, 10, fur_l)  # the snout
+    rect(body, 7, 7, 8, 7, (30, 24, 24))  # nose
+    dot(body, 5, 5, (250, 220, 70))  # yellow eyes
+    dot(body, 10, 5, (250, 220, 70))
+    rect(body, 6, 10, 9, 10, (90, 30, 34))
+    dot(body, 6, 11, (240, 236, 220))  # fangs
+    dot(body, 9, 11, (240, 236, 220))
+    outline_outside(body)
+    return _with_shadow(body)
+
+
+def scarabs(img):
+    box = (212, 170, 70)
+    rect(img, 1, 2, 6, 8, box)
+    rect(img, 5, 2, 6, 8, shade(box, 0.8))
+    rect(img, 1, 1, 6, 1, (130, 60, 40))
+    rect(img, 3, 4, 4, 7, (40, 110, 140))  # a blue beetle on the front
+    dot(img, 2, 5, (40, 110, 140))
+    dot(img, 5, 5, (40, 110, 140))
+    dot(img, 3, 3, (30, 70, 90))
+    dot(img, 4, 3, (30, 70, 90))
+
+
+def canopic(img):
+    jar = (196, 170, 120)
+    rect(img, 2, 4, 5, 8, jar)
+    rect(img, 1, 5, 6, 7, jar)
+    rect(img, 5, 4, 6, 8, shade(jar, 0.8))
+    rect(img, 2, 1, 5, 3, (40, 36, 40))  # a jackal's-head lid
+    dot(img, 2, 0, (40, 36, 40))
+    dot(img, 5, 0, (40, 36, 40))
+    dot(img, 3, 2, (226, 196, 84))
+    rect(img, 2, 6, 5, 6, (60, 110, 150))  # blue band
+
+
+def spleen(img):
+    cup = (230, 228, 232)
+    rect(img, 1, 3, 6, 8, cup)
+    rect(img, 5, 3, 6, 8, shade(cup, 0.85))
+    rect(img, 1, 3, 6, 4, (130, 40, 80))  # purple-red smoothie at the top
+    rect(img, 2, 5, 5, 6, (150, 50, 90))  # a label
+    rect(img, 4, 0, 4, 2, (220, 80, 60))  # the straw
+    dot(img, 5, 0, (220, 80, 60))
+
+
+def nails(img):
+    bag = (206, 186, 150)
+    rect(img, 1, 2, 6, 8, bag)
+    rect(img, 5, 2, 6, 8, shade(bag, 0.82))
+    rect(img, 1, 1, 6, 1, shade(bag, 0.7))
+    for x, y in ((2, 4), (4, 5), (3, 7), (5, 6)):  # little crescents
+        dot(img, x, y, (238, 226, 204))
+        dot(img, x + 1, y, (190, 170, 140))
+
+
+def ecto(img):
+    glass = (150, 200, 180)
+    rect(img, 2, 3, 5, 8, glass)
+    rect(img, 3, 1, 4, 2, glass)  # the neck
+    rect(img, 2, 4, 5, 8, (110, 240, 120))  # glowing green
+    dot(img, 2, 5, (200, 255, 200))
+    rect(img, 3, 0, 4, 0, (220, 60, 60))  # cap
+    rect(img, 2, 6, 5, 6, (240, 240, 240))  # label
+
+
+def cobweb(img):
+    for x, y in ((2, 1), (3, 1), (4, 1), (1, 2), (2, 2), (3, 2), (4, 2), (5, 2), (1, 3), (2, 3), (3, 3), (4, 3),
+                 (5, 3), (6, 3), (2, 4), (3, 4), (4, 4), (5, 4)):
+        dot(img, x, y, (214, 216, 224) if (x + y) % 3 else (180, 182, 196))  # a fluffy grey puff
+    rect(img, 3, 5, 3, 9, (160, 120, 80))  # on a stick
+    dot(img, 5, 2, (40, 36, 40))  # with a little spider
+    dot(img, 6, 1, (40, 36, 40))
+
+
+def tongue(img):
+    shell = (226, 186, 80)
+    rect(img, 1, 4, 6, 7, shell)
+    rect(img, 2, 8, 5, 8, shade(shell, 0.85))
+    rect(img, 6, 4, 6, 7, shade(shell, 0.8))
+    rect(img, 2, 2, 5, 4, (220, 110, 130))  # a pink tongue lolling out
+    dot(img, 3, 1, (220, 110, 130))
+    dot(img, 4, 3, (180, 70, 90))
+    dot(img, 2, 5, (90, 160, 70))  # lettuce
+
+
+def moon_steak(img):
+    meat = (176, 40, 50)
+    rect(img, 1, 3, 6, 8, meat)
+    rect(img, 5, 3, 6, 8, shade(meat, 0.82))
+    rect(img, 2, 4, 3, 5, (226, 120, 120))  # marbling
+    dot(img, 5, 7, (226, 120, 120))
+    rect(img, 6, 1, 7, 3, (240, 236, 222))  # the bone
+    dot(img, 3, 7, (246, 230, 140))  # a moon stamp
+    dot(img, 4, 7, (246, 230, 140))
+
+
+def howl_jerky(img):
+    pouch = (120, 84, 56)
+    rect(img, 1, 2, 6, 8, pouch)
+    rect(img, 5, 2, 6, 8, shade(pouch, 0.8))
+    rect(img, 1, 1, 6, 1, (90, 60, 40))
+    rect(img, 2, 3, 5, 6, (236, 226, 160))  # a full moon...
+    dot(img, 3, 5, (40, 34, 40))  # ...with a howling wolf in it
+    dot(img, 4, 4, (40, 34, 40))
+    dot(img, 4, 5, (40, 34, 40))
+
+
+def golden_brains(img):
+    gold, gold_d, gold_l = (226, 182, 60), (180, 136, 40), (255, 232, 140)
+    rect(img, 1, 3, 6, 8, gold)
+    rect(img, 2, 2, 5, 2, gold)
+    rect(img, 5, 3, 6, 8, gold_d)
+    for x, y in ((2, 4), (3, 5), (4, 4), (2, 6), (4, 7), (5, 5)):
+        dot(img, x, y, gold_d)  # the folds
+    dot(img, 2, 3, gold_l)
+    dot(img, 7, 1, (255, 255, 220))  # a sparkle
+    dot(img, 6, 0, (255, 255, 220))
+
+
+def _lamp(view="front", glass=(214, 150, 64), glass_light=(236, 184, 96), flame=(255, 236, 150),
+          flame_tip=(255, 200, 90), candle=(240, 232, 214), iron=(64, 60, 62), seed=19):
+    """A lantern on a stand (64x64): see lantern()."""
+    img = new(64, 64)
+    cy = img.height - 16
+    iron_dark, iron_light = shade(iron, 0.62), shade(iron, 1.5)
+    prism(img, 32, cy, 7, 2, iron_light, iron, iron_dark)  # base plate
+    rect(img, 31, cy - 22, 32, cy - 2, iron)  # post
+    dot(img, 31, cy - 12, iron_light)
+    top = cy - 40
+    rect(img, 26, top + 4, 37, top + 18, iron_dark)  # cage
+    rect(img, 27, top + 5, 36, top + 17, glass)
+    rect(img, 27, top + 5, 28, top + 17, glass_light)
+    if candle:
+        rect(img, 30, top + 11, 33, top + 17, candle)
+    rect(img, 31, top + 7, 32, top + 10, flame)
+    dot(img, 31, top + 6, flame_tip)
+    for x in (29, 34):
+        rect(img, x, top + 5, x, top + 17, iron)  # bars
+    rect(img, 25, top + 18, 38, top + 20, iron)  # bottom
+    rect(img, 25, top + 2, 38, top + 4, iron)  # roof
+    rect(img, 28, top, 35, top + 1, iron)
+    rect(img, 31, top - 3, 32, top - 1, iron_dark)  # ring
+    hook = 23 if view == "front" else 40
+    rect(img, min(hook, 26), top + 1, max(hook, 25) if hook < 30 else hook, top + 1, iron_dark)
+    rect(img, hook, top + 1, hook, top + 4, iron_dark)
+    random.seed(seed)
+    for _ in range(6):  # rust
+        x, y = random.randint(26, 37), random.choice((top + 3, top + 19, top + 4))
+        if img.load()[x, y][3]:
+            dot(img, x, y, (130, 76, 50))
+    outline_object(img, 0.6)
+    return img
+
+
+def spirit_lamp(view="front"):
+    """A lantern with a ghostly blue wisp in it instead of a candle (64x64)."""
+    return _lamp(view, glass=(90, 130, 170), glass_light=(130, 170, 210), flame=(210, 240, 255),
+                 flame_tip=(150, 210, 255), candle=None, iron=(70, 72, 84), seed=23)
+
+
+def sarcophagus():
+    """A mummy's coffin standing up: gold, with blue stripes and a face (64x76)."""
+    img = new(64, 76)
+    cy = img.height - 16
+    px = img.load()
+    for y in range(cy - 3, cy + 4):
+        for x in range(18, 46):
+            if ((x - 32) / 13.0) ** 2 + ((y - cy) / 3.0) ** 2 <= 1:
+                px[x, y] = (0, 0, 0, 70)
+    gold, gold_d, gold_l = (214, 170, 64), (164, 122, 40), (246, 210, 110)
+    blue = (40, 80, 150)
+    top, shoulder, foot = cy - 52, cy - 38, cy + 1
+
+    def half(y):
+        if y < top + 6:
+            return 5 + (y - top)
+        if y < shoulder:
+            return 10
+        return 10 - (y - shoulder) * 4 // (foot - shoulder)
+
+    for y in range(top, foot + 1):
+        w = half(y)
+        for x in range(32 - w, 32 + w + 1):
+            c = gold_l if x <= 32 - w + 1 else (gold_d if x >= 32 + w - 1 else gold)
+            if y > shoulder and (y - shoulder) % 5 < 2:
+                c = blue if x not in (32 - w, 32 + w) else shade(blue, 0.8)
+            px[x, y] = solid(c)
+    for y in range(top, top + 16):  # the striped headdress
+        w = half(y)
+        for x in (32 - w, 32 - w + 1, 32 + w - 1, 32 + w):
+            if (y - top) % 3 == 0:
+                px[x, y] = solid(blue)
+    rect(img, 29, top + 5, 35, top + 13, (196, 150, 100))  # the face
+    dot(img, 30, top + 8, (30, 30, 40))
+    dot(img, 34, top + 8, (30, 30, 40))
+    rect(img, 31, top + 11, 33, top + 11, (120, 70, 50))
+    rect(img, 31, top + 14, 33, top + 17, (60, 50, 40))  # the beard
+    rect(img, 26, shoulder - 6, 38, shoulder - 5, blue)  # crossed arms
+    outline_object(img, 0.6)
+    return img
+
+
+def moon_lamp():
+    """A full moon glowing on top of a crooked post (64x72). The game adds
+    the light."""
+    img = new(64, 72)
+    cy = img.height - 16
+    px = img.load()
+    wood, wood_d = (92, 70, 52), (62, 46, 36)
+    prism(img, 32, cy, 6, 2, (110, 104, 96), (84, 80, 76), (60, 56, 54))  # a stone base
+    for y in range(cy - 34, cy - 1):  # the post leans a little
+        x = 31 + (cy - y) // 18
+        rect(img, x, y, x + 1, y, wood if y % 4 else wood_d)
+    cx, my = 33, cy - 44
+    for x, y in _ellipse_pixels(cx, my, 9, 9):
+        if 0 <= y < img.height:
+            px[x, y] = solid((240, 232, 190) if x < cx + 4 else (214, 204, 160))
+    for x, y in ((cx - 3, my - 3), (cx + 2, my + 1), (cx - 4, my + 4), (cx + 4, my - 4)):  # craters
+        dot(img, x, y, (200, 190, 150))
+        dot(img, x + 1, y, (200, 190, 150))
+    for x in (cx - 8, cx + 8):  # a little iron cradle
+        rect(img, x, my + 4, x, my + 9, (60, 58, 62))
+    rect(img, cx - 8, my + 9, cx + 8, my + 9, (60, 58, 62))
+    outline_object(img, 0.6)
+    return img
+
+
+def conveyor_icon():
+    img = new(16, 12)
+    rect(img, 0, 6, 15, 8, (40, 40, 44))  # the belt
+    for x in range(1, 16, 3):
+        dot(img, x, 7, (90, 90, 96))
+    for x in (2, 13):
+        rect(img, x, 9, x, 11, (120, 120, 126))  # legs
+    rect(img, 5, 2, 9, 5, CARD_L)  # a box riding along
+    rect(img, 5, 2, 9, 2, CARD_TOP)
+    outline_outside(img)
+    return img
+
+
+def billboard_icon(neon=False):
+    img = new(16, 12)
+    rect(img, 3, 8, 3, 11, (90, 70, 52))  # posts
+    rect(img, 12, 8, 12, 11, (90, 70, 52))
+    board = (230, 226, 210)
+    rect(img, 0, 1, 15, 7, board)
+    if neon:
+        for x in range(16):
+            dot(img, x, 1, (255, 80, 200) if x % 2 else (120, 255, 240))
+            dot(img, x, 7, (255, 80, 200) if x % 2 else (120, 255, 240))
+    rect(img, 3, 3, 6, 5, (210, 120, 140))  # a brain...
+    dot(img, 4, 4, (170, 80, 100))
+    rect(img, 8, 3, 13, 3, (60, 60, 70))  # ...and some words
+    rect(img, 8, 5, 12, 5, (60, 60, 70))
+    outline_outside(img)
+    return img
+
+
+def training_icon():
+    img = new(16, 12)
+    rect(img, 2, 2, 13, 10, (226, 220, 196))  # a certificate
+    rect(img, 2, 2, 13, 2, (170, 60, 60))
+    rect(img, 4, 4, 11, 4, (90, 90, 100))
+    rect(img, 4, 6, 9, 6, (90, 90, 100))
+    rect(img, 10, 7, 12, 9, (226, 182, 60))  # a gold seal
+    dot(img, 11, 8, (255, 232, 140))
+    outline_outside(img)
+    return img
+
+
+def drain_icon():
+    img = new(16, 12)
+    for x, y in _ellipse_pixels(8, 6, 6, 4):
+        dot(img, x, y, (70, 70, 74))
+    for x in range(4, 13, 2):  # the grate
+        rect(img, x, 4, x, 8, (40, 40, 44))
+    for x, y in ((2, 9), (3, 10), (13, 3), (12, 2), (14, 4)):
+        dot(img, x, y, BLOOD)  # the last of a puddle running in
+    outline_outside(img)
+    return img
+
+
+def golden_sign_icon():
+    img = new(16, 12)
+    gold, gold_d = (226, 182, 60), (170, 126, 36)
+    rect(img, 1, 1, 14, 9, gold)
+    rect(img, 1, 9, 14, 9, gold_d)
+    rect(img, 14, 1, 14, 9, gold_d)
+    for x, y in ((7, 2), (8, 2), (6, 3), (7, 4), (8, 5), (9, 6), (8, 7), (7, 7), (7, 3), (8, 6), (7, 8), (8, 8)):
+        dot(img, x, y, (120, 70, 20))  # a dollar sign
+    rect(img, 7, 10, 8, 11, (90, 70, 52))
+    outline_outside(img)
+    return img
+
+
+def mass_grave_icon():
+    img = new(16, 12)
+    for y in range(7, 12):
+        for x in range(16):
+            dot(img, x, y, (96, 80, 60) if (x + y) % 3 else (76, 62, 46))  # dug-up dirt
+    for i, (bx, by) in enumerate(((0, 4), (4, 2), (8, 3), (12, 4), (6, 6))):
+        rect(img, bx, by, bx + 3, by + 3, CARD_L)
+        rect(img, bx, by, bx + 3, by, CARD_TOP)
+    dot(img, 2, 5, BLOOD)
+    outline_outside(img)
+    return img
+
+
+def new_content():
+    """Everything above, saved: called from main()."""
+    save(mummy(), "shopper_mummy_0")
+    save(mummy(wrap=(196, 186, 150), eyes=(120, 230, 120), seed=82), "shopper_mummy_1")
+    save(ghost(), "shopper_ghost_0")
+    save(ghost(sheet=(214, 240, 226), eyes=(40, 50, 44), seed=92), "shopper_ghost_1")
+    save(werewolf(), "shopper_werewolf_0")
+    save(werewolf(fur=(80, 74, 70), shirt=(60, 90, 140), pants=(70, 60, 50), seed=102), "shopper_werewolf_1")
+    for name, draw in [("scarabs", scarabs), ("canopic", canopic), ("spleen", spleen), ("nails", nails),
+                       ("ecto", ecto), ("cobweb", cobweb), ("tongue", tongue), ("moonsteak", moon_steak),
+                       ("howljerky", howl_jerky), ("goldbrains", golden_brains)]:
+        save(icon(draw), f"item_{name}")
+    save(spirit_lamp(), "decor_spirit_lamp")
+    save(sarcophagus(), "decor_sarcophagus")
+    save(moon_lamp(), "decor_moon_lamp")
+    save(conveyor_icon(), "upgrade_conveyor")
+    save(billboard_icon(), "upgrade_billboard")
+    save(billboard_icon(neon=True), "upgrade_neon")
+    save(training_icon(), "upgrade_training")
+    save(drain_icon(), "upgrade_drains")
+    save(golden_sign_icon(), "upgrade_golden_sign")
+    save(mass_grave_icon(), "upgrade_zone_4")
+
+
 def main():
     for i, (style, (a, b, pattern)) in enumerate(FLOOR_STYLES.items()):
         save(floor_tile(a, 10 * i + 1, pattern=pattern), f"floor_{style}_a")
@@ -3097,6 +3528,8 @@ def main():
     save(title(), "title")
     save(splash(), "splash")
     save(lantern(), "lantern")
+    if ZOMBIE:
+        new_content()
     if ZOMBIE:
         save(zombie_girl(), "pc_girl")
         save(pc_wallpaper(), "pc_wallpaper")

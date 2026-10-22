@@ -156,7 +156,7 @@ func is_serving(c: Customer) -> bool:
 
 
 func scan_time(c: Customer) -> float:
-	return c.item_count() * SCAN_SECONDS_PER_ITEM
+	return c.item_count() * SCAN_SECONDS_PER_ITEM / (Game.CONVEYOR_SPEED if Game.has_upgrade("conveyor") else 1.0)
 
 
 ## Rings up the front customer. Used by both the player and cashiers.

@@ -185,9 +185,9 @@ func _ready() -> void:
 	for i in 5:
 		await _button(JOY_BUTTON_DPAD_RIGHT)
 		row.append(_text())
-	check(row == ["-", "+", "=", "Order box", "Order box", "Order box"], "right goes along a product's row and stops at its end: %s" % [row])
+	check(row == ["-", "+", "=", "Order box", "On", "On"], "right goes along a product's row (to its Stock switch) and stops at its end: %s" % [row])
 	await _button(JOY_BUTTON_DPAD_LEFT)
-	check(_text() == "=", "left goes back along it")
+	check(_text() == "Order box", "left goes back along it")
 	var footer: Array = pc.markup_buttons + [pc.match_button, pc.auto_button]
 	for i in 40:
 		if footer.has(_focus()):

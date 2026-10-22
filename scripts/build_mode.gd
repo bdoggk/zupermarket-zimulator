@@ -100,6 +100,9 @@ func select_tool(t: Tool) -> void:
 
 
 func select_place(furniture_id: String) -> void:
+	if Game.level < Game.furniture_level(furniture_id):
+		Game.message.emit("The %s comes with store level %d." % [Game.FURNITURE[furniture_id].name, Game.furniture_level(furniture_id)])
+		return
 	_clear_selection()
 	tool = Tool.PLACE
 	place_id = furniture_id
@@ -198,7 +201,7 @@ func _pad_button(b: JoyButton) -> bool:
 
 ## What the d-pad goes through: the furniture, then the tools.
 func _pad_tools() -> Array:
-	var list: Array = Game.FURNITURE.keys()
+	var list: Array = Game.FURNITURE.keys().filter(func(id): return Game.level >= Game.furniture_level(id))
 	list.append_array(["move", "rotate", "sell"])
 	if store.town and not Brand.EXPANSIONS.is_empty():
 		list.append("expand")

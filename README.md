@@ -38,6 +38,46 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.10.0
+
+- **Decorations that bring in one kind of shopper.** Build mode has a **Decor** row now
+  (gravestones, lanterns and the new ones). Each new decoration brings in 50% more of
+  one kind of shopper, up to three of them per kind:
+  - **Cauldron** (level 2): witches. It glows green.
+  - **Coffin** (level 6): vampires.
+  - **Bone Pile** (level 8): skeletons.
+  - **Spirit Lamp** (level 9): ghosts. It glows blue.
+  - **Sarcophagus** (level 10): mummies.
+  - **Moon Lamp** (level 11): werewolves.
+
+  A decoration you haven't reached the level for shows "Lv N" and can't be bought yet.
+- **Say how your staff work.** The Staff app has a **How they work** section:
+  - **Stockers fill empty shelves** (on/off): whether stockers put things on shelves
+    with no label.
+  - **Stockers take labels off** (on/off): whether stockers take the label off an
+    empty shelf of something you've stopped stocking.
+  - **The manager orders when...**: pick when the general manager orders more of a
+    product. The choices go from "a box fits" (like before) through 3/4, half, 1/3
+    and 1/4 full to "almost empty".
+- **Decide what gets stocked.** Stock & Prices has a **Stock** switch for every product.
+  With it off, stockers leave that product alone and the manager won't order it. You
+  can still stock and order it yourself.
+- **The general manager puts ordering first.** They order before checking on anything
+  else, and break off their rounds to order as soon as something runs low. With the
+  **Handheld Scanner** they order by scanning the low shelf, with no walk to the
+  computer, and it's quicker.
+- **No level cap.** Levels carry on past 14, each one taking 1,000 XP more than the
+  one before. Every level after 14 pays a cash bonus that grows each time. Levels 7 to
+  14 each bring something new:
+  - **10 new products**, from Scarab Crunch to Golden Brains.
+  - **3 new kinds of shopper:** mummies (level 7), ghosts (level 9, mostly at night)
+    and werewolves (level 11, at night, and they drip).
+  - **7 new upgrades:** Conveyor Belts, Mass Grave (the biggest delivery zone),
+    Billboard, Staff Training, Floor Drains, Golden Sign and Neon Billboard.
+  - **More staff:** one more stocker at levels 8 and 12, one more cashier at level 9
+    and one more janitor at level 10.
+  - Room for more shoppers in the store at once, up to level 10.
+
 ## What's new in 0.9.9
 
 - **Take the box you want off a storage rack.** With more than one product on a rack,
@@ -512,11 +552,14 @@ In the **Stock & Prices** tab:
 Every $1 of sales is 1 XP (the bar next to your level shows how close the next level
 is), and every license you buy earns a bit too. Blood on the floor slowly costs you XP
 while you're open. When you level up, a panel lists everything the new level unlocks.
-Leveling up your store (6 levels) lets you buy **licenses** for new products in the
-**Products** tab. Every product you add brings a few more shoppers (up to +50%).
+Leveling up your store lets you buy **licenses** for new products in the
+**Products** tab. There's no top level: up to level 14 every level brings something
+new (products, shoppers, upgrades, decorations, more staff), and after that every
+level takes 1,000 XP more than the one before and pays a cash bonus ($500 at level 15,
+then $250 more each level). Every product you add brings a few more shoppers (up to +50%).
 Shoppers only want what you've licensed, but the skeletons, witches and vampires in
 town tell you which of their favorites to license next (the Products tab and the day
-summary say who asked). There are 18 products in total:
+summary say who asked). There are 28 products in total:
 
 | Level | Products |
 |---|---|
@@ -525,7 +568,13 @@ summary say who asked). There are 18 products in total:
 | 2 | Lungs, Fresh Hearts (cold), Eye of Newt (witches), Calcium Milk (cold, skeletons) |
 | 3 | Kidneys, Toe Jerky, Bat Wing Crisps (vampires), Mandrake Root (witches) |
 | 4 | Liver (cold), Bone Marrow, Type O Blood Bags (cold, vampires) |
-| 5 | Fresh Brains (cold), Spine Snacks |
+| 5 | Fresh Brains (cold, rich zombies), Spine Snacks |
+| 7 | Scarab Crunch (mummies), Canopic Pâté (cold, mummies) |
+| 8 | Spleen Smoothie (cold), Nail Clippings |
+| 9 | Ectoplasm Soda (cold, ghosts), Cobweb Candy (ghosts) |
+| 10 | Tongue Tacos |
+| 11 | Moon Steak (cold, werewolves), Howl Jerky (werewolves) |
+| 12 | Golden Brains (cold, rich zombies) |
 
 Cold products need a **Meat Cooler** (build mode). Keep the favorites of skeletons,
 witches and vampires on your shelves to bring more of them in (see Kinds of shoppers).
@@ -582,12 +631,21 @@ spies they throw out).
 | Runner | Fast, impatient. Shows up from store level 2 |
 | Skeleton | Comes over from Bone Mart's side of town. Fussy about prices. Some just wander around town. Loves Bone Meal and Calcium Milk |
 | Brute | Big and slow, buys a cart full (4-6 different things). Growls. Level 3 |
-| Rich zombie | Doesn't mind paying 50% over market. Level 3 |
+| Rich zombie | Doesn't mind paying 50% over market. Loves Fresh Brains and Golden Brains. Level 3 |
 | Witch | A bit fussy about prices, never drips. Loves Eye of Newt and Mandrake Root. Level 2 |
 | Vampire | Comes out mostly after 5 PM, patient, pays up to 30% over market, never drips. Loves Bat Wing Crisps and Type O Blood Bags. Level 3 |
+| Mummy | Slow and patient, pays a bit over market. Loves Scarab Crunch and Canopic Pâté. Level 7 |
+| Ghost | Quick and impatient, comes out mostly after 5 PM. Loves Ectoplasm Soda and Cobweb Candy. Level 9 |
+| Werewolf | Comes out mostly after 5 PM, buys a lot, and drips. Loves Moon Steak and Howl Jerky. Level 11 |
+
+**Decorations:** a cauldron brings 50% more witches, and each of the other decorations
+in build mode's Decor row brings in its own kind (coffins for vampires, bone piles for
+skeletons, spirit lamps for ghosts, sarcophagi for mummies, moon lamps for werewolves).
+Up to three of each count.
 
 **Favorite products:** every favorite of theirs you have on your shelves (in stock)
-brings 75% more skeletons, witches or vampires (both favorites: 2.5 times as many).
+brings 75% more of the kind that loves it (skeletons, rich zombies, witches, vampires,
+mummies, ghosts or werewolves; both favorites: 2.5 times as many).
 They're 4 times as likely to want it, and 5% less likely to go to Bone Mart for each
 one. Shoppers only want what you sell; if you don't sell a favorite yet, the ones in
 town tell you about it as you pass ("Got any Eye of Newt? Bone Mart doesn't!").
@@ -624,26 +682,29 @@ What's working shows under the corner buttons with the time left.
 Hire help in the computer's **Staff** tab. Each hire costs $50 up front, and staff
 are paid **wages at the end of every day** (shown in the day summary, even if it puts
 you in the red).
-- **Stocker** ($25/day, up to 3): shambles to the stockroom, picks up delivery boxes
+- **Stocker** ($25/day, up to 3, one more at levels 8 and 12): shambles to the stockroom, picks up delivery boxes
   and stocks the shelves. It
   tops up shelves that already have that product first, then fills empty ones, and
   puts a box down if there's nowhere for it to go. It leaves cold products alone
   until you have a meat cooler.
-- **Cashier** ($30/day, one per register): walks to a register and rings up the
+- **Cashier** ($30/day, one per register, up to 4, or 5 from level 9): walks to a register and rings up the
   zombies in its line by themselves, so you're free to stock and order. Customers
   will wait a little longer in a line that has a cashier. Your staff are zombies too.
   Want to run a register yourself? Walk up to it and press E to **take over**: the
   cashier goes to a free register or takes a break, and comes back once you've
   walked away or stood there a few seconds without ringing anyone up (or press E on
   the register to hand it back).
-- **Janitor** ($20/day, up to 2): brings their own mop and cleans up the blood.
+- **Janitor** ($20/day, up to 2, or 3 from level 10): brings their own mop and cleans up the blood.
 - **Spy** ($80 to hire, $35/day, one): spies on Bone Mart and throws out its spies (see
   "Spies" above).
-- **General Manager** ($100 to hire, $45/day, one): walks around checking the shelves
-  and the staff. When a product's shelves are down to a third full (counting boxes
-  that are already around or on the way), they walk to the computer and order enough
+- **General Manager** ($100 to hire, $45/day, one): ordering comes first, then
+  walking around checking the shelves and the staff. When a product's shelves have
+  room for a whole box (counting boxes that are already around or on the way; you can
+  make them wait longer, see below), they drop what they're doing and order enough
   boxes to fill them back up, up to 4 at a time and as many as fit on the delivery
-  zone (if you can afford it; the message says what they ordered). While you have a
+  zone (if you can afford it; the message says what they ordered). They walk to the
+  computer to order, or with the **Handheld Scanner** they scan the low shelf instead,
+  which is quicker. While you have a
   manager, everyone else works 15% faster, and anyone stuck on a job gets a
   "Back to work!".
 
@@ -651,10 +712,24 @@ you in the red).
 up, spills mopped, boxes ordered, self-checkouts fixed. Walking around or standing
 at an empty register earns nothing, and a manager only gets credit for a
 "Back to work!" once that person actually gets something done. There are 5 levels
-and every level makes them 15% faster at everything, walking included.
+(7 with the **Staff Training** upgrade, which also doubles the XP they earn) and every
+level makes them 15% faster at everything, walking included.
 The Staff tab shows what everyone is doing right now, their level and XP. **Reset**
 sends someone back to where they start the day (their register, the mop bucket, the
 delivery zone...) if they ever get stuck, and **Let go** fires someone.
+
+**How they work** (in the Staff tab):
+- **Stockers fill empty shelves**: on (the default), stockers put things on shelves
+  that have no label, and the manager orders something new for them. Off: those
+  shelves stay empty until you fill them.
+- **Stockers take labels off**: on (the default), a stocker takes the label off an
+  empty shelf of something you've switched Stock off for, so the shelf can be used
+  for something else.
+- **The manager orders when...**: "a box fits" (the default), 3/4 full, half full, 1/3
+  full, 1/4 full or almost empty. The later it is, the fewer boxes sit around, but the
+  more likely a shelf runs out.
+- **Stock** switch (in Stock & Prices, one per product): off means stockers don't
+  stock it and the manager doesn't order it. You can still do both yourself.
 
 When a stocker fills a shelf and there's some of the box left, they put the rest away:
 on a **storage rack** if one has room, otherwise back on the delivery zone. Boxes
@@ -710,10 +785,16 @@ way, the upgrade says what: move it (or move the zone somewhere roomier) first.
 
 ### Build mode (customize your store)
 Press **B** (or the **Build** button). The game pauses while you build.
-- **Buy** rusty shelves ($60), meat coolers ($150), storage racks ($120), gravestones
-  ($25), lanterns ($40), registers ($250) and self-checkouts ($400). Each button shows
-  the name, a picture and the price. Gravestones and lanterns make zombies come more
-  often (it feels like home), and a lantern lights up the floor around it.
+- **Buy** rusty shelves ($60), meat coolers ($150), storage racks ($120), registers
+  ($250) and self-checkouts ($400). Each button shows the name, a picture and the
+  price.
+- **Decor** opens the decorations' row: gravestones ($25), lanterns ($40), cauldrons
+  ($60, level 2), coffins ($90, level 6), bone piles ($80, level 8), spirit lamps ($110,
+  level 9), sarcophagi ($140, level 10) and moon lamps ($160, level 11). Any decoration
+  makes zombies come more often (it feels like home), and each one from the cauldron on
+  brings more of one kind of shopper (see Kinds of shoppers). Lanterns, cauldrons,
+  spirit lamps and moon lamps light up the floor around them. One you haven't reached
+  the level for shows "Lv N" instead of a price.
 - **Move** anything you've placed (stock stays on the shelf), plus the **registers**,
   the **computer**, the **OPEN sign**, the **mop bucket** and the **delivery zone**
   (boxes on it come along). When you pick up a register, a yellow
@@ -741,7 +822,19 @@ Press **B** (or the **Build** button). The game pauses while you build.
 ### Handheld scanner
 Buy it in the **Upgrades** tab ($120). Stand next to any shelf and press **Q** (or
 **SCAN**) to order another box of that product on the spot, without walking to the
-computer. A scanner icon appears next to your money once you own it.
+computer. A scanner icon appears next to your money once you own it. Your general
+manager uses it too.
+
+### Upgrades for bigger stores
+| Level | Upgrade | Cost | What it does |
+|---|---|---|---|
+| 7 | Conveyor Belts | $1,200 | Registers and self-checkouts ring up 25% faster |
+| 8 | Mass Grave | $1,400 | The biggest delivery zone (5x4, 20 boxes). Needs the third zone upgrade |
+| 9 | Billboard | $1,500 | 15% more shoppers |
+| 10 | Staff Training | $1,800 | Staff earn XP twice as fast and can reach level 7 |
+| 12 | Floor Drains | $2,200 | Blood that's been on the floor for 2 hours drains away |
+| 13 | Golden Sign | $2,500 | Shoppers pay up to 10% more before it feels pricey |
+| 14 | Neon Billboard | $3,000 | Another 15% more shoppers. Needs the Billboard |
 
 ### Controls
 
@@ -943,6 +1036,8 @@ SEED=1 godot --headless --path . --fixed-fps 60 res://tests/walk_test.tscn  # wa
 godot --headless --path . res://tests/update_test.tscn  # the updater, against a stand-in GitHub (needs python3)
 godot --headless --path . --fixed-fps 60 res://tests/fixes_test.tscn  # 0.9.5's fixes from players' notes
 godot --headless --path . --fixed-fps 60 res://tests/rack_test.tscn   # picking which box to take off a storage rack
+godot --headless --path . --fixed-fps 60 res://tests/rules_test.tscn  # how staff work: Stock switches, stocker rules, when the manager orders
+godot --headless --path . --fixed-fps 60 res://tests/levels_test.tscn # levels with no cap, levels 7-14, decorations, the new upgrades
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)
 ```
 

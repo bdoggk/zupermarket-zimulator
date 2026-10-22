@@ -30,6 +30,7 @@ signal rival_bought
 signal rival_spy_sent  # Bone Mart sends a spy over to your store (the town does the walking)
 signal shop_requested(shop: String)  # use a little shop's counter (Brand.SHOPS)
 signal rack_requested(rack: StorageRack)  # pick which box to take off a storage rack
+signal staff_rules_changed  # the Staff app's rules, or a product's Stock switch
 signal effects_changed  # a brew started or wore off
 signal tutorial_changed
 
@@ -62,7 +63,27 @@ const STARTING_MONEY := 100.0
 
 ## Store level. You earn 1 XP for every dollar of sales. Each number is the
 ## XP needed to reach the next level (level 2 at 150 XP, level 3 at 400...).
-const LEVEL_XP := [0, 150, 400, 800, 1400, 2200]
+## There's no top level: after these, each level takes LEVEL_XP_STEP more
+## XP than the one before (see xp_for_level).
+const LEVEL_XP := [0, 150, 400, 800, 1400, 2200, 3200, 4500, 6000, 8000, 10500, 13500, 17000, 21000]
+const LEVEL_XP_STEP := 1000.0
+## The last level with something new to unlock. Every level after it pays
+## a cash bonus (level_bonus) instead.
+const LAST_UNLOCK_LEVEL := 14
+const TRAFFIC_LEVELS := 14  # levels past this don't bring more shoppers (the store's full)
+## Store levels that let you hire one more of a kind of staff.
+const STAFF_PERKS := {"stocker": [8, 12], "cashier": [9], "janitor": [10]}
+## Decorations that bring in one kind of shopper (Brand.FURNITURE "pulls"):
+## each one brings this many more of them, counting up to DECOR_PULL_MAX.
+const DECOR_PULL := 0.5
+const DECOR_PULL_MAX := 3
+## Upgrades (Brand.UPGRADES) past level 6:
+const CONVEYOR_SPEED := 1.25  # Conveyor Belts: registers ring up this much faster
+const BILLBOARD_TRAFFIC := 1.15  # Billboard and Neon Billboard: this many more shoppers each
+const TRAINING_XP := 2.0  # Staff Training: staff XP this many times as fast...
+const TRAINING_LEVEL_XP := [450, 700]  # ...and two more levels at these
+const DRAIN_MINUTES := 120  # Floor Drains: a puddle this old (game minutes, while open) drains away
+const GOLDEN_SIGN_TOLERANCE := 1.1  # Golden Sign: shoppers pay this much more before it's pricey
 ## Blood on the floor costs XP while the store is open: this much per spill
 ## per game hour (you never drop a level, though).
 const BLOOD_XP_PER_HOUR := 1.5
@@ -83,6 +104,18 @@ const SELL_REFUND := 0.5  # selling furniture gives back half what it cost
 const STAFF_LEVEL_XP := [0, 30, 80, 160, 280]
 const STAFF_SPEED_PER_LEVEL := 0.15
 const FLOOR_COST := 40.0
+## When the general manager orders more of something (Staff app): once
+## everything there is of it (on its shelves, in boxes, on the way) is down
+## to `share` of the shelf space labeled for it. -1: as soon as a whole box
+## would fit (the busiest, and how it always worked).
+const REORDER_POINTS := [
+	{"name": "When a box fits", "share": -1.0},
+	{"name": "3/4 full", "share": 0.75},
+	{"name": "Half full", "share": 0.5},
+	{"name": "1/3 full", "share": 0.34},
+	{"name": "1/4 full", "share": 0.25},
+	{"name": "Almost empty", "share": 0.0},
+]
 const WALL_COST := 30.0
 
 var money := STARTING_MONEY
@@ -105,6 +138,12 @@ const LOG_SIZE := 60  # messages kept in the log
 var message_log: Array[Dictionary] = []  # recent messages, oldest first: {text, day, time}
 var price_markup := 0.0  # Stock & Prices: prices are set to the market price plus this much (0.1 = +10%)
 var auto_price := false  # your prices follow the market automatically
+## How your staff work (the computer's Staff app, and the Stock switch in
+## Stock & Prices):
+var unstocked := {}  # product id -> true: stockers don't put it on shelves and the manager doesn't order it
+var fill_empty_shelves := true  # stockers put things on shelves with no label (and the manager orders for them)
+var take_labels_off := true  # stockers take the label off an empty shelf of something you've stopped stocking
+var reorder_at := 0  # when the manager orders more: an index into REORDER_POINTS
 var play_time := 0.0  # seconds played in this save
 var slot := -1  # save slot being played (0-2), -1 = not saving (e.g. tests)
 var touch_ui := false  # set by the HUD
@@ -161,6 +200,10 @@ func reset() -> void:
 	day_over = false
 	auto_price = false
 	price_markup = 0.0
+	unstocked = {}
+	fill_empty_shelves = true
+	take_labels_off = true
+	reorder_at = 0
 	play_time = 0.0
 	slot = -1
 	staff = []
@@ -319,7 +362,7 @@ func markup_effect(m: float) -> String:
 	for k: Dictionary in Brand.SHOPPERS.values():
 		if level < int(k.get("level", 1)):
 			continue
-		var chance := buy_chance_at(1.0 + m, float(k.tolerance))
+		var chance := buy_chance_at(1.0 + m, float(k.tolerance) * (GOLDEN_SIGN_TOLERANCE if has_upgrade("golden_sign") else 1.0))
 		if chance >= 0.999:
 			always.append(shopper_plural(k))
 		else:
@@ -359,6 +402,8 @@ static func _and_list(names: Array) -> String:
 ## how far over the market price they'll go without blinking (1 = not at
 ## all, 1.5 = half again; see Brand.SHOPPERS).
 func buy_chance(id: String, tolerance := 1.0) -> float:
+	if has_upgrade("golden_sign"):
+		tolerance *= GOLDEN_SIGN_TOLERANCE
 	return buy_chance_at(prices[id] / market_price(id), tolerance)
 
 
@@ -391,7 +436,28 @@ func shopper_weight(k: Dictionary) -> float:
 	var w := float(k.weight)
 	if k.has("night"):
 		w *= float(k.night) if minute >= NIGHT_MINUTE else NIGHT_KIND_BY_DAY
+	w *= 1.0 + DECOR_PULL * mini(decorations_for(k), DECOR_PULL_MAX)  # cauldrons for witches...
 	return w * (1.0 + FAVORITE_PULL * favorites_on_shelves(k))
+
+
+## How many decorations that bring in this kind of shopper (Brand.FURNITURE
+## "pulls": a cauldron for witches...) are in the store.
+func decorations_for(k: Dictionary) -> int:
+	if not in_game():
+		return 0
+	var id: Variant = Brand.SHOPPERS.find_key(k)
+	if id == null:
+		return 0
+	var n := 0
+	for obj in store.objects.values():
+		if obj is Decoration and FURNITURE.get(obj.furniture_id, {}).get("pulls", "") == id:
+			n += 1
+	return n
+
+
+## Store level you need to build furniture `id` (1 = from the start).
+func furniture_level(id: String) -> int:
+	return int(FURNITURE[id].get("level", 1))
 
 
 ## How many of this kind of shopper's favorite products (Brand.SHOPPERS
@@ -666,6 +732,35 @@ func is_licensed(id: String) -> bool:
 	return licensed.has(id)
 
 
+## Your staff stock `id` (it's licensed and its Stock switch is on).
+func staff_stock(id: String) -> bool:
+	return licensed.has(id) and not unstocked.has(id)
+
+
+## The Stock switch in Stock & Prices.
+func set_staff_stock(id: String, on: bool) -> void:
+	if on:
+		unstocked.erase(id)
+	else:
+		unstocked[id] = true
+	staff_rules_changed.emit()
+
+
+func set_reorder_at(i: int) -> void:
+	reorder_at = clampi(i, 0, REORDER_POINTS.size() - 1)
+	staff_rules_changed.emit()
+
+
+func set_fill_empty_shelves(on: bool) -> void:
+	fill_empty_shelves = on
+	staff_rules_changed.emit()
+
+
+func set_take_labels_off(on: bool) -> void:
+	take_labels_off = on
+	staff_rules_changed.emit()
+
+
 ## Products you can sell, in the order they're listed in PRODUCTS.
 func unlocked_ids() -> Array:
 	return PRODUCTS.keys().filter(func(id): return licensed.has(id))
@@ -724,34 +819,57 @@ func buy_upgrade(id: String) -> bool:
 	if UPGRADES[id].has("zone") and is_instance_valid(store):
 		store.grow_delivery_zone(store.zone_size_for(UPGRADES[id].zone))
 	message.emit("Bought the %s!" % UPGRADES[id].name)
+	if id == "training":  # staff with the XP for the new levels get them now
+		for entry in staff:
+			var lv := staff_level_for(entry.xp)
+			if lv > entry.level:
+				entry.level = lv
+				staff_leveled.emit(entry.id, lv)
 	unlocks_changed.emit()
 	return true
 
 
+## XP needed to reach store level `lv` (1 needs none). Past the table, each
+## level takes LEVEL_XP_STEP more than the one before, with no end.
+static func xp_for_level(lv: int) -> float:
+	if lv <= 1:
+		return 0.0
+	if lv <= LEVEL_XP.size():
+		return float(LEVEL_XP[lv - 1])
+	var need := float(LEVEL_XP[-1])
+	var gap := float(LEVEL_XP[-1] - LEVEL_XP[-2])
+	for k in range(LEVEL_XP.size() + 1, lv + 1):
+		gap += LEVEL_XP_STEP
+		need += gap
+	return need
+
+
 static func level_for(amount: float) -> int:
-	var lv := 0
-	for need in LEVEL_XP:
-		if amount >= need:
-			lv += 1
+	var lv := 1
+	while amount >= xp_for_level(lv + 1):
+		lv += 1
 	return lv
 
 
-## XP needed for the next level, or -1 at max level.
+## XP needed for the next level (there's always one).
 func next_level_xp() -> float:
-	return LEVEL_XP[level] if level < LEVEL_XP.size() else -1.0
+	return xp_for_level(level + 1)
 
 
 ## XP at the start of the current level (you never drop below it).
 func level_start_xp() -> float:
-	return LEVEL_XP[level - 1] if level >= 1 and level <= LEVEL_XP.size() else 0.0
+	return xp_for_level(level)
 
 
-## How far along the current level you are, 0 to 1 (1 at max level).
+## The cash you get for reaching store level `lv`, past the last level
+## that unlocks something new (0 before that).
+static func level_bonus(lv: int) -> float:
+	return 0.0 if lv <= LAST_UNLOCK_LEVEL else 500.0 + 250.0 * (lv - LAST_UNLOCK_LEVEL - 1)
+
+
+## How far along the current level you are, 0 to 1.
 func level_progress() -> float:
-	var next := next_level_xp()
-	if next < 0.0:
-		return 1.0
-	return clampf((xp - level_start_xp()) / (next - level_start_xp()), 0.0, 1.0)
+	return clampf((xp - level_start_xp()) / (next_level_xp() - level_start_xp()), 0.0, 1.0)
 
 
 func add_xp(amount: float) -> void:
@@ -763,6 +881,12 @@ func add_xp(amount: float) -> void:
 	level = new_level
 	Settings.vibrate(0.8, 0.35)
 	message.emit("Store level %d!" % level)
+	var bonus := 0.0
+	for lv in range(from + 1, level + 1):
+		bonus += level_bonus(lv)
+	if bonus > 0.0:
+		money += bonus
+		message.emit("Level bonus: +$%d!" % int(bonus))
 	unlocks_changed.emit()
 	leveled_up.emit(from, level)
 
@@ -792,13 +916,29 @@ func unlocks_at(lv: int) -> Array[String]:
 	var kinds := Brand.SHOPPERS.values().filter(func(k): return int(k.get("level", 1)) == lv)
 	if not kinds.is_empty():
 		lines.append("New shoppers: %s" % ", ".join(kinds.map(func(k): return shopper_plural(k))))
-	var fans := products.filter(func(id): return not fans_of(id).is_empty())
-	if not fans.is_empty():
-		lines.append("; ".join(fans.map(func(id): return "%s love %s" % [fans_text(id).trim_suffix(" love it"), product_name(id)]))
-			+ (" (stock it to bring more of them in)" if fans.size() == 1 else " (stock them to bring more in)"))
+	for id: String in FURNITURE:
+		var f: Dictionary = FURNITURE[id]
+		if int(f.get("level", 1)) == lv and lv > 1:
+			var pulls := " (brings in more %s)" % shopper_plural(Brand.SHOPPERS[f.pulls]) if Brand.SHOPPERS.has(f.get("pulls", "")) else ""
+			lines.append("New in Build mode: %s%s" % [f.name, pulls])
+	for role: String in STAFF_PERKS:
+		if lv in STAFF_PERKS[role] and STAFF.has(role):
+			lines.append("You can hire one more %s" % (STAFF[role].name as String).to_lower())
+	if level_bonus(lv) > 0.0:
+		lines.append("A level bonus: $%d" % int(level_bonus(lv)))
+	# "Werewolves love Moon Steak and Howl Jerky" (one line per kind of fan).
+	var loves := {}  # "Werewolves" -> product names
+	for id: String in products.filter(func(id): return not fans_of(id).is_empty()):
+		var who := fans_text(id).trim_suffix(" love it")
+		loves[who] = loves.get(who, []) + [product_name(id)]
+	if not loves.is_empty():
+		var count: int = loves.values().reduce(func(n, names): return n + names.size(), 0)
+		lines.append("; ".join(loves.keys().map(func(who): return "%s love %s" % [who, " and ".join(loves[who])]))
+			+ (" (stock it to bring more of them in)" if count == 1 else " (stock them to bring more in)"))
 	if not Brand.RIVAL.is_empty() and int(Brand.RIVAL.get("buyout_level", 0)) == lv and not rival_owned:
 		lines.append("You can buy out %s ($%d)" % [Brand.RIVAL.name, int(Brand.RIVAL.buyout)])
-	lines.append("%d%% more shoppers come by" % roundi(Store.LEVEL_TRAFFIC * 100.0))
+	if lv <= TRAFFIC_LEVELS:
+		lines.append("%d%% more shoppers come by" % roundi(Store.LEVEL_TRAFFIC * 100.0))
 	return lines
 
 
@@ -811,10 +951,20 @@ func staff_count(role: String) -> int:
 ## The most of `role` you can have right now. Cashiers are limited to one
 ## per register.
 func staff_limit(role: String) -> int:
-	var limit: int = STAFF[role].max
+	var limit := staff_cap(role)
 	if role == "cashier" and in_game():
 		limit = mini(limit, store.registers.filter(func(r): return not r is SelfCheckout).size())
 	return limit
+
+
+## The most of `role` a store of your level can have (more stockers,
+## cashiers and janitors at higher levels, STAFF_PERKS).
+func staff_cap(role: String) -> int:
+	var cap: int = STAFF[role].max
+	for lv: int in STAFF_PERKS.get(role, []):
+		if level >= lv:
+			cap += 1
+	return cap
 
 
 ## Why you can't hire a `role` right now ("" means you can).
@@ -859,9 +1009,14 @@ func staff_entry(id: int) -> Dictionary:
 	return {}
 
 
-static func staff_level_for(amount: float) -> int:
+## XP needed for each staff level: two more with Staff Training.
+func staff_levels() -> Array:
+	return STAFF_LEVEL_XP + TRAINING_LEVEL_XP if has_upgrade("training") else STAFF_LEVEL_XP
+
+
+func staff_level_for(amount: float) -> int:
 	var lv := 0
-	for need in STAFF_LEVEL_XP:
+	for need in staff_levels():
 		if amount >= need:
 			lv += 1
 	return maxi(lv, 1)
@@ -873,8 +1028,9 @@ static func staff_speed(lv: int) -> float:
 
 
 ## XP needed for their next level, or -1 at max level.
-static func staff_next_xp(lv: int) -> float:
-	return STAFF_LEVEL_XP[lv] if lv < STAFF_LEVEL_XP.size() else -1.0
+func staff_next_xp(lv: int) -> float:
+	var levels := staff_levels()
+	return float(levels[lv]) if lv < levels.size() else -1.0
 
 
 ## Staff member `id` did some work.
@@ -882,7 +1038,7 @@ func add_staff_xp(id: int, amount: float) -> void:
 	var entry := staff_entry(id)
 	if entry.is_empty():
 		return
-	entry.xp += amount
+	entry.xp += amount * (TRAINING_XP if has_upgrade("training") else 1.0)
 	var lv := staff_level_for(entry.xp)
 	if lv <= entry.level:
 		return
@@ -1041,6 +1197,8 @@ func to_dict() -> Dictionary:
 		"next_market_minute": next_market_minute, "is_open": is_open, "opened": opened,
 		"between_days": day_over, "prices": prices, "licensed": licensed.keys(),
 		"upgrades": upgrades.keys(), "auto_price": auto_price, "markup": price_markup,
+		"unstocked": unstocked.keys(),
+		"staff_rules": {"fill_empty": fill_empty_shelves, "labels_off": take_labels_off, "reorder_at": reorder_at},
 		"floor_style": floor_style, "wall_color": wall_color, "stats": stats,
 		"play_time": play_time,
 		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
@@ -1064,6 +1222,13 @@ func from_dict(d: Dictionary) -> void:
 	day_over = false
 	auto_price = bool(d.get("auto_price", false))
 	price_markup = clampf(float(d.get("markup", 0.0)), MARKUP_MIN, MARKUP_MAX)
+	for id: String in d.get("unstocked", []):
+		if PRODUCTS.has(id):
+			unstocked[id] = true
+	var rules: Dictionary = d.get("staff_rules", {})
+	fill_empty_shelves = bool(rules.get("fill_empty", true))
+	take_labels_off = bool(rules.get("labels_off", true))
+	reorder_at = clampi(int(rules.get("reorder_at", 0)), 0, REORDER_POINTS.size() - 1)
 	floor_style = clampi(int(d.get("floor_style", 0)), 0, FLOOR_STYLES.size() - 1)
 	wall_color = clampi(int(d.get("wall_color", 0)), 0, WALL_COLORS.size() - 1)
 	play_time = float(d.get("play_time", 0.0))

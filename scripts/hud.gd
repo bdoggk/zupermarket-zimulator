@@ -175,7 +175,7 @@ func _process(delta: float) -> void:
 		_xp_flash = 0.6  # losing XP (blood on the floor)
 	_xp_shown = Game.xp
 	_xp_flash = maxf(0.0, _xp_flash - delta)
-	xp_bar.tooltip_text = "Store XP: %d / %d" % [int(Game.xp), int(Game.next_level_xp())] if Game.next_level_xp() > 0.0 else "Store XP: max level"
+	xp_bar.tooltip_text = "Store XP: %d / %d" % [int(Game.xp), int(Game.next_level_xp())]
 	xp_bar.queue_redraw()
 	if levelup_panel.visible:
 		_levelup_left -= delta
@@ -512,13 +512,12 @@ func _draw_xp_bar() -> void:
 	var r := Rect2(Vector2.ZERO, xp_bar.size)
 	xp_bar.draw_rect(r, Color(0.08, 0.08, 0.1))
 	var f := Game.level_progress()
-	var maxed := Game.next_level_xp() < 0.0
-	var fill := Color(0.95, 0.8, 0.4) if maxed else UI.INFO.darkened(0.15)
+	var fill := UI.INFO.darkened(0.15)
 	if _xp_flash > 0.0:
 		fill = fill.lerp(UI.BAD, minf(1.0, _xp_flash * 3.0))
 	xp_bar.draw_rect(Rect2(1, 1, (r.size.x - 2) * f, r.size.y - 2), fill)
 	xp_bar.draw_rect(r, UI.PANEL_BORDER, false, 1.0)
-	var text := "MAX" if maxed else "%d/%d" % [int(Game.xp - Game.level_start_xp()), int(Game.next_level_xp() - Game.level_start_xp())]
+	var text := "%d/%d" % [int(Game.xp - Game.level_start_xp()), int(Game.next_level_xp() - Game.level_start_xp())]
 	var font := ThemeDB.fallback_font
 	var fs := 12 if not is_touch else 15
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x

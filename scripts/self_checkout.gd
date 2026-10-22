@@ -100,7 +100,7 @@ func is_serving(c: Customer) -> bool:
 
 
 func scan_time(c: Customer) -> float:
-	return c.item_count() * SECONDS_PER_ITEM if c else 0.0
+	return c.item_count() * SECONDS_PER_ITEM / (Game.CONVEYOR_SPEED if Game.has_upgrade("conveyor") else 1.0) if c else 0.0
 
 
 func get_prompt(_p: Player) -> String:

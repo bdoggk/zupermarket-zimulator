@@ -465,11 +465,7 @@ func _process(_delta: float) -> void:
 	if not visible:
 		return
 	money_label.text = "$%.2f" % Game.money
-	var next := Game.next_level_xp()
-	if next < 0:
-		level_label.text = "Lv %d (max)" % Game.level
-	else:
-		level_label.text = "Lv %d  %d/%d XP" % [Game.level, int(Game.xp - Game.level_start_xp()), int(next - Game.level_start_xp())]
+	level_label.text = "Lv %d  %d/%d XP" % [Game.level, int(Game.xp - Game.level_start_xp()), int(Game.next_level_xp() - Game.level_start_xp())]
 	clock_label.text = Game.clock_text()
 	# The taskbar is as tall as its buttons (taller with touch-screen text).
 	var bar_h := maxf(TASKBAR_HEIGHT, taskbar.get_combined_minimum_size().y)
@@ -764,8 +760,8 @@ func _input(event: InputEvent) -> void:
 func _build_stock() -> void:
 	var rival := Game.store.town != null and not Game.rival_owned
 	_refresh_markup()
-	var g := _grid(9 if rival else 8)
-	var heads := ["", "Product", "Market", "", "Your price", "", "", ""]
+	var g := _grid(10 if rival else 9)
+	var heads := ["", "Product", "Market", "", "Your price", "", "", "", "Stock"]
 	if rival:
 		heads.insert(3, Brand.RIVAL.name)
 	for h in heads:
@@ -795,6 +791,10 @@ func _build_stock() -> void:
 		g.add_child(eq)
 		var order := _row_button("Order box", func(): Game.order_box(id), Vector2(0, 52))
 		g.add_child(order)
+		# Off: your staff leave it alone (no stocking, no ordering).
+		var stock := _row_button("", func(): Game.set_staff_stock(id, not Game.staff_stock(id)), Vector2(70, 52))
+		stock.tooltip_text = "On: your stockers stock it and the manager orders it. Off: they leave it to you."
+		g.add_child(stock)
 
 		_updaters.append(func():
 			var cold := "  (%s)" % Game.FURNITURE.fridge.name.to_lower() if Game.is_cold(id) else ""
@@ -808,6 +808,10 @@ func _build_stock() -> void:
 				price.text = "$%.2f" % p
 			price.add_theme_color_override("font_color", UI.BAD if p > m * 1.25 else (UI.WARN if p > m + 0.001 else UI.GOOD))
 			order.disabled = Game.money < Game.box_cost(id)
+			var on := Game.staff_stock(id)
+			stock.text = "On" if on else "Off"
+			_tint(stock, UI.GOOD if on else UI.BAD)
+			info.modulate.a = 1.0 if on else 0.6
 			if theirs:
 				var seen: Array = Game.rival_seen.get(id, [])
 				if seen.is_empty():
@@ -877,6 +881,69 @@ func _build_products() -> void:
 
 # ---------------------------------------------------------------- staff tab
 
+## An On / Off button's text color.
+static func _tint(b: Button, c: Color) -> void:
+	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(state, c)
+
+
+## How your staff work: whether stockers use shelves with no label and take
+## labels off, and when the manager orders more. (Each product's Stock
+## switch is in Stock & Prices.)
+func _build_staff_rules() -> void:
+	body.add_child(UI.label("HOW THEY WORK", UI.WARN))
+	var g := _grid(4)
+	var rules := [
+		["Stockers fill empty shelves", "They put things on shelves with no label yet. Off: only shelves that already have a label (you label new ones).",
+			func(): return Game.fill_empty_shelves, func(): Game.set_fill_empty_shelves(not Game.fill_empty_shelves)],
+		["Stockers take labels off", "With nothing to stock, they take the label off an empty shelf of something you've stopped stocking, so it can hold something else.",
+			func(): return Game.take_labels_off, func(): Game.set_take_labels_off(not Game.take_labels_off)],
+	]
+	for r: Array in rules:
+		var get_on: Callable = r[2]
+		g.add_child(Control.new())
+		var info := UI.label("%s\n%s" % [r[0], r[1]])
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		g.add_child(info)
+		g.add_child(Control.new())
+		var b := _row_button("", r[3], Vector2(120, 52))
+		g.add_child(b)
+		_updaters.append(func():
+			var on: bool = get_on.call()
+			b.text = "On" if on else "Off"
+			_tint(b, UI.GOOD if on else UI.DIM)
+		)
+	g.add_child(Control.new())
+	var when := UI.label("The manager orders more when stock is down to\n(counting the boxes waiting and on the way)")
+	when.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	when.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	g.add_child(when)
+	var down := _row_button("<", func(): Game.set_reorder_at(Game.reorder_at - 1), Vector2(52, 52))
+	down.tooltip_text = "Order sooner"
+	var point := UI.label("", UI.WARN)
+	point.custom_minimum_size.x = 150
+	point.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	point.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var picker := HBoxContainer.new()
+	picker.add_theme_constant_override("separation", 4)
+	picker.add_child(down)
+	picker.add_child(point)
+	var up := _row_button(">", func(): Game.set_reorder_at(Game.reorder_at + 1), Vector2(52, 52))
+	up.tooltip_text = "Order later"
+	picker.add_child(up)
+	g.add_child(Control.new())
+	g.add_child(picker)
+	_updaters.append(func():
+		point.text = Game.REORDER_POINTS[Game.reorder_at].name
+		down.disabled = Game.reorder_at <= 0
+		up.disabled = Game.reorder_at >= Game.REORDER_POINTS.size() - 1
+	)
+	var note := UI.label("Turn a product's Stock switch off in Stock & Prices and nobody stocks or orders it.", UI.DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(note)
+
+
 func _build_staff() -> void:
 	var wages := Game.daily_wages()
 	if wages > 0.0:
@@ -902,6 +969,8 @@ func _build_staff() -> void:
 			b.text = "Hire (%d/%d)" % [Game.staff_count(role), Game.staff_limit(role)] if problem == "" else problem
 		)
 
+	body.add_child(HSeparator.new())
+	_build_staff_rules()
 	body.add_child(HSeparator.new())
 	if Game.staff.is_empty():
 		body.add_child(UI.label("Nobody works here yet.", UI.DIM))
