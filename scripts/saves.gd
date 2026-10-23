@@ -22,6 +22,8 @@ const MENU_SCENE := "res://scenes/menu.tscn"
 var pending_store := {}
 ## The save was made between days: start the next day when it loads.
 var pending_next_day := false
+## A message for the HUD to show once the store is up (after starting over).
+var pending_notice := ""
 
 
 func _ready() -> void:
@@ -113,6 +115,23 @@ func new_game(slot: int) -> void:
 	pending_store = {}
 	pending_next_day = false
 	_go(GAME_SCENE)
+
+
+## The lender took your head: this slot starts over from day 1 (the old
+## save is gone). The first-day tips you've already seen stay seen.
+func start_over() -> void:
+	var tips := Game.tutorial.duplicate()
+	var tips_hidden := Game.tutorial_hidden
+	if Game.slot >= 0:
+		new_game(Game.slot)
+	else:  # (not saving: tests)
+		Game.reset()
+		pending_store = {}
+		pending_next_day = false
+		_go(GAME_SCENE)
+	Game.tutorial = tips
+	Game.tutorial_hidden = tips_hidden
+	pending_notice = Brand.LOAN.start_over
 
 
 func load_game(slot: int) -> bool:

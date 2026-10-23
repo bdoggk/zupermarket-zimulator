@@ -12,6 +12,7 @@ const RackPanel := preload("res://scripts/ui/rack_panel.gd")
 const Tutorial := preload("res://scripts/ui/tutorial.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
+const LoanCutsceneScript := preload("res://scripts/ui/loan_cutscene.gd")
 const MARGIN := 14.0
 const WANTED_SHOWN := 6  # the day's summary names this many of the things shoppers asked for
 const MAX_MESSAGES := 4
@@ -48,6 +49,8 @@ const LEVELUP_SECONDS := 15.0
 var clock_label: Label
 var scanner_icon: TextureRect
 var mess_label: Label
+var loan_label: Label  # what you owe Count Vlad, and when it's due
+var cutscene: CanvasLayer  # Count Vlad collecting (scripts/ui/loan_cutscene.gd)
 var fps_label: Label  # Options > Show FPS
 var prep_panel: PanelContainer
 var tutorial: PanelContainer  # first-day tips
@@ -152,6 +155,7 @@ func _ready() -> void:
 	Game.prompt_changed.connect(_on_prompt_changed)
 	Game.computer_requested.connect(open_computer)
 	Game.day_ended.connect(_on_day_ended)
+	Game.loan_defaulted.connect(_on_loan_defaulted)
 	Game.leveled_up.connect(_on_leveled_up)
 	Game.effects_changed.connect(_rebuild_effects)
 	Game.shop_requested.connect(func(_id): computer.close(); rival_panel.close(); rack_panel.close())
@@ -160,6 +164,9 @@ func _ready() -> void:
 	_rebuild_effects()
 	Game.build_mode.changed.connect(_on_build_changed)
 
+	if Saves.pending_notice != "":  # (starting over)
+		show_message(Saves.pending_notice)
+		Saves.pending_notice = ""
 	if is_touch:
 		show_message("Tap to walk (RUN to sprint). Tap boxes, shelves and the register to use them.")
 	else:
@@ -191,6 +198,11 @@ func _process(delta: float) -> void:
 		mess_label.text = "Blood: %d (-%d%% shoppers)" % [mess, roundi((1.0 - Game.store.mess_multiplier()) * 100.0)]
 	clock_label.text = "Day %d   %s   %s" % [Game.day, Game.clock_text(), "OPEN" if Game.is_open else "CLOSED"]
 	scanner_icon.visible = Game.has_upgrade("scanner")
+	loan_label.visible = Game.has_loan()
+	if loan_label.visible:
+		var due := int(Game.loan.due)
+		loan_label.text = "Owe $%s: %s" % [Game.cash(Game.loan_left()), "DUE TONIGHT" if Game.day >= due else "due day %d" % due]
+		UI.set_color(loan_label, UI.BAD if Game.day >= due or Game.loan_behind() > 0.0 else UI.WARN)
 	fps_label.visible = Settings.show_fps
 	if fps_label.visible:
 		fps_label.text = "%d FPS" % Engine.get_frames_per_second()
@@ -202,7 +214,7 @@ func _process(delta: float) -> void:
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
 	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or rack_panel.visible or summary_panel.visible or message_log.visible
-	Game.menu_open = menu_open  # (the arrow keys pick buttons, not walk you away)
+	Game.menu_open = menu_open or Game.cutscene  # (the arrow keys pick buttons, not walk you away)
 	# After closing you can keep working (stock, order, build...) until you
 	# press Space for the summary and the next day.
 	var summing_up := summary_panel.visible
@@ -487,6 +499,11 @@ func _build_status() -> void:
 	mess_label = UI.label("", UI.BAD)  # how many spills need mopping (zombie game)
 	mess_label.visible = false
 	row.add_child(mess_label)
+	loan_label = UI.label("", UI.WARN)
+	loan_label.visible = false
+	loan_label.tooltip_text = "Your loan (the computer's Loans app)"
+	loan_label.mouse_filter = Control.MOUSE_FILTER_PASS
+	row.add_child(loan_label)
 	fps_label = UI.label("", UI.DIM)
 	fps_label.visible = false
 	row.add_child(fps_label)
@@ -878,7 +895,9 @@ func _show_summary(s: Dictionary) -> void:
 		"Store upgrades: $%.2f" % s.invested,
 		"Staff wages: $%.2f" % s.wages,
 		"Profit: $%.2f" % s.profit,
-	])
+		"Borrowed: $%.2f" % float(s.get("borrowed", 0.0)) if float(s.get("borrowed", 0.0)) > 0.0 else "--",
+		"Loan payments: $%.2f" % float(s.get("loan_paid", 0.0)) if float(s.get("loan_paid", 0.0)) > 0.0 else "--",
+	].filter(func(line: String): return line != "--"))
 	summary_people.text = "\n".join([
 		"%s served: %d" % [Brand.SAY.shoppers.capitalize(), s.customers],
 		"Items sold: %d" % s.items_sold,
@@ -892,6 +911,7 @@ func _show_summary(s: Dictionary) -> void:
 		_spies_line(s),
 		"Your spy's reports: %d" % int(s.get("spy_reports", 0)) if int(s.get("spy_reports", 0)) > 0 else "--",
 		"XP lost to blood on the floor: %d" % roundi(float(s.get("xp_lost", 0.0))) if Brand.SPILLS and roundi(float(s.get("xp_lost", 0.0))) > 0 else "--",
+		_loan_line(),
 	].filter(func(line: String): return line != "--"))
 	summary_notes.visible = summary_notes.text != ""
 	summary_scroll.scroll_vertical = 0
@@ -899,6 +919,33 @@ func _show_summary(s: Dictionary) -> void:
 	summary_hint.text = "" if is_touch and Input.get_connected_joypads().is_empty() else "%s to go to Day %d" % [_key_hint("the button"), s.day + 1]
 	summary_hint.visible = summary_hint.text != ""
 	summary_panel.visible = true
+
+
+## "Count Vlad's loan: $977.14 left, all due the night of day 10", or "--".
+static func _loan_line() -> String:
+	if not Game.has_loan():
+		return "--"
+	var due := int(Game.loan.due)
+	var when := "TOMORROW NIGHT" if due == Game.day + 1 else "the night of day %d" % due
+	return "%s's loan: $%s left, all due %s. A payment comes out every morning." % [Brand.LOAN.lender, Game.cash(Game.loan_left()), when]
+
+
+## The loan's last night, and it isn't paid: Count Vlad comes for your head.
+func _on_loan_defaulted() -> void:
+	if is_instance_valid(cutscene):
+		return
+	for panel in [computer, rival_panel, shop_panel, rack_panel]:
+		panel.close()
+	summary_panel.visible = false
+	levelup_panel.visible = false
+	message_log.close()
+	if pause_menu.visible:
+		pause_menu.close()
+	options.visible = false
+	visible = false
+	cutscene = LoanCutsceneScript.new()
+	get_parent().add_child(cutscene)
+	cutscene.play(self)
 
 
 ## Keeps the day's summary inside the window: long lines wrap, and the

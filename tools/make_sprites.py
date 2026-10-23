@@ -2266,6 +2266,30 @@ def app_icon_pc(kind):
         dot(img, 18, 17, (200, 40, 50))
         rect(img, 13, 21, 18, 21, (70, 30, 36))
         rect(img, 8, 25, 23, 25, (150, 150, 156))
+    elif kind == "loans":  # a money bag with a dollar sign, and a drop of blood
+        bag, bag_d, tie = (176, 136, 84), (146, 108, 64), (110, 76, 44)
+        for x, y in _ellipse_pixels(15.5, 20.5, 10, 9):
+            dot(img, x, y, bag)
+        for x, y in _ellipse_pixels(18.5, 23.5, 7, 6):
+            if ((x + 0.5 - 15.5) / 10) ** 2 + ((y + 0.5 - 20.5) / 9) ** 2 <= 1.0:
+                dot(img, x, y, bag_d)
+        rect(img, 12, 7, 19, 11, bag)
+        rect(img, 10, 5, 12, 7, bag)  # the top flaps
+        rect(img, 19, 5, 21, 7, bag)
+        rect(img, 11, 11, 20, 12, tie)
+        green = (34, 96, 46)
+        rect(img, 15, 14, 16, 27, green)  # $
+        rect(img, 12, 16, 19, 17, green)
+        rect(img, 12, 18, 13, 19, green)
+        rect(img, 12, 20, 19, 21, green)
+        rect(img, 18, 22, 19, 23, green)
+        rect(img, 12, 24, 19, 25, green)
+        red = (200, 24, 36)
+        for x, y in _ellipse_pixels(26.5, 27, 3, 3):
+            dot(img, x, y, red)
+        rect(img, 26, 21, 26, 24, red)
+        rect(img, 25, 24, 27, 24, red)
+        dot(img, 25, 26, (250, 120, 120))
     elif kind == "upgrades":  # a green arrow up and a wrench
         for i in range(10):
             rect(img, 15 - i, 4 + i, 16 + i, 4 + i, (90, 200, 100))
@@ -3330,8 +3354,53 @@ def mass_grave_icon():
     return img
 
 
+def count_vlad():
+    """The loan shark: an old vampire count, grey at the temples, in a
+    red-lined cape with a blood-red bow tie."""
+    img = vampire(cape=(16, 12, 20), lining=(200, 22, 34), vest=(96, 12, 26), hair=(28, 24, 32),
+                  grey=True, bowtie=(210, 30, 42))
+    silver, gold, gold_d = (196, 196, 204), (236, 200, 80), (176, 140, 50)
+    for x, y in [(4, 2), (5, 1), (4, 3), (4, 5), (11, 2), (10, 1), (11, 3), (11, 4)]:
+        dot(img, x, y, silver)  # silver at the temples
+    for x, y in [(5, 14), (6, 15), (7, 16), (8, 16), (9, 15), (10, 14)]:
+        dot(img, x, y, gold)  # a heavy gold chain
+    rect(img, 7, 17, 8, 18, gold)
+    dot(img, 8, 18, gold_d)
+    dot(img, 9, 11, (200, 24, 36))  # a drop of blood on his chin
+    return img
+
+
+def bat(frame):
+    """A little bat (12x8) for the lender's entrance: wings up (0) or down (1)."""
+    img = new(12, 8)
+    body, wing, eye = (40, 32, 44), (64, 50, 72), (236, 48, 56)
+    if frame == 0:
+        wings = [(4, 3), (3, 2), (2, 1), (1, 1), (0, 2), (3, 3), (2, 2), (1, 2), (2, 3)]
+    else:
+        wings = [(4, 4), (3, 5), (2, 6), (1, 6), (0, 5), (3, 4), (2, 5), (1, 5), (2, 4)]
+    for x, y in wings:
+        dot(img, x, y, wing)
+        dot(img, 11 - x, y, wing)
+    rect(img, 5, 2, 6, 5, body)
+    dot(img, 5, 1, body)  # ears
+    dot(img, 6, 1, body)
+    dot(img, 5, 3, eye)
+    dot(img, 6, 3, eye)
+    outline_outside(img)
+    return img
+
+
+def loan_content():
+    """The Loans app and Count Vlad (0.11)."""
+    save(app_icon_pc("loans"), "pc_app_loans")
+    save(count_vlad(), "count_vlad")
+    save(bat(0), "bat_0")
+    save(bat(1), "bat_1")
+
+
 def new_content():
     """Everything above, saved: called from main()."""
+    loan_content()
     save(mummy(), "shopper_mummy_0")
     save(mummy(wrap=(196, 186, 150), eyes=(120, 230, 120), seed=82), "shopper_mummy_1")
     save(ghost(), "shopper_ghost_0")
@@ -3533,7 +3602,7 @@ def main():
     if ZOMBIE:
         save(zombie_girl(), "pc_girl")
         save(pc_wallpaper(), "pc_wallpaper")
-        for kind in ("stock", "products", "staff", "upgrades"):
+        for kind in ("stock", "products", "staff", "upgrades", "loans"):
             save(app_icon_pc(kind), f"pc_app_{kind}")
         save(skull_icon(), "pc_skull")
     # The sign stands at an angle: *_r1 is it turned to face the other way

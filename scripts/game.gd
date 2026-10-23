@@ -32,6 +32,8 @@ signal shop_requested(shop: String)  # use a little shop's counter (Brand.SHOPS)
 signal rack_requested(rack: StorageRack)  # pick which box to take off a storage rack
 signal staff_rules_changed  # the Staff app's rules, or a product's Stock switch
 signal effects_changed  # a brew started or wore off
+signal loan_changed  # borrowed, paid (or a payment was taken)
+signal loan_defaulted  # the loan's last night came and it isn't paid: the lender comes for your head
 signal tutorial_changed
 
 const OPEN_MINUTE := 8 * 60
@@ -84,6 +86,13 @@ const TRAINING_XP := 2.0  # Staff Training: staff XP this many times as fast...
 const TRAINING_LEVEL_XP := [450, 700]  # ...and two more levels at these
 const DRAIN_MINUTES := 120  # Floor Drains: a puddle this old (game minutes, while open) drains away
 const GOLDEN_SIGN_TOLERANCE := 1.1  # Golden Sign: shoppers pay this much more before it's pricey
+## Loans (the computer's Loans app, Brand.LOAN). One at a time, paid back
+## in LOAN_DAYS payments taken every morning. The more you borrow, the
+## higher the interest (LOAN_RATES, one for each of LOAN_AMOUNTS).
+const LOAN_DAYS := 7
+const LOAN_AMOUNTS := [250, 500, 1000, 2000, 3000, 5000, 7500, 10000, 15000, 20000]
+const LOAN_RATES := [0.05, 0.08, 0.12, 0.15, 0.18, 0.2, 0.23, 0.25, 0.28, 0.3]
+const LOAN_LIMIT_PER_LEVEL := 1000.0  # you can borrow up to this times your store level
 ## Blood on the floor costs XP while the store is open: this much per spill
 ## per game hour (you never drop a level, though).
 const BLOOD_XP_PER_HOUR := 1.5
@@ -159,6 +168,11 @@ var rival_spies: Array = []  # game minutes today when the rival sends a spy ove
 var tutorial := {}  # first-day tips you've done (see ui/tutorial.gd)
 var tutorial_hidden := false  # you pressed "Hide tips"
 var effects := {}  # brew id -> seconds it still works for (Brand.BREWS)
+## The loan you're paying back, or {} if none: {amount (borrowed), total
+## (to pay back), payment (each morning), paid (so far), day (borrowed on),
+## due (the day whose night it all has to be paid by)}.
+var loan := {}
+var cutscene := false  # the lender is collecting (the HUD and the player stand aside)
 
 # Set by these nodes when they load.
 var player: Node2D
@@ -215,6 +229,8 @@ func reset() -> void:
 	tutorial = {}
 	tutorial_hidden = false
 	effects = {}
+	loan = {}
+	cutscene = false
 	player = null
 	store = null
 	build_mode = null
@@ -1188,6 +1204,158 @@ func buy_wall_color(i: int) -> bool:
 	return true
 
 
+# ---------------------------------------------------------------- loans
+
+## The interest on borrowing `amount`: more, the more you borrow (5% on
+## $250, 12% on $1,000, 25% on $10,000).
+static func loan_rate(amount: float) -> float:
+	var rate: float = LOAN_RATES[0]
+	for i in LOAN_AMOUNTS.size():
+		if amount + 0.001 >= float(LOAN_AMOUNTS[i]):
+			rate = LOAN_RATES[i]
+	return rate
+
+
+## What you pay back for borrowing `amount`.
+static func loan_total(amount: float) -> float:
+	return snappedf(amount * (1.0 + loan_rate(amount)), 0.01)
+
+
+## Each morning's payment on a loan of `total` (rounded up to the cent).
+static func loan_payment(total: float) -> float:
+	return ceilf(total / LOAN_DAYS * 100.0 - 0.001) / 100.0
+
+
+## "$1,250" (or "$1,250.50" with cents).
+static func cash(v: float) -> String:
+	var cents := roundi(absf(v) * 100.0)
+	var whole := str(cents / 100)
+	var grouped := ""
+	while whole.length() > 3:
+		grouped = "," + whole.right(3) + grouped
+		whole = whole.left(whole.length() - 3)
+	var out := whole + grouped
+	if cents % 100 != 0:
+		out += ".%02d" % (cents % 100)
+	return ("-" if v < 0.0 else "") + out
+
+
+## The most you can borrow at your store level.
+func loan_limit() -> float:
+	return minf(LOAN_LIMIT_PER_LEVEL * level, float(LOAN_AMOUNTS[-1]))
+
+
+## The store level you need to borrow `amount`.
+static func loan_level(amount: float) -> int:
+	return maxi(1, ceili(amount / LOAN_LIMIT_PER_LEVEL - 0.0001))
+
+
+func has_loan() -> bool:
+	return not loan.is_empty()
+
+
+## What you still owe (0 with no loan).
+func loan_left() -> float:
+	return maxf(0.0, snappedf(float(loan.total) - float(loan.paid), 0.01)) if has_loan() else 0.0
+
+
+## How much of the loan should be paid by the morning of day `d`: one
+## payment for every morning since you borrowed it, and all of it on the last day.
+func loan_due_by(d: int) -> float:
+	if not has_loan():
+		return 0.0
+	if d >= int(loan.due):
+		return float(loan.total)
+	return minf(float(loan.total), float(loan.payment) * clampi(d - int(loan.day), 0, LOAN_DAYS))
+
+
+## Payments you've missed (0 if you're up to date).
+func loan_behind() -> float:
+	return maxf(0.0, snappedf(loan_due_by(day) - float(loan.get("paid", 0.0)), 0.01))
+
+
+## The last night came and the loan isn't paid off: the lender is here.
+func loan_overdue() -> bool:
+	return has_loan() and day >= int(loan.due) and day_over and loan_left() > 0.0
+
+
+## Why you can't borrow `amount` right now ("" means you can).
+func loan_problem(amount: float) -> String:
+	if has_loan():
+		return "Pay back what you owe first"
+	if not amount in LOAN_AMOUNTS.map(func(a): return float(a)):
+		return "Not an amount %s lends" % Brand.LOAN.lender
+	if amount > loan_limit() + 0.001:
+		return "Store level %d" % loan_level(amount)
+	return ""
+
+
+## Borrows `amount`. It's paid back over the next LOAN_DAYS mornings, and
+## all of it is due by the night of the last one.
+func take_loan(amount: float) -> bool:
+	var problem := loan_problem(amount)
+	if problem != "":
+		message.emit(problem + ".")
+		return false
+	var total := loan_total(amount)
+	loan = {"amount": amount, "total": total, "payment": loan_payment(total), "paid": 0.0, "day": day, "due": day + LOAN_DAYS}
+	money += amount
+	stats.borrowed = float(stats.get("borrowed", 0.0)) + amount
+	message.emit(Brand.LOAN.taken % [cash(amount), cash(total), cash(loan.payment), LOAN_DAYS, loan.due])
+	Settings.vibrate(0.4, 0.1)
+	loan_changed.emit()
+	return true
+
+
+## Pays up to `amount` of the loan from your money (and never more than you
+## owe or have). Returns how much was paid.
+func pay_loan(amount: float, announce := true) -> float:
+	if not has_loan():
+		return 0.0
+	var pay := snappedf(minf(amount, minf(loan_left(), maxf(0.0, money))), 0.01)
+	if pay <= 0.0:
+		return 0.0
+	money -= pay
+	loan.paid = snappedf(float(loan.paid) + pay, 0.01)
+	stats.loan_paid = float(stats.get("loan_paid", 0.0)) + pay
+	if loan_left() <= 0.0:
+		loan = {}
+		if announce:
+			message.emit(Brand.LOAN.paid_off)
+	loan_changed.emit()
+	return pay
+
+
+## Each morning: the day's payment is taken (plus any you missed), as much
+## of it as you have. On the last day, a warning.
+func _loan_morning() -> void:
+	if not has_loan():
+		return
+	var due := loan_behind()
+	if due > 0.0:
+		var paid := pay_loan(due)
+		if paid + 0.001 >= due:
+			if has_loan():
+				message.emit(Brand.LOAN.paid_morning % [cash(paid), cash(loan_left())])
+		else:
+			message.emit(Brand.LOAN.short_morning % [cash(paid), cash(due), int(loan.due)])
+	if has_loan() and day >= int(loan.due):
+		message.emit(Brand.LOAN.last_day % cash(loan_left()))
+
+
+## The end of the day (after wages): on the loan's last night it's
+## collected from your money. False if you can't pay it all.
+func _loan_night() -> bool:
+	if not has_loan() or day < int(loan.due):
+		return true
+	var left := loan_left()
+	if money + 0.001 < left:
+		return false
+	pay_loan(left, false)
+	message.emit(Brand.LOAN.paid_at_night % cash(left))
+	return true
+
+
 # ---------------------------------------------------------------- saving
 
 ## Everything in this script that goes into a save file.
@@ -1203,7 +1371,7 @@ func to_dict() -> Dictionary:
 		"play_time": play_time,
 		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
 		"rival": {"owned": rival_owned, "factor": rival_factor, "deal": rival_deal, "seen": rival_seen, "spies": rival_spies},
-		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden, "effects": effects,
+		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden, "effects": effects, "loan": loan,
 		"market": {"factor": market.factor, "previous": market.previous, "demand": market.demand, "news": market.news},
 	}
 
@@ -1270,6 +1438,10 @@ func from_dict(d: Dictionary) -> void:
 		for id: String in fx:
 			if Brand.BREWS.has(id) and float(fx[id]) > 0.0:
 				effects[id] = minf(float(fx[id]), MAX_EFFECT_SECONDS)
+	var ln: Variant = d.get("loan", {})
+	if ln is Dictionary and float(ln.get("total", 0.0)) > 0.0:
+		loan = {"amount": float(ln.get("amount", 0.0)), "total": float(ln.total), "payment": float(ln.get("payment", loan_payment(float(ln.total)))),
+			"paid": float(ln.get("paid", 0.0)), "day": int(ln.get("day", day)), "due": int(ln.get("due", day + LOAN_DAYS))}
 	var r: Dictionary = d.get("rival", {})
 	rival_owned = bool(r.get("owned", false))
 	var factors: Dictionary = r.get("factor", {})
@@ -1365,6 +1537,9 @@ func end_day() -> void:
 	if wages > 0.0:
 		money -= wages  # wages are always paid, even if it puts you in the red
 		stats.wages += wages
+	if not _loan_night():
+		loan_defaulted.emit()  # the lender comes for your head (no summary tonight)
+		return
 	var summary := stats.duplicate()
 	summary.day = day
 	summary.profit = stats.revenue - stats.spent - stats.invested - stats.wages
@@ -1380,6 +1555,9 @@ func resume_day_over() -> void:
 	opened = true
 	is_open = false
 	minute = CLOSE_MINUTE
+	if loan_overdue():  # (saved during the lender's visit: he's still here)
+		loan_defaulted.emit()
+		return
 	day_ended.emit({"day": day, "resumed": true})
 
 
@@ -1395,6 +1573,7 @@ func start_next_day() -> void:
 	roll_rival_spies()
 	day_started.emit(day)
 	message.emit(Brand.SAY.morning % day)
+	_loan_morning()
 	update_market(true)
 	if not rival_owned and rival_deal != "":
 		message.emit(Brand.RIVAL.deal_news % product_name(rival_deal))
@@ -1423,4 +1602,4 @@ func clock_text() -> String:
 
 func _reset_stats() -> void:
 	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0, "wanted": {}, "wanted_by": {}, "xp_lost": 0.0, "brews": 0,
-		"spies_caught": 0, "spies_escaped": 0, "spy_reports": 0}
+		"spies_caught": 0, "spies_escaped": 0, "spy_reports": 0, "borrowed": 0.0, "loan_paid": 0.0}

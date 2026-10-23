@@ -38,6 +38,25 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.11.0
+
+- **Loans from Count Vlad.** The store computer has a new **Loans** app: "Count Vlad's
+  Blood Money". Borrow from $250 up to $1,000 for every store level you have (up to
+  $20,000). The more you borrow, the higher the interest: 5% on $250, 12% on $1,000,
+  25% on $10,000, 30% on $20,000. The app shows every amount and its interest side by
+  side.
+- **7 days to pay it back.** A payment comes out of your money every morning. If you're
+  short, he takes what you have and you fall behind; the app shows what's left, any
+  missed payments, and lets you pay early or pay it all off.
+- **Don't miss the last night.** On the night of the 7th day, whatever's still owed comes
+  out of your money at closing. If you can't cover it, Count Vlad comes for your head:
+  the lights go red, he swoops in through the door in a cloud of bats, reminds you what
+  you owe and rips your head off. Then it's **GAME OVER** and you start over from day 1
+  (in the same save slot: quitting during his visit doesn't save you). Skip the scene
+  with Esc, B or the Skip button.
+- The top bar shows what you owe and when it's due (red on the last day or when you're
+  behind), and the day's summary shows what you borrowed and paid.
+
 ## What's new in 0.10.0
 
 - **Decorations that bring in one kind of shopper.** Build mode has a **Decor** row now
@@ -90,7 +109,7 @@ more in it (see "Two games" below).
 
 - **Every button on the store computer works without the mouse or touch screen.**
   With the keyboard (on a Mac or PC): the arrow keys pick any button, Enter or Space
-  presses it, **Tab** / Shift+Tab or **1-4** switch apps, and Esc goes back. With a
+  presses it, **Tab** / Shift+Tab or **1-5** switch apps, and Esc goes back. With a
   controller (like the AYN Thor's): the d-pad, A and B, and **LB / RB** switch apps.
   That includes the buttons you couldn't reach before: the markup's < and >, the
   window's X, and the taskbar (Home, the apps, Close PC).
@@ -825,6 +844,31 @@ Buy it in the **Upgrades** tab ($120). Stand next to any shelf and press **Q** (
 computer. A scanner icon appears next to your money once you own it. Your general
 manager uses it too.
 
+### Loans (Count Vlad)
+Short of cash? Open the computer's **Loans** app. Count Vlad lends up to $1,000 for every
+store level you have (up to $20,000), one loan at a time:
+
+| Borrow | Interest | Pay back | Each morning (7 days) |
+|---|---|---|---|
+| $250 | 5% | $262.50 | $37.50 |
+| $500 | 8% | $540 | $77.15 |
+| $1,000 | 12% | $1,120 | $160 |
+| $2,000 | 15% | $2,300 | $328.58 |
+| $3,000 | 18% | $3,540 | $505.72 |
+| $5,000 | 20% | $6,000 | $857.15 |
+| $7,500 | 23% | $9,225 | $1,317.86 |
+| $10,000 | 25% | $12,500 | $1,785.72 |
+| $15,000 | 28% | $19,200 | $2,742.86 |
+| $20,000 | 30% | $26,000 | $3,714.29 |
+
+(The payments are rounded up to the cent, so the last one is a few cents less.)
+
+A payment comes out of your money every morning for 7 days. If you don't have enough, he
+takes what you have, and the rest is behind (the Loans app and the top bar show it). You
+can pay early, or pay it all off, any time. On the night of the last day, whatever's still
+owed comes out of your money at closing. If you can't cover it, Count Vlad comes for your
+head: you lose everything and start over from day 1.
+
 ### Upgrades for bigger stores
 | Level | Upgrade | Cost | What it does |
 |---|---|---|---|
@@ -851,7 +895,7 @@ manager uses it too.
 | Pause menu | Esc or P | II button / back button |
 | Recent messages | M, or the Log button | Log button |
 | Close / cancel | Esc | Back button |
-| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-4 switch apps, Esc goes back | Tap |
+| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-5 switch apps, Esc goes back | Tap |
 
 A gamepad works too: left stick to move, LT or L3 (sprint), A (use), X (scan), Y
 (build), Start (pause), Back/View (messages), B (back). Every menu works with the d-pad, A and B, the store
@@ -923,7 +967,8 @@ scripts/
   ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades tabs
   ui/rival_panel.gd    Bone Mart's price list (and buying it out)
   ui/tutorial.gd       The first-day tips
-  ui/build_bar.gd      The build mode toolbar and paint menu
+  ui/build_bar.gd      The build mode toolbar, decorations row and paint menu
+  ui/loan_cutscene.gd  Count Vlad's visit when a loan isn't paid back in time
   ui/pause_menu.gd     The in-game pause menu
   ui/message_log.gd    Recent messages (M, the Log button, or the pause menu)
   ui/options_menu.gd   The Options screen (main menu and pause menu)
@@ -931,8 +976,9 @@ scripts/
   menu/menu.gd         Main menu: Continue / New Game / Load Game / Options / Quit
   menu/menu_backdrop.gd  The store drawn behind the main menu (from your latest save)
 assets/sprites/        All the pixel art
-assets/sounds/         Sounds (.ogg). A shopper kind's "sound" in brand.gd is what it growls
+assets/sounds/         Sounds (.ogg / .wav). A shopper kind's "sound" in brand.gd is what it growls
 tools/make_sprites.py  The Python script that draws the placeholder art (for both games)
+tools/make_sounds.py   Makes Count Vlad's sound effects (organ, bats, the rip...) from scratch
 tests/                 Automated checks (not included in exports, safe to ignore)
 Update Mac App.command Rebuilds the Mac app and installs it (see "Mac app")
 ```
@@ -1038,6 +1084,7 @@ godot --headless --path . --fixed-fps 60 res://tests/fixes_test.tscn  # 0.9.5's 
 godot --headless --path . --fixed-fps 60 res://tests/rack_test.tscn   # picking which box to take off a storage rack
 godot --headless --path . --fixed-fps 60 res://tests/rules_test.tscn  # how staff work: Stock switches, stocker rules, when the manager orders
 godot --headless --path . --fixed-fps 60 res://tests/levels_test.tscn # levels with no cap, levels 7-14, decorations, the new upgrades
+godot --headless --path . -s res://tests/loan_test.gd                 # loans, the payments, Count Vlad's visit and starting over
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)
 ```
 

@@ -57,6 +57,7 @@ var max_world_nodes := 0
 var max_hud_nodes := 0
 var start_orphans := 0
 var days_played := 0
+var visits := 0  # Count Vlad came for your head (an unpaid loan)
 var loads := 0
 
 var store: Store
@@ -154,7 +155,7 @@ func _finish() -> void:
 	Engine.time_scale = 1.0
 	_drain_errors()
 	print("")
-	print("CHAOS done: %d frames, %.0f game seconds, %d days, %d loads" % [frame, game_time, days_played, loads])
+	print("CHAOS done: %d frames, %.0f game seconds, %d days, %d loads, %d visits from Count Vlad" % [frame, game_time, days_played, loads, visits])
 	var acts := counts.keys()
 	acts.sort()
 	print("actions: " + ", ".join(acts.map(func(a): return "%s %d" % [a, counts[a]])))
@@ -293,6 +294,9 @@ func _set_up_big_store() -> void:
 
 
 func _act() -> void:
+	if is_instance_valid(hud.cutscene):
+		await _vlad()
+		return
 	if mode == "staff":
 		if Game.day_over and rng.randf() < 0.2:
 			await _next_day()
@@ -335,9 +339,11 @@ func _act() -> void:
 		"mop": 5.0, "computer": 3.0, "build": 1.5, "shop": 1.5, "rival": 0.5, "pause": 0.5,
 		"saveload": 0.5 if saveload else 0.0, "spawn": 2.0, "zoom": 1.0, "staff": 2.0, "teleport": 3.0,
 		"settings": 0.4, "wait": 6.0, "click": 4.0, "key": 4.0, "wheel": 0.5, "spy": 1.0,
-		"finger": 6.0 if touch else 0.0,
+		"finger": 6.0 if touch else 0.0, "loan": 0.8,
 	})
 	match what:
+		"loan":
+			_loan()
 		"finger":
 			_finger()
 		"walk":
@@ -537,7 +543,7 @@ func _computer() -> void:
 	for i in rng.randi_range(1, 5):
 		var r := rng.randf()
 		if r < 0.25:
-			var t := rng.randi() % 4
+			var t: int = rng.randi() % pc.TAB_NAMES.size()
 			_note("computer: app %d" % t)
 			if rng.randf() < 0.5:
 				pc.desktop_icons[t].pressed.emit()
@@ -585,6 +591,67 @@ func _computer() -> void:
 			hud._back()
 			await _frames(1)
 	_note("computer: closed (%s)" % ("still open!" if pc.visible else "ok"))
+
+
+## Borrows from Count Vlad, pays some back, or (to see his visit in a
+## short run) makes it due tonight.
+func _loan() -> void:
+	if Game.has_loan():
+		var r := rng.randf()
+		if r < 0.6:
+			var amount: float = [Game.loan_behind(), float(Game.loan.payment), Game.loan_left(), rng.randf_range(1.0, 400.0)][rng.randi() % 4]
+			_note("loan: pay $%.2f (owe $%.2f)" % [amount, Game.loan_left()])
+			Game.pay_loan(amount)
+		elif r < 0.8:
+			_note("loan: make it due tonight (day %d)" % Game.day)
+			Game.loan.due = Game.day
+			Game.loan.day = Game.day - Game.LOAN_DAYS
+	else:
+		var amounts: Array = Game.LOAN_AMOUNTS.filter(func(a): return float(a) <= Game.loan_limit())
+		var a := float(amounts[rng.randi() % amounts.size()])
+		_note("loan: borrow $%d (%s)" % [int(a), Game.loan_problem(a)])
+		Game.take_loan(a)
+
+
+## Count Vlad's here: let it play (with the odd key press, click or Esc),
+## then start over, and pick up the new store.
+func _vlad() -> void:
+	var c: Node = hud.cutscene
+	visits += 1
+	_note("Count Vlad's visit (day %d, owed $%.2f)" % [Game.day, Game.loan_left()])
+	var t0 := Time.get_ticks_msec()
+	while is_instance_valid(c) and not c.card.visible:
+		if Time.get_ticks_msec() - t0 > 120000:
+			_fail("Count Vlad's visit never ended", c.step)
+			c.skip()
+			t0 = Time.get_ticks_msec()
+		var r := rng.randf()
+		if r < 0.02:
+			var k: Key = [KEY_SPACE, KEY_E, KEY_W, KEY_B, KEY_M, KEY_ESCAPE, KEY_ENTER, KEY_5][rng.randi() % 8]
+			_note("visit: key %s (%s)" % [OS.get_keycode_string(k), c.step])
+			for down in [true, false]:
+				var e := InputEventKey.new()
+				e.keycode = k
+				e.physical_keycode = k
+				e.pressed = down
+				get_viewport().push_input(e)
+		elif r < 0.03:
+			_note("visit: click (%s)" % c.step)
+			var sz := get_viewport().get_visible_rect().size
+			_click(Vector2(rng.randf() * sz.x, rng.randf() * sz.y), MOUSE_BUTTON_LEFT)
+		await _frames(1)
+	if get_tree().paused:
+		_fail("paused during Count Vlad's visit")
+	await _frames(3)
+	_note("visit: start over")
+	changing_scene = true
+	if is_instance_valid(c):
+		c.restart_button.pressed.emit()
+	await _wait_for_store()
+	Game.tutorial_hidden = true
+	if Game.day != 1 or Game.has_loan() or Game.cutscene or not hud.visible and is_instance_valid(hud):
+		_fail("starting over didn't start over", "day %d, loan %s, cutscene %s" % [Game.day, Game.loan, Game.cutscene])
+	hud = get_tree().current_scene.get_node("HUD")
 
 
 func _build() -> void:

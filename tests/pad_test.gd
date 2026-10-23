@@ -225,10 +225,11 @@ func _ready() -> void:
 	check(pc.visible and not pc.is_app_open(), "A on Home: back to the desktop")
 	await _button(JOY_BUTTON_LEFT_SHOULDER)
 	await _frames(2)
-	check(pc.tab == 3 and pc.is_app_open(), "LB on the desktop opens the last app (Upgrades)")
+	var last: int = pc.TAB_NAMES.size() - 1
+	check(pc.tab == last and pc.is_app_open(), "LB on the desktop opens the last app (%s)" % pc.TAB_NAMES[last])
 	await _button(JOY_BUTTON_LEFT_SHOULDER)
 	await _frames(2)
-	check(pc.tab == 2, "LB again: the one before (Staff)")
+	check(pc.tab == last - 1, "LB again: the one before (%s)" % pc.TAB_NAMES[last - 1])
 	await _button(JOY_BUTTON_RIGHT_SHOULDER)
 	await _button(JOY_BUTTON_RIGHT_SHOULDER)
 	await _frames(2)

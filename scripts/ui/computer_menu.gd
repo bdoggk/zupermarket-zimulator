@@ -10,12 +10,13 @@ extends PanelContainer
 ##                   (paid every evening); reset anyone who's stuck
 ##   Upgrades        one-time purchases like the handheld scanner, faster
 ##                   deliveries and a bigger delivery zone
+##   Loans           borrow from Count Vlad (Brand.LOAN), and pay him back
 ## The window's X goes back to the desktop; "Close PC" (or Esc) closes it.
 
-enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES }
+enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES, LOANS }
 
-const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades"]
-const APP_ICONS := ["stock", "products", "staff", "upgrades"]
+const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades", "Loans"]
+const APP_ICONS := ["stock", "products", "staff", "upgrades", "loans"]
 const TASKBAR_HEIGHT := 50.0
 const WALLPAPER := preload("res://assets/sprites/pc_wallpaper.png")
 const GIRL := preload("res://assets/sprites/pc_girl.png")
@@ -54,6 +55,9 @@ var markup_buttons: Array[Button] = []  # Stock & Prices: < and >
 var home_button: Button
 var off_button: Button  # Close PC
 var pad_hint: Label  # "LB / RB: other apps", with a controller
+var icon_box: VFlowContainer  # the desktop's app icons (a second column if they don't fit)
+var note_box: PanelContainer  # the sticky note, right of the icons
+var loan_pick := 2  # Loans: which of Game.LOAN_AMOUNTS you're looking at
 
 
 func _ready() -> void:
@@ -110,6 +114,7 @@ func _ready() -> void:
 	_chain(markup_buttons + [match_button, auto_button])
 	Game.market_changed.connect(_rebuild_if_open)
 	Game.staff_changed.connect(_rebuild_if_open)
+	Game.loan_changed.connect(_rebuild_if_open)
 
 
 ## The home screen: wallpaper, the girl, app icons and a sticky note.
@@ -140,9 +145,15 @@ func _build_desktop() -> void:
 	logo.position = Vector2(-150, 10)
 	desktop.add_child(logo)
 
-	var icons := VBoxContainer.new()
-	icons.position = Vector2(14, 12)
-	icons.add_theme_constant_override("separation", 6)
+	var icons := VFlowContainer.new()  # top to bottom, then a second column
+	icon_box = icons
+	icons.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	icons.offset_left = 14
+	icons.offset_top = 12
+	icons.offset_bottom = -8
+	icons.add_theme_constant_override("v_separation", 6)
+	icons.add_theme_constant_override("h_separation", 6)
+	icons.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	desktop.add_child(icons)
 	for i in TAB_NAMES.size():
 		var b := Button.new()
@@ -151,7 +162,7 @@ func _build_desktop() -> void:
 		b.expand_icon = true
 		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		b.custom_minimum_size = Vector2(132, 104)
+		b.custom_minimum_size = Vector2(132, 96)
 		b.add_theme_constant_override("icon_max_width", 64)
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		b.focus_mode = Control.FOCUS_ALL
@@ -171,6 +182,8 @@ func _build_desktop() -> void:
 	note.position = Vector2(170, 14)
 	note.custom_minimum_size = Vector2(300, 0)
 	desktop.add_child(note)
+	note_box = note
+	icons.resized.connect(func(): note.position.x = icons.position.x + icons.size.x + 24)
 	note_label = UI.label("", Color(0.2, 0.16, 0.1))
 	note_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note_label.custom_minimum_size.x = 276
@@ -550,6 +563,8 @@ func _rebuild() -> void:
 			_build_staff()
 		Tab.UPGRADES:
 			_build_upgrades()
+		Tab.LOANS:
+			_build_loans()
 
 
 func _grid(columns: int) -> GridContainer:
@@ -644,7 +659,7 @@ func _chain(row: Array) -> void:
 		c.focus_neighbor_right = c.get_path_to(row[mini(i + 1, row.size() - 1)])
 
 
-## Opens app `t` with its first button selected (LB / RB, Tab, 1-4).
+## Opens app `t` with its first button selected (LB / RB, Tab, 1-5).
 func _open_app(t: int) -> void:
 	show_tab(t as Tab)
 	if _keys():
@@ -725,7 +740,7 @@ func _input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 					return
 	# LB / RB or Tab / Shift+Tab: the app to the left / right (from the
-	# desktop: the first / last). 1-4 open an app straight away.
+	# desktop: the first / last). 1-5 open an app straight away.
 	var step := 0
 	if event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
 		step = -1 if event.button_index == JOY_BUTTON_LEFT_SHOULDER else 1
@@ -1053,3 +1068,153 @@ func _build_upgrades() -> void:
 		body.add_child(UI.label(how + " A box of that product is ordered right away.", UI.INFO))
 	var t := Game.delivery_seconds()
 	body.add_child(UI.label("Deliveries take %s right now." % ("%d seconds" % roundi(t) if t >= 1.5 else "about a second"), UI.DIM))
+
+
+# ---------------------------------------------------------------- loans tab
+
+## Count Vlad's Blood Money: borrow (the more you borrow, the higher the
+## interest), or see what you owe and pay early.
+func _build_loans() -> void:
+	var lend: Dictionary = Brand.LOAN
+	footer_label.text = "Payments are taken every morning. On the last night, whatever's still owed comes out of your money. If that isn't enough, %s comes for your head." % lend.lender
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 16)
+	body.add_child(top)
+	top.add_child(UI.icon(lend.sprite, Vector2(32, 72)))
+	var intro := VBoxContainer.new()
+	intro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	intro.alignment = BoxContainer.ALIGNMENT_CENTER
+	top.add_child(intro)
+	var name_label := UI.label(lend.business.to_upper(), UI.BAD)
+	name_label.add_theme_font_size_override("font_size", 24)
+	intro.add_child(name_label)
+	var pitch := UI.label("\"%s\"" % lend.pitch, UI.DIM)
+	pitch.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.add_child(pitch)
+	body.add_child(HSeparator.new())
+	if Game.has_loan():
+		_build_loan_owed()
+	else:
+		_build_loan_offer()
+	_show_top.call_deferred()
+
+
+## Back to the top of the app once it's laid out (selecting its first
+## button can scroll it before it knows where everything goes).
+func _show_top() -> void:
+	await get_tree().process_frame
+	if is_instance_valid(scroll):
+		scroll.scroll_vertical = 0
+
+
+func _build_loan_offer() -> void:
+	var amounts: Array = Game.LOAN_AMOUNTS
+	var most := 0  # the biggest amount you can borrow right now
+	for i in amounts.size():
+		if float(amounts[i]) <= Game.loan_limit() + 0.001:
+			most = i
+	loan_pick = clampi(loan_pick, 0, most)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	body.add_child(row)
+	var ask := UI.label("Borrow")
+	ask.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(ask)
+	var less := _row_button("<", func():
+		loan_pick = maxi(0, loan_pick - 1)
+		_rebuild(), Vector2(52, 52))
+	less.tooltip_text = "Borrow less"
+	less.disabled = loan_pick <= 0
+	row.add_child(less)
+	var amount := float(amounts[loan_pick])
+	var shown := UI.label("$" + Game.cash(amount), UI.WARN)
+	shown.add_theme_font_size_override("font_size", 26)
+	shown.custom_minimum_size.x = 150
+	shown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	shown.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(shown)
+	var more := _row_button(">", func():
+		loan_pick = mini(most, loan_pick + 1)
+		_rebuild(), Vector2(52, 52))
+	more.tooltip_text = "Borrow more"
+	more.disabled = loan_pick >= most
+	row.add_child(more)
+	var spacer := Control.new()
+	spacer.custom_minimum_size.x = 12
+	row.add_child(spacer)
+	var take := _row_button("Borrow $%s" % Game.cash(amount), func(): Game.take_loan(amount), Vector2(220, 52))
+	row.add_child(take)
+
+	var total := Game.loan_total(amount)
+	var terms := UI.label("Interest: %d%%.  You pay back $%s: $%s every morning for %d days,\nall of it by the night of day %d." % [
+		roundi(Game.loan_rate(amount) * 100.0), Game.cash(total), Game.cash(Game.loan_payment(total)), Game.LOAN_DAYS, Game.day + Game.LOAN_DAYS])
+	terms.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(terms)
+	var warn := UI.label("Still owe him on that night, and he comes for your head: you lose everything and start over from day 1.", UI.BAD)
+	warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(warn)
+
+	body.add_child(UI.label("THE MORE YOU BORROW, THE MORE YOU PAY", UI.WARN))
+	var g := _grid(5)
+	for h in ["Borrow", "Interest", "Pay back", "Each morning", ""]:
+		g.add_child(UI.label(h, UI.DIM))
+	for i in amounts.size():
+		var a := float(amounts[i])
+		var t := Game.loan_total(a)
+		var locked := a > Game.loan_limit() + 0.001
+		var color := UI.DIM if locked else (UI.WARN if i == loan_pick else Color.WHITE)
+		for text in ["$" + Game.cash(a), "%d%%" % roundi(Game.loan_rate(a) * 100.0), "$" + Game.cash(t), "$" + Game.cash(Game.loan_payment(t)),
+				("Store level %d" % Game.loan_level(a)) if locked else ""]:
+			g.add_child(UI.label(text, color))
+
+
+func _build_loan_owed() -> void:
+	var ln: Dictionary = Game.loan
+	var lender: String = Brand.LOAN.lender
+	var owed := UI.label("You owe %s $%s" % [lender, Game.cash(Game.loan_left())], UI.WARN)
+	owed.add_theme_font_size_override("font_size", 26)
+	body.add_child(owed)
+	var nights := int(ln.due) - Game.day
+	var when := "TONIGHT" if nights <= 0 else ("by tomorrow night (day %d)" % int(ln.due) if nights == 1 else "by the night of day %d (in %d days)" % [int(ln.due), nights])
+	var info := UI.label("You borrowed $%s at %d%% on day %d: $%s to pay back, $%s every morning.\nAll of it is due %s." % [
+		Game.cash(float(ln.amount)), roundi(Game.loan_rate(float(ln.amount)) * 100.0), int(ln.day), Game.cash(float(ln.total)),
+		Game.cash(float(ln.payment)), when])
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(info)
+	if nights <= 0:
+		var tonight := UI.label("Have $%s by closing time, or %s takes your head and you start over from day 1!" % [Game.cash(Game.loan_left()), lender], UI.BAD)
+		tonight.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body.add_child(tonight)
+	elif Game.loan_behind() > 0.0:
+		var late := UI.label("You're $%s behind on your payments. Pay it before the night of day %d." % [Game.cash(Game.loan_behind()), int(ln.due)], UI.BAD)
+		late.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body.add_child(late)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	body.add_child(row)
+	var next := minf(float(ln.payment), Game.loan_left())
+	if Game.loan_behind() > 0.0:
+		next = Game.loan_behind()
+	var pay_next := _row_button("Pay $%s now" % Game.cash(next), func(): Game.pay_loan(next), Vector2(220, 52))
+	pay_next.tooltip_text = "Pay early: it counts toward the next payments"
+	row.add_child(pay_next)
+	var all := Game.loan_left()
+	var pay_all := _row_button("Pay it all: $%s" % Game.cash(all), func(): Game.pay_loan(all), Vector2(240, 52))
+	row.add_child(pay_all)
+	_updaters.append(func():
+		pay_next.disabled = Game.money + 0.001 < next
+		pay_all.disabled = Game.money + 0.001 < all
+	)
+
+	body.add_child(UI.label("PAYMENTS", UI.WARN))
+	var g := _grid(Game.LOAN_DAYS)
+	for k in range(1, Game.LOAN_DAYS + 1):
+		var d := int(ln.day) + k
+		var due_by := Game.loan_due_by(d)
+		var paid := float(ln.paid) + 0.001 >= due_by
+		var state := "Paid" if paid else ("Missed" if d <= Game.day else "")
+		var color := UI.GOOD if paid else (UI.BAD if d <= Game.day else Color.WHITE)
+		var cell := UI.label("Day %d\n$%s\n%s" % [d, Game.cash(due_by - Game.loan_due_by(d - 1)), state if state != "" else ("last" if d == int(ln.due) else "")], color)
+		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		g.add_child(cell)

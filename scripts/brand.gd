@@ -637,6 +637,35 @@ const STAFF_NAMES := [
 	"Pale Paula", "Limpy Lou", "Morgana", "Half Hank",
 ]
 
+## The loan shark, in the computer's Loans app. You can borrow more as
+## your store levels up; the more you borrow, the higher the interest (see
+## Game.loan_rate). It's paid back every morning for 7 days. Still owe him
+## on the night of the last day, and he comes for your head: the game
+## starts over from day 1 (scripts/ui/loan_cutscene.gd).
+const LOAN := {
+	"lender": "Count Vlad",
+	"business": "Count Vlad's Blood Money",
+	"pitch": "Short of cash? I lend to anyone. And I always collect.",
+	"sprite": preload("res://assets/sprites/count_vlad.png"),
+	"taken": "Count Vlad lends you $%s. You owe him $%s: $%s every morning for %d days. Miss the night of day %d and he comes for your head.",
+	"paid_morning": "Count Vlad took his loan payment: $%s. You still owe $%s.",
+	"short_morning": "You couldn't make Count Vlad's payment! He took $%s of $%s. Pay the rest in the Loans app before the night of day %d, or he comes for your head.",
+	"last_day": "Tonight Count Vlad comes to collect the $%s you still owe. Have it by closing time, or he takes your head!",
+	"paid_off": "You've paid Count Vlad back in full. He'll lend to you again whenever you like.",
+	"paid_at_night": "Count Vlad came by at closing and collected the last $%s. You're square.",
+	"start_over": "Count Vlad took your head as payment. Starting over from day 1...",
+	# The cutscene on the last night (%s: the day, what you borrowed, what
+	# you owed with interest, what's still owed):
+	"arrive": "Good evening. It is the night of day %d. We had an agreement.",
+	"owed": "You borrowed $%s from me. With interest, $%s.",
+	"short": "And yet you still owe me $%s.",
+	"excuse": "Uhh... braaains?",
+	"threat": "I always collect. One way... or another.",
+	"gloat": "This head will do nicely. Pleasure doing business.",
+	"game_over": "Count Vlad took your head as payment.",
+	"gone": "Your store, your money, your staff: all gone.",
+}
+
 ## What people are called and what they say.
 const SAY := {
 	"shopper": "zombie",
