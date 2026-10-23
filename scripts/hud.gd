@@ -51,6 +51,9 @@ var scanner_icon: TextureRect
 var mess_label: Label
 var loan_label: Label  # what you owe Count Vlad, and when it's due
 var cutscene: CanvasLayer  # Count Vlad collecting (scripts/ui/loan_cutscene.gd)
+var first_person: FirstPerson  # the store in 3D (V)
+var view_button: Button
+var zoom_buttons: Array[Button] = []
 var fps_label: Label  # Options > Show FPS
 var prep_panel: PanelContainer
 var tutorial: PanelContainer  # first-day tips
@@ -163,6 +166,10 @@ func _ready() -> void:
 	Game.rival_requested.connect(func(): rack_panel.close())
 	_rebuild_effects()
 	Game.build_mode.changed.connect(_on_build_changed)
+	first_person = FirstPerson.new()
+	get_parent().add_child.call_deferred(first_person)
+	first_person.toggled.connect(func(_on: bool): _refresh_view_button())
+	_refresh_view_button()
 
 	if Saves.pending_notice != "":  # (starting over)
 		show_message(Saves.pending_notice)
@@ -604,9 +611,16 @@ func _build_corner_buttons() -> void:
 	var zoom_row := HBoxContainer.new()
 	zoom_row.alignment = BoxContainer.ALIGNMENT_END
 	corner_box.add_child(zoom_row)
+	view_button = UI.button("View", func():
+		if is_instance_valid(first_person):
+			first_person.toggle(), Vector2(76, 56))
+	view_button.tooltip_text = "First person / from above (V)"
+	zoom_row.add_child(view_button)
 	for z in [["-", 0.8], ["+", 1.25]]:
 		var factor: float = z[1]
-		zoom_row.add_child(UI.button(z[0], func(): Game.player.zoom_by(factor), Vector2(56, 56)))
+		var zb := UI.button(z[0], func(): Game.player.zoom_by(factor), Vector2(56, 56))
+		zoom_buttons.append(zb)
+		zoom_row.add_child(zb)
 	log_button = UI.button("Log", func(): message_log.toggle(), Vector2(64, 56))
 	log_button.tooltip_text = "Recent messages (M)"
 	zoom_row.add_child(log_button)
@@ -771,7 +785,18 @@ func _popup_label(text: String, color: Color) -> Label:
 ## Where a spot in the store is, in the HUD's own units (which Options >
 ## UI size makes bigger or smaller than the screen's).
 func _world_to_ui(world_pos: Vector2) -> Vector2:
+	if is_instance_valid(first_person) and first_person.active:
+		return transform.affine_inverse() * first_person.to_screen(world_pos)
 	return transform.affine_inverse() * (get_viewport().get_canvas_transform() * world_pos)
+
+
+## View: "1st person" while you're in it (and no zooming then).
+func _refresh_view_button() -> void:
+	var on := is_instance_valid(first_person) and first_person.active
+	view_button.text = "3rd" if on else "1st"
+	view_button.tooltip_text = ("Back to the view from above" if on else "First person") + ("" if is_touch else " (V)")
+	for zb in zoom_buttons:
+		zb.visible = not on
 
 
 ## Shows `c` over `world_pos`, drifting up and fading away.
@@ -833,7 +858,7 @@ func _update_shopper_card(delta: float, hidden: bool) -> void:
 ## else the closest one right next to you once you've stopped moving.
 func shopper_of_interest() -> Customer:
 	var store: Store = Game.store
-	if not is_touch:
+	if not is_touch and not (is_instance_valid(first_person) and first_person.active):
 		var m := store.get_global_mouse_position()
 		var front: Customer = null
 		for c: Customer in store.customers:
@@ -934,6 +959,8 @@ static func _loan_line() -> String:
 func _on_loan_defaulted() -> void:
 	if is_instance_valid(cutscene):
 		return
+	if is_instance_valid(first_person):
+		first_person.force_off()  # (he comes in the normal view)
 	for panel in [computer, rival_panel, shop_panel, rack_panel]:
 		panel.close()
 	summary_panel.visible = false

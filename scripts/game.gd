@@ -173,6 +173,7 @@ var effects := {}  # brew id -> seconds it still works for (Brand.BREWS)
 ## due (the day whose night it all has to be paid by)}.
 var loan := {}
 var cutscene := false  # the lender is collecting (the HUD and the player stand aside)
+var fp: Node  # the first person view (FirstPerson), while a store's open
 
 # Set by these nodes when they load.
 var player: Node2D
@@ -232,6 +233,7 @@ func reset() -> void:
 	loan = {}
 	cutscene = false
 	player = null
+	fp = null
 	store = null
 	build_mode = null
 	for id in PRODUCTS:

@@ -6,17 +6,25 @@ extends Node2D
 const MARKER_SECONDS := 0.6
 
 var _tiles: Array = []  # [texture, top-left position, tint]
+var version := 0  # goes up whenever the tiles change (first person rebuilds its floor)
 var _marker_cell := Vector2i.ZERO
 var _marker_time := 0.0
 
 
 func clear() -> void:
 	_tiles.clear()
+	version += 1
 	queue_redraw()
+
+
+## Every tile: [texture, top-left position, tint].
+func tiles() -> Array:
+	return _tiles
 
 
 func add_tile(tex: Texture2D, cell: Vector2i, tint := Color.WHITE) -> void:
 	_tiles.append([tex, Iso.cell_to_world(cell) - Vector2(32, 16), tint])
+	version += 1
 	queue_redraw()
 
 

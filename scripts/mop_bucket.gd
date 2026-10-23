@@ -57,3 +57,7 @@ func display_name() -> String:
 
 func get_pick_rect() -> Rect2:
 	return Rect2(-20, -52, 40, 62)
+
+
+func fp_texture() -> Texture2D:
+	return EMPTY if Game.player != null and Game.player.holding_mop else FULL

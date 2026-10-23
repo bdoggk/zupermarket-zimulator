@@ -95,3 +95,7 @@ func interact(_p: Player) -> void:
 
 func get_pick_rect() -> Rect2:
 	return Rect2(-20, -44, 40, 48)
+
+
+func fp_texture() -> Texture2D:
+	return OPEN_TEX if Game.is_open else CLOSED_TEX

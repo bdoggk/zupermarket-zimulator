@@ -58,6 +58,7 @@ var volume := 0.75  # 0-1, for the whole game
 var vibration := true
 var ui_scale := 1.0
 var auto_update := true
+var first_person := false  # the store in first person (V); remembered for next time
 
 var _applying := false  # we're resizing the window ourselves
 var _save_queued := false
@@ -278,6 +279,13 @@ func set_auto_update(on: bool) -> void:
 		Updater.check()
 
 
+func set_first_person(on: bool) -> void:
+	if first_person == on:
+		return
+	first_person = on
+	save_settings()
+
+
 func set_vibration(on: bool) -> void:
 	vibration = on
 	save_settings()
@@ -315,6 +323,7 @@ func save_settings() -> void:
 	cfg.set_value("audio", "volume", volume)
 	cfg.set_value("controls", "vibration", vibration)
 	cfg.set_value("updates", "automatic", auto_update)
+	cfg.set_value("view", "first_person", first_person)
 	cfg.save(PATH)
 
 
@@ -337,3 +346,4 @@ func load_settings() -> void:
 	volume = clampf(float(cfg.get_value("audio", "volume", volume)), 0.0, 1.0)
 	vibration = bool(cfg.get_value("controls", "vibration", vibration))
 	auto_update = bool(cfg.get_value("updates", "automatic", auto_update))
+	first_person = bool(cfg.get_value("view", "first_person", first_person))

@@ -140,3 +140,7 @@ func fix(by_someone := true) -> void:
 	jammed = false
 	_jam_time = 0.0
 	Game.show_popup(position + Vector2(0, -60), "Fixed!" if by_someone else "Rebooted...", Color(0.6, 1.0, 0.6))
+
+
+func fp_texture() -> Texture2D:
+	return SELF_TEXTURE

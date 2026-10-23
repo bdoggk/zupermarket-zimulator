@@ -49,6 +49,7 @@ var action_label := ""
 
 var _walk_anim := 0.0
 var facing := Vector2.ZERO  # the way you last walked (E prefers what's in front of you)
+var look_dir := Vector2.ZERO  # first person: where you're looking (you face that way, whichever way you walk)
 var _stuck_time := 0.0
 var _last_prompt := ["-", false, "-"]
 
@@ -72,7 +73,8 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	var typing := is_typing() or Game.menu_open  # (the keys are working the menu)
-	var input := Vector2.ZERO if typing else Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var fp := first_person()
+	var input := Vector2.ZERO if typing else (fp.move_input() if fp else Input.get_vector("move_left", "move_right", "move_up", "move_down"))
 	if is_busy() and input != Vector2.ZERO:
 		cancel_action()
 
@@ -85,7 +87,10 @@ func _process(delta: float) -> void:
 	elif input != Vector2.ZERO:
 		path.clear()
 		tap_target = null
-		velocity = Iso.even_velocity(input, speed) * minf(input.length(), 1.0)  # as fast up/down as left/right
+		if fp:
+			velocity = fp.walk_velocity(input, speed)  # the way you're looking
+		else:
+			velocity = Iso.even_velocity(input, speed) * minf(input.length(), 1.0)  # as fast up/down as left/right
 	elif not path.is_empty():
 		_follow_path(delta, speed)
 	else:
@@ -94,9 +99,17 @@ func _process(delta: float) -> void:
 	move_and_slide()
 	if velocity.length() > 5.0:
 		facing = velocity.normalized()
+	if fp and look_dir != Vector2.ZERO:
+		facing = look_dir
 	_animate(delta)
 	_update_focus()
 	queue_redraw()
+
+
+## The first person view, while you're in it (null otherwise).
+func first_person() -> FirstPerson:
+	var fp: FirstPerson = Game.fp
+	return fp if fp != null and is_instance_valid(fp) and fp.active else null
 
 
 ## Typing in a text box (a price on the computer): WASD and Shift are
@@ -107,6 +120,8 @@ func is_typing() -> bool:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if first_person() and (event is InputEventMouseButton or event is InputEventScreenTouch or event is InputEventScreenDrag):
+		return  # first person does clicks and taps itself
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT \
 			and event.device == InputEvent.DEVICE_ID_EMULATION:
 		# A finger: walk there (or use what's there) once it lifts, unless it
@@ -419,6 +434,7 @@ func _animate(delta: float) -> void:
 # ---------------------------------------------------------------- focus + prompt
 
 func _update_focus() -> void:
+	var fp_now := first_person()
 	var best: Interactable = null
 	var info: Interactable = null
 	var scannable: Interactable = null
@@ -433,6 +449,11 @@ func _update_focus() -> void:
 			# Same priority: what's in front of you counts as up to 40% closer.
 			var ahead := maxf(0.0, facing.dot((obj.position - position).normalized())) if d > 0.5 else 1.0
 			var score := d * (1.0 - 0.4 * ahead)
+			if fp_now:  # first person: what you're looking at, never what's behind you
+				var look := fp_now.ahead(obj.position - position) if d > 0.5 else 1.0
+				if look < -0.2:
+					continue
+				score = d * (2.0 - 1.6 * maxf(0.0, look))
 			if pr > best_pr or (pr == best_pr and score < best_d):
 				best_pr = pr
 				best_d = score

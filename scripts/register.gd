@@ -246,3 +246,7 @@ func interact(_p: Player) -> void:
 
 func get_pick_rect() -> Rect2:
 	return Rect2(-30, -48, 60, 62)
+
+
+func fp_texture() -> Texture2D:
+	return TEXTURE

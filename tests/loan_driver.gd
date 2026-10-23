@@ -208,9 +208,14 @@ func _cutscene(skip: bool) -> void:
 	Game.money = 10.0
 	var p: Player = Game.player
 	var head_cell := p.current_cell()
+	if not skip:
+		Game.fp.set_active(true)  # (he comes in the view from above, even in first person)
+		await _frames(2)
 	_end_day()
 	await _frames(3)
 	var c: Node = hud.cutscene
+	if not skip:
+		check(not Game.fp.active and Game.store.visible, "first person switches off for his visit")
 	check(is_instance_valid(c) and not hud.visible and Game.cutscene, "%s: the cutscene starts and the HUD gets out of the way" % ("skipped" if skip else "watched"))
 	if not is_instance_valid(c):
 		return

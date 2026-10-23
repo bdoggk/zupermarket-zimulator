@@ -49,3 +49,14 @@ func interact(p: Player) -> void:
 
 func get_pick_rect() -> Rect2:
 	return Rect2(-16, -26, 32, 34)
+
+
+func fp_texture() -> Texture2D:
+	return TEXTURE
+
+
+## First person: the box with its product's picture on it.
+func look_3d() -> Array:
+	var layers := super.look_3d()
+	layers.append([Game.icon(product_id), Vector2(-4, -24), false])
+	return layers

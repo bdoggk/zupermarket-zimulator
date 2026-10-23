@@ -69,3 +69,8 @@ func is_sellable() -> bool:
 
 func get_pick_rect() -> Rect2:
 	return Rect2()  # tapping scenery just walks you there
+
+
+## First person: every texture, drawn where the normal view draws it.
+func look_3d() -> Array:
+	return textures.map(func(t): return [t, -origin, false])

@@ -11,3 +11,7 @@ func _draw() -> void:
 
 func get_pick_rect() -> Rect2:
 	return Rect2(-14, -44, 28, 54)
+
+
+func fp_texture() -> Texture2D:
+	return Game.FURNITURE[furniture_id].texture

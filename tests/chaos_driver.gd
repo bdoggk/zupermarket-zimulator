@@ -339,9 +339,15 @@ func _act() -> void:
 		"mop": 5.0, "computer": 3.0, "build": 1.5, "shop": 1.5, "rival": 0.5, "pause": 0.5,
 		"saveload": 0.5 if saveload else 0.0, "spawn": 2.0, "zoom": 1.0, "staff": 2.0, "teleport": 3.0,
 		"settings": 0.4, "wait": 6.0, "click": 4.0, "key": 4.0, "wheel": 0.5, "spy": 1.0,
-		"finger": 6.0 if touch else 0.0, "loan": 0.8,
+		"finger": 6.0 if touch else 0.0, "loan": 0.8, "view": 0.6,
 	})
 	match what:
+		"view":
+			if Game.fp:
+				Game.fp.toggle()
+				_note("first person %s" % ("on" if Game.fp.active else "off"))
+				if Game.fp.active:
+					Game.fp.yaw = rng.randf() * TAU
 		"loan":
 			_loan()
 		"finger":
@@ -413,7 +419,7 @@ func _act() -> void:
 			var size: Vector2 = get_viewport().get_visible_rect().size
 			_click(Vector2(rng.randf() * size.x, rng.randf() * size.y), MOUSE_BUTTON_WHEEL_UP if rng.randf() < 0.5 else MOUSE_BUTTON_WHEEL_DOWN)
 		"key":
-			var keys := [KEY_E, KEY_E, KEY_Q, KEY_B, KEY_R, KEY_SPACE, KEY_ESCAPE, KEY_P, KEY_ENTER, KEY_TAB, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_3]
+			var keys := [KEY_E, KEY_E, KEY_Q, KEY_B, KEY_R, KEY_SPACE, KEY_ESCAPE, KEY_P, KEY_ENTER, KEY_TAB, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_3, KEY_V]
 			var k: Key = keys[rng.randi() % keys.size()]
 			_note("key %s" % OS.get_keycode_string(k))
 			_key(k)
@@ -627,7 +633,7 @@ func _vlad() -> void:
 			t0 = Time.get_ticks_msec()
 		var r := rng.randf()
 		if r < 0.02:
-			var k: Key = [KEY_SPACE, KEY_E, KEY_W, KEY_B, KEY_M, KEY_ESCAPE, KEY_ENTER, KEY_5][rng.randi() % 8]
+			var k: Key = [KEY_SPACE, KEY_E, KEY_W, KEY_B, KEY_M, KEY_ESCAPE, KEY_ENTER, KEY_5, KEY_V][rng.randi() % 9]
 			_note("visit: key %s (%s)" % [OS.get_keycode_string(k), c.step])
 			for down in [true, false]:
 				var e := InputEventKey.new()

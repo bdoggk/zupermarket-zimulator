@@ -38,6 +38,26 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.12.0
+
+- **First person.** Press **V** (R3 on a controller, or the **View** button in the corner)
+  to see the store through your own eyes, and again to go back to the view from above.
+  The game remembers which one you used last.
+  - It's the same store, drawn in 3D from the same art: the floor tiles, the walls and
+    the shelves (with what's on them, and their labels) are solid, and shoppers, staff,
+    townsfolk and everything else stand up like the sprites in old shooters. The town
+    is out there too: walk out the door, down the street, to Bone Mart and the shops.
+  - **Keyboard and mouse:** WASD walks, the mouse looks around, Left / Right arrows
+    turn, **E** or a left click uses what's in front of you (the + in the middle turns
+    yellow), **Q** or a right click scans it.
+  - **Controller:** left stick walks, right stick looks, A uses, X scans.
+  - **Touch:** drag to look around, tap the floor to walk there, or tap something to
+    walk over and use it (USE and SCAN work as usual).
+  - What you're carrying (a box, the mop) shows at the bottom of the screen, with a bar
+    while you stock, ring up or mop.
+  - Build mode is still seen from above: it switches back to first person when you're
+    done. Count Vlad's visit plays in the view from above too.
+
 ## What's new in 0.11.0
 
 - **Loans from Count Vlad.** The store computer has a new **Loans** app: "Count Vlad's
@@ -892,13 +912,17 @@ head: you lose everything and start over from day 1.
 | Build mode | B | Build button |
 | Turn something (build mode) | R | Rotate button, then tap it |
 | Zoom | Mouse wheel or the +/- buttons | Pinch with two fingers, or the +/- buttons |
+| First / third person | V, or the View button | View button |
+| Look around (first person) | Mouse; Left / Right arrows turn | Drag |
+| Use / scan what you look at (first person) | Left-click / right-click (or E / Q) | Tap it, or USE / SCAN |
 | Pause menu | Esc or P | II button / back button |
 | Recent messages | M, or the Log button | Log button |
 | Close / cancel | Esc | Back button |
 | Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-5 switch apps, Esc goes back | Tap |
 
 A gamepad works too: left stick to move, LT or L3 (sprint), A (use), X (scan), Y
-(build), Start (pause), Back/View (messages), B (back). Every menu works with the d-pad, A and B, the store
+(build), R3 (first / third person; the right stick looks around in first person),
+Start (pause), Back/View (messages), B (back). Every menu works with the d-pad, A and B, the store
 computer and its apps included. In build mode the tile in the middle of the screen is
 the cursor: left stick to look around, d-pad left/right (or LB) to pick what to buy or
 Move / Rotate / Sell / Expand, A to place it (or pick up, sell...), RB to turn it, B to
@@ -969,6 +993,8 @@ scripts/
   ui/tutorial.gd       The first-day tips
   ui/build_bar.gd      The build mode toolbar, decorations row and paint menu
   ui/loan_cutscene.gd  Count Vlad's visit when a loan isn't paid back in time
+  first_person.gd      First person: the store in 3D, built from the 2D one, and the controls
+  fp_art.gd            Turns the iso art into what first person needs (flat floor tiles, box sides)
   ui/pause_menu.gd     The in-game pause menu
   ui/message_log.gd    Recent messages (M, the Log button, or the pause menu)
   ui/options_menu.gd   The Options screen (main menu and pause menu)
@@ -1072,7 +1098,7 @@ godot --headless --path . --fixed-fps 60 res://tests/rotate_test.tscn   # turnin
 godot --headless --path . --fixed-fps 60 res://tests/controls_test.tscn # sprinting, zoom steps, Controls list, frame rate + window settings
 xvfb-run -s "-screen 0 1920x1080x24" godot --path . --rendering-driver opengl3 res://tests/controls_test.tscn  # + zoom in a real window
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/camera_test.tscn  # build mode view
-xvfb-run godot --path . --rendering-driver opengl3 res://tests/touch_test.tscn   # real finger taps, slides and pinches on a 1920x1080 touch screen
+xvfb-run godot --path . --rendering-driver opengl3 res://tests/touch_test.tscn   # real finger taps, slides and pinches on a 1920x1080 touch screen (first person too)
 DAYS=5 godot --headless --path . --fixed-fps 60 res://tests/bot_test.tscn   # a bot plays 5 days
 STAFF=1 SHUFFLE=1 godot --headless --path . --fixed-fps 60 res://tests/stuck_test.tscn  # busy-store stress test
 godot --headless --path . --fixed-fps 60 res://tests/shops_test.tscn   # the little shops, brews, witches and vampires, favorite products
@@ -1085,6 +1111,7 @@ godot --headless --path . --fixed-fps 60 res://tests/rack_test.tscn   # picking 
 godot --headless --path . --fixed-fps 60 res://tests/rules_test.tscn  # how staff work: Stock switches, stocker rules, when the manager orders
 godot --headless --path . --fixed-fps 60 res://tests/levels_test.tscn # levels with no cap, levels 7-14, decorations, the new upgrades
 godot --headless --path . -s res://tests/loan_test.gd                 # loans, the payments, Count Vlad's visit and starting over
+godot --headless --path . --fixed-fps 60 res://tests/fp_test.tscn     # first person: the 3D store, walking, looking, using, tapping
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)
 ```
 

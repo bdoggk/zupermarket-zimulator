@@ -18,6 +18,7 @@ var rotation_step := 0
 ## The grid direction the front faces for each rotation_step.
 const FACINGS: Array[Vector2i] = [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]
 static var _views := {}  # texture -> how to draw it each way (see view_of)
+var _drawn_tex: Texture2D  # the sprite draw_object_sprite drew last (see fp_texture)
 
 
 ## Text shown to the player, e.g. "Stock Canned Beans". "" = nothing to say.
@@ -133,7 +134,25 @@ func _process(_delta: float) -> void:
 ## Draws a sprite made by tools/make_sprites.py so its floor footprint sits
 ## on this node's position, turned the way it faces.
 func draw_object_sprite(tex: Texture2D) -> void:
+	_drawn_tex = tex
 	draw_view(self, tex, rotation_step, Vector2.ZERO)
+
+
+## First person (scripts/first_person.gd): the sprite that stands for this,
+## as drawn in the normal view. Things whose sprite changes say so here.
+func fp_texture() -> Texture2D:
+	return _drawn_tex
+
+
+## First person: what to show as [[texture, top-left (from the position),
+## mirrored]] layers, drawn in order into one billboard.
+func look_3d() -> Array:
+	var tex := fp_texture()
+	if tex == null:
+		return []
+	var view := view_of(tex, rotation_step)
+	var t: Texture2D = view[0]
+	return [[t, Vector2(-32, -(t.get_height() - 16)), view[1]]]
 
 
 ## Draws `tex` turned to `step` with its floor footprint centered on `at`

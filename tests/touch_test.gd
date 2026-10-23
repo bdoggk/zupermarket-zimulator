@@ -3,7 +3,8 @@ extends Node
 # sends) in a 1920x1080 window like an AYN Thor's: tapping to walk, pinching
 # to zoom, build mode, scrolling lists by dragging over their buttons and
 # prices, typing a price, and every window fitting on screen with the big
-# touch-screen text (also at UI size 130%). Needs a real window (xvfb):
+# touch-screen text (also at UI size 130%), and first person by touch
+# (drag to look, tap to walk). Needs a real window (xvfb):
 #   xvfb-run godot --path . --rendering-driver opengl3 res://tests/touch_test.tscn
 
 var fails := 0
@@ -23,6 +24,7 @@ func _ready() -> void:
 	Settings.display = Settings.Display.WINDOWED
 	Settings.resolution = Vector2i(1920, 1080)
 	Settings.ui_scale = 1.0
+	Settings.first_person = false  # (starts in the view from above)
 	Settings.apply()
 	await _frames(5)
 	var main: Node = preload("res://scenes/main.tscn").instantiate()
@@ -168,6 +170,31 @@ func _ready() -> void:
 	hud.shop_panel.close()
 	await _frames(2)
 
+	# ---- first person by touch: the View button, drag to look, tap to walk
+	var fp: FirstPerson = Game.fp
+	await tap(_screen_of(hud.view_button))
+	await _frames(3)
+	check(fp.active and not store.visible, "the View button: first person")
+	var ahead := _open_line(store)
+	p.position = Iso.cell_to_world(ahead)
+	p.path.clear()
+	fp.yaw = 0.0
+	fp.pitch = -0.05
+	await _frames(3)
+	await drag(Vector2(1200, 540), Vector2(800, 540))
+	await _frames(3)
+	check(fp.yaw > 0.4 and p.current_cell() == ahead and p.path.is_empty(), "sliding a finger looks around (%.2f) without walking" % fp.yaw)
+	fp.yaw = 0.0
+	fp.pitch = -0.6  # looking at the floor ahead
+	await _frames(3)
+	await tap(Vector2(960, 540))
+	await _frames(90)
+	check(p.current_cell().y < ahead.y, "tapping the floor ahead walks there (%s -> %s)" % [ahead, p.current_cell()])
+	fp.pitch = -0.05
+	await tap(_screen_of(hud.view_button))
+	await _frames(3)
+	check(not fp.active and store.visible, "and the View button goes back to the view from above")
+
 	# ---- at UI size 130% everything still fits, and taps still land
 	Settings.set_ui_scale(1.3)
 	await _frames(4)
@@ -307,6 +334,18 @@ func _free_spot(win: Window) -> Vector2i:
 			if b.cursor_error == "":
 				return c
 	return Store.NO_CELL
+
+
+## A walkable cell with four more walkable cells straight ahead of it (up the map).
+func _open_line(store: Store) -> Vector2i:
+	for c: Vector2i in store.floor_cells:
+		var ok := true
+		for k in range(0, 5):
+			for dx in [-1, 0, 1]:
+				ok = ok and store.is_walkable(c + Vector2i(dx, -k))
+		if ok:
+			return c
+	return Vector2i(6, 8)
 
 
 func _open_cell_near(store: Store, from: Vector2i, step: Vector2i) -> Vector2i:
