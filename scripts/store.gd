@@ -88,6 +88,7 @@ var computer: Computer
 var sign: OpenSign
 var mop_bucket: MopBucket
 var player: Player
+var ray_tracer: RayTracer  # shadows from every light (Options > Graphics > Ray tracing)
 var customers: Array[Customer] = []
 ## Things you can walk up to and use that walk around themselves (the
 ## rival's spies, see RivalSpy). Their `cell` is wherever they are now.
@@ -130,6 +131,8 @@ func _ready() -> void:
 	if town:
 		town.start()
 	_sync_staff()
+	ray_tracer = RayTracer.new(self)
+	add_child(ray_tracer)
 	Game.store_expanded.connect(expand)
 	Game.box_ordered.connect(_on_box_ordered)
 	Game.store_opened.connect(_on_store_opened)

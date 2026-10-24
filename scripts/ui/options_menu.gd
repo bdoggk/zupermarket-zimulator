@@ -334,7 +334,7 @@ func _change_ui_scale(step: int) -> void:
 
 
 func _change_graphics(step: int) -> void:
-	Settings.set_graphics(wrapi(Settings.graphics + step, 0, 3) as Settings.Graphics)
+	Settings.set_graphics(wrapi(Settings.graphics + step, 0, Settings.GRAPHICS_NAMES.size()) as Settings.Graphics)
 
 
 func _refresh() -> void:

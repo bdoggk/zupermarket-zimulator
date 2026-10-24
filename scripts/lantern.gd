@@ -2,7 +2,7 @@ class_name Lantern
 extends Decoration
 ## A candle lantern on a post (build mode). Like a gravestone it makes the
 ## store a bit more inviting, and it throws a warm pool of light around
-## itself (Medium/High graphics; on High the candle flickers). Handy for
+## itself (Medium graphics and up; from High the candle flickers). Handy for
 ## the dark corners between the ceiling lights, and at night. Other
 ## decorations that glow (a cauldron, the spirit lamp, the moon lamp) are
 ## lanterns too, with their FURNITURE entry's "light" color, "glow" spot

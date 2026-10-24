@@ -409,7 +409,7 @@ func _act() -> void:
 			p.path.clear()
 			p.position = Iso.cell_to_world(c)
 		"settings":
-			var g := rng.randi() % 3
+			var g := rng.randi() % Settings.GRAPHICS_NAMES.size()
 			var k: float = Settings.UI_SCALES[rng.randi() % Settings.UI_SCALES.size()]
 			_note("graphics %d, UI size %s" % [g, Settings.ui_scale_name(k)])
 			Settings.set_graphics(g as Settings.Graphics)
@@ -1226,7 +1226,7 @@ func _check_people(dt: float, paused: bool) -> void:
 			continue
 		var age: float = m.get_meta("age", 0.0) + (0.0 if paused else dt)
 		m.set_meta("age", age)
-		if age > 240.0:
+		if m is RivalSpy and age > 240.0:  # (your gang stands guard all day: that's fine)
 			_fail("rival spy hanging around", "%s at %s, inside %s, path %d, wait %.1f" % [RivalSpy.State.keys()[m.state], m.cell, m.is_inside(), m.path.size(), m.wait])
 			m.set_meta("age", -100000.0)
 	# The day has to end after closing.

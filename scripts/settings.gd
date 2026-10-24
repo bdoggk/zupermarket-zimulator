@@ -8,7 +8,8 @@ extends Node
 ##   Window size   PC, in a window. Dragging the window's edges or
 ##                 maximizing it works too, and the game remembers.
 ##   Frame rate    a cap on the frames per second (or none)
-##   Graphics      Low / Medium / High (see GRAPHICS_INFO)
+##   Graphics      Low / Medium / High / Ray tracing (see GRAPHICS_INFO);
+##                 PC starts on Ray tracing, phones on Medium
 ##   UI size       how big the menus, buttons and text are (UI_SCALES); the
 ##                 store itself stays the same size (see UI.fit_layer)
 ##   VSync         on/off (on: the frame rate matches the screen)
@@ -40,18 +41,19 @@ const FPS_LIMITS := [30, 60, 90, 120, 144, 165, 240, 0]  # 0 = no limit
 const UI_SCALES := [0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3]
 const UI_MIN_ROOM := Vector2(960, 540)  # the UI needs this much room (in its own units) to fit, so big sizes stop there
 
-enum Graphics { LOW, MEDIUM, HIGH }
-const GRAPHICS_NAMES := ["Low", "Medium", "High"]
+enum Graphics { LOW, MEDIUM, HIGH, RAY_TRACING }
+const GRAPHICS_NAMES := ["Low", "Medium", "High", "Ray tracing"]
 const GRAPHICS_INFO := [
 	"Simple lighting. Best for older phones and battery life.",
 	"Store lights and soft shadows.",
 	"Store lights with flicker and floating dust.",
+	"Every light casts real shadows: shelves, walls, people. Needs a good graphics card.",
 ]
 
 var display := Display.WINDOWED
 var resolution := Vector2i(1280, 720)  # the window's size (FIT_SCREEN = maximized)
 var fps_limit := 0
-var graphics := Graphics.HIGH
+var graphics := Graphics.RAY_TRACING
 var vsync := true
 var show_fps := false
 var volume := 0.75  # 0-1, for the whole game
@@ -165,7 +167,12 @@ func lights_enabled() -> bool:
 
 
 func effects_enabled() -> bool:
-	return graphics == Graphics.HIGH
+	return graphics >= Graphics.HIGH
+
+
+## Shadows from every light (see RayTracer).
+func ray_tracing() -> bool:
+	return graphics == Graphics.RAY_TRACING
 
 
 ## What VSync does to the frame rate on this screen.
@@ -317,6 +324,7 @@ func save_settings() -> void:
 	cfg.set_value("display", "resolution", resolution)
 	cfg.set_value("display", "fps_limit", fps_limit)
 	cfg.set_value("display", "graphics", graphics)
+	cfg.set_value("display", "ray_tracing_offered", true)
 	cfg.set_value("display", "vsync", vsync)
 	cfg.set_value("display", "show_fps", show_fps)
 	cfg.set_value("display", "ui_scale", ui_scale)
@@ -339,7 +347,9 @@ func load_settings() -> void:
 	if r is Vector2i and (r == FIT_SCREEN or (r.x >= MIN_WINDOW.x and r.y >= MIN_WINDOW.y)):
 		resolution = r
 	fps_limit = maxi(0, int(cfg.get_value("display", "fps_limit", fps_limit)))
-	graphics = clampi(int(cfg.get_value("display", "graphics", graphics)), 0, 2) as Graphics
+	graphics = clampi(int(cfg.get_value("display", "graphics", graphics)), 0, Graphics.size() - 1) as Graphics
+	if graphics == Graphics.HIGH and is_desktop() and not cfg.has_section_key("display", "ray_tracing_offered"):
+		graphics = Graphics.RAY_TRACING  # (High was the best there was before 0.14.0: PC goes up to ray tracing once)
 	vsync = bool(cfg.get_value("display", "vsync", vsync))
 	show_fps = bool(cfg.get_value("display", "show_fps", show_fps))
 	ui_scale = clampf(float(cfg.get_value("display", "ui_scale", ui_scale)), 0.5, 2.0)

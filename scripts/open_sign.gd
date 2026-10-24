@@ -14,7 +14,7 @@ var _glow: PointLight2D
 
 
 func _ready() -> void:
-	_glow = PointLight2D.new()  # a little colored glow (Medium/High graphics)
+	_glow = PointLight2D.new()  # a little colored glow (Medium graphics and up)
 	var g := Gradient.new()
 	g.set_color(0, Color(1, 1, 1, 1))
 	g.set_color(1, Color(1, 1, 1, 0))

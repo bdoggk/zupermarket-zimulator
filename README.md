@@ -38,6 +38,24 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.14.0
+
+- **Ray tracing.** A new graphics level, **Options > Graphics > Ray tracing**: every
+  light casts real shadows, in the normal view and in first person.
+  - The ceiling lights, street lamps, burning barrels, the cauldron, lanterns, the shops'
+    counter lights and the OPEN sign all count.
+  - Shelves, coolers, racks, walls, counters, boxes on the floor, wrecked cars and ruins
+    cast shadows. So do you, the shoppers, your staff and every skeleton walking around.
+  - The shadows have soft edges, and a side of a shelf that faces away from the lights is
+    darker.
+  - Walls and roofs keep the street lamps out of the stores at night (and the store's
+    light in).
+- **On by default on PC.** If you had High before, you get Ray tracing now. Phones start
+  on Medium, but you can switch to Ray tracing on a fast phone or handheld (the AYN Thor
+  handles it).
+- It runs on any graphics card that runs the game. There's no RTX card needed: the rays
+  are traced in the game's own shaders, through a map of how tall everything is.
+
 ## What's new in 0.13.0
 
 - **Gang war.** When your store reaches **level 15**, Mr. Bones walks in with two of his
@@ -531,12 +549,26 @@ It has Resume, Save Game, Options, Save & Main Menu, and Save & Quit (PC).
 | Show FPS | A frame counter next to the clock |
 | Sound | How loud the game is, from off to 100% (a slider) |
 | UI size | How big the menus, buttons and text are: 70% to 130%. The store itself stays the same size. On a small window it only goes as big as still fits |
-| Graphics | **Low**: simple lighting (older phones, battery life). **Medium**: store lights with darker corners. **High**: adds a flickering light tube and floating dust |
+| Graphics | **Low**: simple lighting (older phones, battery life). **Medium**: store lights with darker corners. **High**: adds a flickering light tube and floating dust. **Ray tracing**: High, plus every light casts real shadows (shelves, walls, people), in both views. The default on PC (phones start on Medium) |
 | Automatic updates | Windows: new versions download by themselves and start the next time you open the game. Android: the main menu says when a new version is out. On by default (Windows and Android only) |
 | Vibration | Phone vibration and controller rumble. It turns on when a phone or controller is available, and you feel it when you make a sale, stock a shelf, scan, mop, level up, or when a zombie storms out |
 
 **Controls** (the button at the bottom of Options) lists every key and button, for
 keyboard and mouse, controller and touch screens.
+
+**How ray tracing works.** Every frame the game works out the light on the whole map
+(`scripts/ray_tracer.gd`, `shaders/rt_light.gdshader`), 8 pixels to a floor tile.
+- For every spot a light reaches, it traces 8 rays to points on the light. That's what
+  gives the shadows their soft edges.
+- Each ray goes tile by tile through a height map of everything on the floor, at the
+  same heights first person builds its boxes with. It also goes past a post for each
+  person nearby.
+- The floor and everything on it are then drawn with that light instead of the normal 2D
+  lights. First person's floor, walls and shelves are too, and its billboards get the
+  light where they stand.
+- It's all ordinary shader work, so it runs on the Compatibility renderer the game uses
+  everywhere, with no ray tracing hardware. It's more work for the graphics card than
+  High, so it's off on phones until you turn it on.
 
 Settings are saved to `user://settings.cfg`.
 
@@ -1038,6 +1070,8 @@ scripts/
   updater.gd           Autoload "Updater": checks GitHub for a new version, downloads,
                        checks and swaps in the new .exe on Windows
   store_lights.gd      Store lighting for each graphics level, day/night tint
+  ray_tracer.gd        Ray tracing: the height map, the lights, the lightmap, and
+                       putting it on the normal view and first person
   market.gd            Prices that drift over time + daily news events
   store.gd             Builds the store from the map, furniture placement rules,
                        registers and their lines, deliveries, decor, staff, spills,
@@ -1089,6 +1123,10 @@ scripts/
   ui/ui.gd             UI helpers and theme
   menu/menu.gd         Main menu: Continue / New Game / Load Game / Options / Quit
   menu/menu_backdrop.gd  The store drawn behind the main menu (from your latest save)
+shaders/
+  rt_light.gdshader    Ray tracing: traces the shadow rays, one quad per light
+  rt_canvas.gdshader   Ray tracing in the normal view (the floor, boxes, people)
+  rt_fp.gdshader       Ray tracing in first person
 assets/sprites/        All the pixel art
 assets/sounds/         Sounds (.ogg / .wav). A shopper kind's "sound" in brand.gd is what it growls
 tools/make_sprites.py  The Python script that draws the placeholder art (for both games)
@@ -1201,6 +1239,7 @@ godot --headless --path . --fixed-fps 60 res://tests/levels_test.tscn # levels w
 godot --headless --path . -s res://tests/loan_test.gd                 # loans, the payments, Count Vlad's visit and starting over
 godot --headless --path . --fixed-fps 60 res://tests/fp_test.tscn     # first person: the 3D store, walking, looking, using, tapping
 godot --headless --path . --fixed-fps 60 res://tests/war_test.tscn    # the gang war: land, branches, raids both ways, fighting, the cutscene
+xvfb-run godot --path . --rendering-driver opengl3 res://tests/rt_test.tscn  # ray tracing: the setting, the height map, shadows read back from the lightmap, both views
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)
 ```
 

@@ -142,6 +142,22 @@ func dress(i: int, building := false) -> void:
 		store.layout_changed()
 
 
+## The floor inside every branch store (under its roof: first person puts
+## a ceiling over it, and ray tracing keeps the street lamps out).
+func roofed_cells() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for i in plots.size():
+		if i >= Game.war.plots.size() or Game.war.plots[i] == "":
+			continue
+		var info: Dictionary = plots[i]
+		var rows: Array = info.rows
+		for y in rows.size():
+			for x in (rows[y] as String).length():
+				if (rows[y] as String)[x] != "#":
+					out.append((info.min as Vector2i) + Vector2i(x, y))
+	return out
+
+
 ## An empty lot: bare ground behind a fence, with a FOR SALE sign out front.
 func _build_lot(i: int, info: Dictionary) -> void:
 	var lo: Vector2i = info.min

@@ -8,12 +8,54 @@ class_name FpArt
 ##   top()         the top of a box sprite as a square
 ##   composite()   several layers drawn into one image (a box with its
 ##                 product's icon, a shelf front with its stock on it)
-## Everything is made once and cached.
+## Everything is made once and cached. With ray tracing on (see RayTracer)
+## the materials take their light from its lightmap.
 
 const TILE_W := 64
 const TILE_H := 32
 
 static var _cache := {}  # key -> Texture2D / Material / Mesh
+static var rt_lightmap: Texture2D  # ray tracing's lightmap (null: ray tracing is off)
+static var rt_world := Vector2.ONE  # the map's size in cells
+static var _rt_shaders := {}  # both sides? -> Shader
+
+
+## Ray tracing went on (the lightmap of `world` cells) or off (null): the
+## materials made from now on are made for that.
+static func set_lightmap(t: Texture2D, world := Vector2.ONE) -> void:
+	if t == rt_lightmap and world == rt_world:
+		return
+	rt_lightmap = t
+	rt_world = world
+	for k: String in _cache.keys():
+		if k.begins_with("rt"):
+			_cache.erase(k)
+
+
+## The lightmap shader (shaders/rt_fp.gdshader), seen from both sides or one.
+static func _rt_shader(both_sides: bool) -> Shader:
+	if not _rt_shaders.has(both_sides):
+		var base: Shader = load("res://shaders/rt_fp.gdshader")
+		if both_sides:
+			_rt_shaders[true] = base
+		else:
+			var one := Shader.new()
+			one.code = base.code.replace("cull_disabled", "cull_back")
+			_rt_shaders[false] = one
+	return _rt_shaders[both_sides]
+
+
+static func _rt_material(tex: Texture2D, both_sides: bool, tint: Color) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = _rt_shader(both_sides)
+	m.set_shader_parameter("use_texture", tex != null)
+	if tex:
+		m.set_shader_parameter("albedo_tex", tex)
+	m.set_shader_parameter("tint", tint)
+	m.set_shader_parameter("lightmap", rt_lightmap)
+	m.set_shader_parameter("world", rt_world)
+	m.set_shader_parameter("encode", RayTracer.ENCODE)
+	return m
 
 
 static func _image(tex: Texture2D) -> Image:
@@ -169,10 +211,16 @@ static func composite(key: String, size: Vector2i, layers: Array) -> Texture2D:
 
 
 ## An unshaded material for pixel art: crisp pixels, see-through where the
-## art is. `both_sides` for walls seen from inside and out.
-static func material(tex: Texture2D, both_sides := false, tint := Color.WHITE) -> StandardMaterial3D:
+## art is. `both_sides` for walls seen from inside and out. (With ray
+## tracing on, lit by the lightmap.)
+static func material(tex: Texture2D, both_sides := false, tint := Color.WHITE) -> Material:
 	var key := "mat:%s:%s:%s" % [tex.get_rid() if tex else "none", both_sides, tint.to_html()]
+	if rt_lightmap:
+		key = "rt" + key
 	if _cache.has(key):
+		return _cache[key]
+	if rt_lightmap:
+		_cache[key] = _rt_material(tex, both_sides, tint)
 		return _cache[key]
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -188,10 +236,16 @@ static func material(tex: Texture2D, both_sides := false, tint := Color.WHITE) -
 	return m
 
 
-## A flat colored material (the ceiling).
-static func color_material(c: Color) -> StandardMaterial3D:
+## A flat colored material (the ceiling). `lit`: lit by the lightmap
+## when ray tracing is on (not the lights themselves).
+static func color_material(c: Color, lit := true) -> Material:
 	var key := "col:%s" % c.to_html()
+	if rt_lightmap and lit:
+		key = "rt" + key
 	if _cache.has(key):
+		return _cache[key]
+	if rt_lightmap and lit:
+		_cache[key] = _rt_material(null, true, c)
 		return _cache[key]
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -248,7 +302,9 @@ static func _quad(mesh: ArrayMesh, c: Array) -> void:
 
 static func _add_quad(st: SurfaceTool, c: Array) -> void:
 	var uv := [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]
+	var n: Vector3 = (c[3] - c[0]).cross(c[1] - c[0]).normalized()  # (the side that shows; ray tracing lights it from there)
 	for i in [0, 1, 2, 0, 2, 3]:
 		st.set_color(Color.WHITE)
+		st.set_normal(n)
 		st.set_uv(uv[i])
 		st.add_vertex(c[i])

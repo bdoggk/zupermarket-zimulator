@@ -15,6 +15,10 @@ extends Node
 ## It's drawn at half the screen's resolution (chunky pixels, like the
 ## art, and quick on phones). One cell of the map is one unit; heights
 ## come from the art: PX_UP art pixels to a unit.
+##
+## With ray tracing on (Options > Graphics, see RayTracer) the floor, walls
+## and shelves are lit by its lightmap, shadows and all, and the billboards
+## by the light where they stand. Otherwise it's all unlit, dimmed at night.
 
 signal toggled(on: bool)
 
@@ -58,6 +62,8 @@ var _suspended := false  # turned off for build mode (or a menu that needs the n
 var _finger := NO_SPOT
 var _finger_moved := 0.0
 var _bob := 0.0
+var _rt := false  # built for ray tracing (its lightmap lights everything)
+var _lit_next := 0  # the next billboard to work out the light for (a few each frame)
 
 
 func _ready() -> void:
@@ -238,6 +244,9 @@ func walk_velocity(input: Vector2, speed: float) -> Vector2:
 
 
 func _process(delta: float) -> void:
+	if store and (FpArt.rt_lightmap != null) != _rt:
+		_rt = FpArt.rt_lightmap != null
+		_rebuild_all()  # (with the other materials)
 	if not active or store == null or not is_instance_valid(player):
 		return
 	var win := get_viewport().get_visible_rect().size
@@ -249,9 +258,17 @@ func _process(delta: float) -> void:
 	crosshair.size = win
 	crosshair.visible = not Game.menu_open and not get_tree().paused
 	crosshair.queue_redraw()
-	# The night (and the day's light) the normal view has.
+	# The night (and the day's light) the normal view has. Ray tracing's
+	# lightmap has it in already; the sky and fog get it here.
 	var mood: Color = store.mood.color
-	screen.modulate = Color.WHITE.lerp(mood, 0.55)
+	if _rt:
+		screen.modulate = Color.WHITE
+		env.background_color = SKY * mood
+		env.fog_light_color = SKY * mood
+	else:
+		screen.modulate = Color.WHITE.lerp(mood, 0.55)
+		env.background_color = SKY
+		env.fog_light_color = SKY
 	# Looking: the right stick, and Left / Right on the arrow keys.
 	if not Game.menu_open and not get_tree().paused:
 		var stick := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
@@ -271,6 +288,8 @@ func _process(delta: float) -> void:
 	camera.rotation = Vector3(pitch, yaw, 0.0)
 	_frame += 1
 	_sync(_frame % RESYNC_EVERY == 0)
+	if _rt:
+		_light_billboards()
 
 
 ## The mouse looks around (it's hidden) while nothing's open over the store.
@@ -546,6 +565,8 @@ func _sync_person(n: Node, m: Array) -> void:
 	s.offset = Vector2(top_left.x + size.x / 2.0, -(top_left.y + size.y / 2.0))
 	s.flip_h = sp.flip_h
 	s.modulate = Color(1, 1, 1, (n as CanvasItem).modulate.a * sp.modulate.a) * Color(sp.modulate.r, sp.modulate.g, sp.modulate.b)
+	if _rt:
+		s.modulate *= light_at((n as Node2D).position)
 	s.position = to_3d((n as Node2D).global_position - store.global_position)
 
 
@@ -597,7 +618,51 @@ func _signature(n: Node, kind: String) -> String:
 
 func _highlight(node3: Node3D, on: bool) -> void:
 	if node3 is Sprite3D:
-		(node3 as Sprite3D).modulate = Color(1.35, 1.3, 1.1) if on else Color.WHITE
+		var lit: Color = node3.get_meta("lit", Color.WHITE)
+		(node3 as Sprite3D).modulate = (Color(1.35, 1.3, 1.1) if on else Color.WHITE) * lit
+
+
+## Ray tracing: the light at 2D position `iso_pos` (as a billboard's tint,
+## so no brighter than its art).
+func light_at(iso_pos: Vector2) -> Color:
+	var c: Color = store.ray_tracer.light_at(iso_to_grid(iso_pos))
+	return Color(minf(c.r, 1.0), minf(c.g, 1.0), minf(c.b, 1.0))
+
+
+## Ray tracing: the billboards of things that stand still (signs, lamps,
+## what's on a counter, shelf labels) get the light where they stand, a few
+## of them each frame (lamps dim at dawn, a tube flickers).
+func _light_billboards() -> void:
+	var ids := _mirrors.keys()
+	if ids.is_empty():
+		return
+	for i in mini(24, ids.size()):
+		_lit_next = (_lit_next + 1) % ids.size()
+		var m: Array = _mirrors[ids[_lit_next]]
+		if m[1] == "person" or m[1] == "skip" or not is_instance_valid(m[2]) or not is_instance_valid(m[0]):
+			continue
+		var lit := light_at((m[0] as Node2D).position)
+		var on: bool = m[0] is Interactable and m[0].highlighted
+		for s in [m[2]] + (m[2] as Node).get_children():
+			if s is Sprite3D:
+				s.set_meta("lit", lit)
+				_highlight(s, on and s == m[2])
+
+
+## Throws the whole 3D store away, to build it again (ray tracing went on
+## or off: other materials).
+func _rebuild_all() -> void:
+	for id in _mirrors:
+		var m: Array = _mirrors[id]
+		if is_instance_valid(m[2]):
+			m[2].queue_free()
+	_mirrors.clear()
+	_signs.clear()
+	for cell in _spills:
+		if is_instance_valid(_spills[cell]):
+			_spills[cell].queue_free()
+	_spills.clear()
+	_floor_version = -1
 
 
 func _billboard() -> Sprite3D:
@@ -802,11 +867,13 @@ func _build_floor() -> void:
 		mmi.multimesh = mm
 		mmi.material_override = FpArt.material(FpArt.square(tex), true)
 		_floor.add_child(mmi)
-	# A ceiling over the store, Bone Mart and the little shops.
+	# A ceiling over the store, Bone Mart, the little shops and the branch stores.
 	var inside: Array = store.floor_cells.keys()
 	if store.town:
 		inside.append_array(store.town.rival_floor.keys())
 		inside.append_array(store.town.shop_floor.keys())
+		if store.town.turf:
+			inside.append_array(store.town.turf.roofed_cells())
 	var ceiling_h := FpArt.box_height(load("res://assets/sprites/wall_rival_tall.png")) / PX_UP
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -832,5 +899,5 @@ func _build_floor() -> void:
 		lamps.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(0.7, 1, 0.25)), spots[i]))
 	var lights := MultiMeshInstance3D.new()
 	lights.multimesh = lamps
-	lights.material_override = FpArt.color_material(CEILING_LIGHT)
+	lights.material_override = FpArt.color_material(CEILING_LIGHT, false)
 	_floor.add_child(lights)

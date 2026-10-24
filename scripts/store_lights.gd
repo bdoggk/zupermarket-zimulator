@@ -5,6 +5,8 @@ extends Node2D
 ##   Low     no lights, just a tint at night (fastest)
 ##   Medium  pools of light from the ceiling lights, darker corners
 ##   High    the same, plus a flickering tube and dust floating in the air
+##   Ray tracing  the same lights, and every one of them (these, the street
+##           lamps, lanterns...) casts shadows: see RayTracer
 
 const LIGHT_SPACING := Vector2i(4, 3)  # cells between ceiling lights
 const DAY_AMBIENT: Color = Brand.LIGHT.day  # how dark it is away from lights

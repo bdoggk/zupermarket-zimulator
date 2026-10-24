@@ -48,7 +48,8 @@ func _ready() -> void:
 			tiles += mmi.multimesh.instance_count
 	var floor_tiles := 0
 	for mmi in fp._floor.get_children():
-		if mmi is MultiMeshInstance3D and mmi.material_override is StandardMaterial3D and mmi.material_override.albedo_texture != null:
+		var mat: Material = mmi.material_override if mmi is MultiMeshInstance3D else null
+		if (mat is StandardMaterial3D and mat.albedo_texture != null) or (mat is ShaderMaterial and mat.get_shader_parameter("use_texture")):
 			floor_tiles += mmi.multimesh.instance_count
 	check(floor_tiles == store.floor_layer.tiles().size(), "every floor tile, the town's too (%d)" % floor_tiles)
 	var cam := fp.camera.position
