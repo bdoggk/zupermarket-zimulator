@@ -143,7 +143,7 @@ void fragment() {
 		// the same falloff as the glow texture of the normal lights
 		float x = d / reach;
 		float fall = x < 0.5 ? 1.0 - 1.1 * x : 0.9 * (1.0 - x);
-		float h0 = cell_at(ivec2(floor(p + 0.5))).x + 0.03;  // on top of whatever is here
+		float h0 = 0.03;  // the floor (under a shelf too: else its light bleeds onto the floor around it)
 		bool light_inside = cell_at(ivec2(floor(l + 0.5))).y > 0.5;
 		vec2 dir = d > 0.0001 ? (l - p) / d : vec2(1.0, 0.0);
 		vec2 across = vec2(-dir.y, dir.x);

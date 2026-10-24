@@ -410,8 +410,7 @@ func _update_people() -> void:
 ## billboards with. One ray to each light (no soft edges or people).
 func light_at(at: Vector2) -> Color:
 	var total := Color(ambient.r * AMBIENT_SCALE, ambient.g * AMBIENT_SCALE, ambient.b * AMBIENT_SCALE)
-	var cell := Vector2i(roundi(at.x), roundi(at.y))
-	var h0 := (heights[_index(cell)] if _inside(cell) else 0.0) + 0.03
+	var h0 := 0.03  # (the floor, as in the lightmap)
 	for e: Array in cpu_lights:
 		var l: Vector2 = e[0]
 		var r: float = e[2]
