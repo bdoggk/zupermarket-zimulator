@@ -183,9 +183,6 @@ func _ready() -> void:
 	Game.effects = {}
 	Game.from_dict(loaded)
 	check(Game.has_effect("stake") and Game.has_effect("crucifix"), "and load again")
-	Game.rival_owned = true
-	check(Game.brew_problem("stake").contains("yours"), "no staking %s once it's yours" % Brand.RIVAL.name)
-	Game.rival_owned = false
 
 	# ---- witches and vampires
 	check(Game.unlocks_at(int(Brand.SHOPPERS.witch.level)).any(func(l): return l.contains("witches")), "witches show up at level %d" % Brand.SHOPPERS.witch.level)

@@ -44,6 +44,8 @@ const LAYOUT := [
 ##   ,  dirt              ;  dead grass        :  dirt path
 ##   _  sidewalk          =  road              -  road with a center line
 ##   1-3  lots next door you can buy to make the store bigger (in order)
+##   P  land for sale in the gang war (WAR): each block of P is a plot
+##      where you (or Bone Mart) can open a branch store
 ##   T  dead tree         C c  wrecked car (two tiles, C is the back end)
 ##   l  street lamp       x  rubble            w  ruined wall
 ##   B  burning barrel    h  fire hydrant      g  gravestone
@@ -60,43 +62,43 @@ const LAYOUT := [
 ##   W y      its counter, and where the witch stands behind it
 ##   Q  a coffin          K  the cauldron
 const TOWN := [
-	"@@@@@@@@@@@@@@@@111122223333,,##############;;;;",
-	"@@@@@@@@@@@@@@@@111122223333,,#kbbbbbbbbbbk#;;;;",
-	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#;T;;",
-	"@@@@@@@@@@@@@@@@111122223333x,#bbsssbbsssbb#;;;;",
-	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#;;;;",
-	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#x;;;",
-	"@@@@@@@@@@@@@@@@111122223333,,#bbsssbbsssbb#;;;;",
-	"@@@@@@@@@@@@@@@@111122223333,B#bbbbbbbbbbbb#;;;;",
-	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#;;v;",
-	"@@@@@@@@@@@@@@@@111122223333,,#bbbmrbbbbbbk#;;;;",
-	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbpbbbb#;;;;",
-	"@@@@@@@@@@@@@@@@111122223333,,######e#######;;;;",
-	"________________________________________S_______",
-	"___l_________l_________l_______l_____________l__",
-	"================================================",
-	"======Cc=================================Cc=====",
-	"--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=",
-	"=========================Cc=====================",
-	"================================================",
-	"________l_________l_________l_________l_________",
-	"______________h__________________h______________",
-	",,,,,,,,,,,,:,,,,,,,x,;;;;T,,,,,,,,,,,,,:,,,,B,,",
-	",,T,,DDDDDDD:HHHHHHH,,;;;;;,www,,wwww,,,:,,;;;;;",
-	",,,,,DjQjfjD:HzKyzzH,,g;g;;,w,,,,,,xw,,,:,,;;;;;",
-	";v;,;DuVfffd:HooWozH,,;;;;;,w,B,,,,,,,,,:,,;T;;;",
-	";;;;;DfffjjD:HzooooH,g;g;g;,w,,,,x,,w,v,:,,;;;;;",
-	";B;,;DDDDDDD:HHHnHHH,,;;;;;,w,,,,,,,w,,,:,,;;;;;",
-	";;;w;;,,,,,,:,,,,,,,,,g,g,,,wwwwww,ww,,,:,,;;;;;",
-	";;;www,,x,,,:,,,,,v,,,,,,,,,,,,,,,,,,,,,:,v;;;;;",
-	";;v;;;,,,,,,:,,,v,,,,,,,,,T,,,;;;;;;;;;,:,,;;;;;",
-	";;;;;;,,T,,,:,,,,,,,,T,,,,,,,,;;;;;v;;;,:,,;;;T;",
-	";;;;;;,,,,,,:,,,,,,,,,,,,,,,,,;;;;;;;;;,:,,;;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,##############;;;;;;;;;;;;;;;;;;;;;;;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#kbbbbbbbbbbk#;;;;;;;T;;;;;;;;;;x;;;;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#;T;;;;;;;;;v;;;;;;;;;;T;;;",
+	"@@@@@@@@@@@@@@@@111122223333x,#bbsssbbsssbb#;;;;;;;;;;;;;;;;;;;;;;;;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#;;;;;PPPPPPPP;;PPPPPPPP;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#x;;;;PPPPPPPP;;PPPPPPPP;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbsssbbsssbb#;;;;;PPPPPPPP;;PPPPPPPP;T;",
+	"@@@@@@@@@@@@@@@@111122223333,B#bbbbbbbbbbbb#;;;;;PPPPPPPPv;PPPPPPPP;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbbbbbb#;;v;;PPPPPPPP;;PPPPPPPP;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbmrbbbbbbk#;;;;BPPPPPPPP;;PPPPPPPP;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,#bbbbbbbpbbbb#;;;;;PPPPPPPP;;PPPPPPPP;;;",
+	"@@@@@@@@@@@@@@@@111122223333,,######e#######;;;;;PPPPPPPP;;PPPPPPPP;;;",
+	"________________________________________S_____________________________",
+	"___l_________l_________l_______l_____________l_________l_________l____",
+	"======================================================================",
+	"======Cc=================================Cc===========================",
+	"--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=--=-",
+	"=========================Cc===================================Cc======",
+	"======================================================================",
+	"________l_________l_________l_________l_____________l_________l_______",
+	"______________h__________________h_______________________h____________",
+	",,,,,,,,,,,,:,,,,,,,x,;;;;T,,,,,,,,,,,,,:,,,,B,,,PPPPPPPP,,PPPPPPPP,,;",
+	",,T,,DDDDDDD:HHHHHHH,,;;;;;,www,,wwww,,,:,,;;;;;;PPPPPPPP,;PPPPPPPP,T,",
+	",,,,,DjQjfjD:HzKyzzH,,g;g;;,w,,,,,,xw,,,:,,;;;;;,PPPPPPPPx,PPPPPPPP;,,",
+	";v;,;DuVfffd:HooWozH,,;;;;;,w,B,,,,,,,,,:,,;T;;;,PPPPPPPP,,PPPPPPPP,,,",
+	";;;;;DfffjjD:HzooooH,g;g;g;,w,,,,x,,w,v,:,,;;;;;,PPPPPPPP,,PPPPPPPP,,,",
+	";B;,;DDDDDDD:HHHnHHH,,;;;;;,w,,,,,,,w,,,:,,;;;;;,PPPPPPPP,vPPPPPPPP,,;",
+	";;;w;;,,,,,,:,,,,,,,,,g,g,,,wwwwww,ww,,,:,,;;;;;;PPPPPPPP,;PPPPPPPP,;,",
+	";;;www,,x,,,:,,,,,v,,,,,,,,,,,,,,,,,,,,,:,v;;;;;,PPPPPPPP;,PPPPPPPP;,,",
+	";;v;;;,,,,,,:,,,v,,,,,,,,,T,,,;;;;;;;;;,:,,;;;;;,,,;,,,,;,,,,;,,,,;B,,",
+	";;;;;;,,T,,,:,,,,,,,,T,,,,,,,,;;;;;v;;;,:,,;;;T;,,;,T,,;,,,,;v,,,;,,,,",
+	";;;;;;,,,,,,:,,,,,,,,,,,,,,,,,;;;;;;;;;,:,,;;;;;,;,,,,;,,,,;,,,,x,,,,;",
 ]
 
 ## Where shoppers walk into town from (and leave by): the ends of the road
 ## and the paths at the bottom of the map.
-const TOWN_SPAWNS := [Vector2i(0, 15), Vector2i(0, 17), Vector2i(47, 15), Vector2i(47, 17), Vector2i(12, 31), Vector2i(40, 31)]
+const TOWN_SPAWNS := [Vector2i(0, 15), Vector2i(0, 17), Vector2i(69, 15), Vector2i(69, 17), Vector2i(12, 31), Vector2i(40, 31)]
 
 ## The lots next door (1, 2, 3 in TOWN), bought in Build mode. Each one
 ## makes the store 4 tiles wider.
@@ -114,14 +116,15 @@ const RIVAL := {
 	"owner": "Mr. Bones",
 	"slogan": "Bare bones prices!",
 	"share": 0.25,
-	"buyout": 3000.0,
-	"buyout_level": 5,
 	"price_low": 0.82,  # its prices are this much of the market price...
 	"price_high": 1.08,  # ...up to this, changing every day
 	"deal": 0.6,  # its deal of the day
 	"hello": "Welcome to Bone Mart! Bare bones prices!",
 	"deal_news": "Bone Mart has a deal on %s today.",
-	"bought": "You bought out Bone Mart! Every zombie in town shops with you now.",
+	# Saves from before 0.13, when you could buy Bone Mart out: Mr. Bones
+	# buys it back (you get what you paid, `old_buyout`).
+	"old_buyout": 3000.0,
+	"bought_back": "Mr. Bones bought Bone Mart back from you, and paid you your $3000 back. It's his store again (and it isn't for sale anymore).",
 	# Its spies: from this day on, a skeleton in a trench coat sneaks into
 	# your store now and then while you're open and looks at your shelves.
 	# If it gets away, Bone Mart prices what it saw `spy_undercut` of yours
@@ -143,6 +146,7 @@ const RIVAL := {
 		"stocker": preload("res://assets/sprites/skeleton_stocker.png"),
 		"sign": preload("res://assets/sprites/rival_sign.png"),
 		"sign_sold": preload("res://assets/sprites/rival_sign_sold.png"),
+		"sign_closed": preload("res://assets/sprites/rival_sign_closed.png"),
 		"spy": preload("res://assets/sprites/skeleton_spy.png"),
 	},
 }
@@ -664,6 +668,112 @@ const LOAN := {
 	"gloat": "This head will do nicely. Pleasure doing business.",
 	"game_over": "Count Vlad took your head as payment.",
 	"gone": "Your store, your money, your staff: all gone.",
+}
+
+## The gang war: from store level 15, Bone Mart's skeleton gang against
+## your zombie gang (scripts/gang_war.gd keeps score, scripts/turf.gd and
+## gangster.gd play it out, ui/war_cutscene.gd starts it). The land east
+## of Bone Mart (P in TOWN) is for sale: each plot opens a branch that runs
+## itself, and Bone Mart buys plots too. Its gangs raid your stores; you
+## fight them off (fists, nunchucks or a Glock), hire a zombie gang that guards
+## your stores, and send it to raid Bone Mart's.
+const WAR := {
+	"boss": "Mr. Bones",
+	"zombie_boss": "Big Rotto",
+	"your_branch": "Zupermarket Express",
+	"bone_branch": "Bone Mart Express",
+	"plot_names": ["the north lot", "the far north lot", "the south lot", "the far south lot"],
+	# A branch store on a plot (8x8, the same in every plot): # walls, d the
+	# door, s shelves, c the counter and k where its crew stands. North of
+	# the road the door's at the bottom; south of it, at the top.
+	"branch_north": [
+		"########",
+		"#ss..ss#",
+		"#......#",
+		"#ss..ss#",
+		"#.k....#",
+		"#.c....#",
+		"#......#",
+		"###d####",
+	],
+	"branch_south": [
+		"###d####",
+		"#.k....#",
+		"#.c....#",
+		"#......#",
+		"#ss..ss#",
+		"#......#",
+		"#ss..ss#",
+		"########",
+	],
+	"bone_names": ["Knuckles", "Molar", "Grim", "Lefty", "Femur", "Jawbone", "Rattles", "Slim"],
+	"zombie_names": ["Stitches", "Two-Ton", "Mangle", "Rotgut", "Gristle", "Lurch", "Moldy Mo", "Clamps"],
+	"weapons": {
+		"fists": {"name": "Fists", "cost": 0.0, "desc": "Free, and they hurt. A little."},
+		"nunchucks": {"name": "Nunchucks", "cost": 400.0, "desc": "Whirl them round: two hits and a skeleton's in pieces.",
+			"bought": "You bought nunchucks. They're in your hand when there's a fight."},
+		"glock": {"name": "Glock", "cost": 2500.0, "desc": "Two shots drop a skeleton from across the store. 15 rounds, then a quick reload.",
+			"bought": "You bought a Glock. It's in your hand when there's a fight (it beats the nunchucks)."},
+	},
+	# Messages (%s: a plot's name, a branch's name, a gangster's name, money...)
+	"started": "The gang war has begun! Open the computer's Turf app to buy land, hire your gang and get a weapon.",
+	"bought_plot": "You bought %s! %s is open for business: it makes money every day.",
+	"bone_bought": "Bone Mart bought %s and opened another %s! More shoppers go to Bone Mart now.",
+	"raid_coming": "A Bone Mart gang is heading for your store! Fight them off, or let your gang do it.",
+	"raid_coming_branch": "A Bone Mart gang is heading for your %s on %s!",
+	"raid_in": "Bone Mart's gang is in your store! Your shoppers are running for it.",
+	"raid_won": "You fought off Bone Mart's gang!",
+	"raid_won_branch": "Bone Mart's gang is down: %s is safe.",
+	"robbed": "Bone Mart's gang robbed your register: they took $%s!",
+	"robbed_nothing": "Bone Mart's gang came for your register, but there was nothing in it.",
+	"branch_lost": "Bone Mart's gang took over your branch on %s! It's a %s now.",
+	"knocked_out": "You got knocked out!",
+	"scared": "AAAH!",
+	"gangster_out": "%s is out cold until tomorrow.",
+	"gang_back": "Your gang is back on its feet: %s.",
+	"hired": "%s joined your gang! Wages are $%d a day.",
+	"fired": "%s left your gang.",
+	"land_before": "Empty land east of Bone Mart. Nobody's selling it... yet.",
+	"land_for_sale": "Land for sale: $%s. Buy it in the Turf app on your computer.",
+	"your_branch_says": "%s: it runs itself (about $%d a day).",
+	"your_raid_off": "Your gang is on its way to %s!",
+	"your_raid_won_main": "Your gang smashed up Bone Mart! It's closed for the rest of the day, and you took $%s from its till.",
+	"your_raid_won_branch": "Your gang took over %s on %s! It's your %s now.",
+	"your_raid_lost": "Bone Mart's skeletons beat your gang this time. They'll be back on their feet tomorrow.",
+	"bone_reopened": "Bone Mart is open again.",
+	# The cutscene when the war starts (store level 15)
+	"cut_arrive": "Level 15, huh? Big zombie. Big store.",
+	"cut_not_for_sale": "Bone Mart isn't for sale. Not now, not ever.",
+	"cut_bought_back": "You thought you bought Bone Mart? I bought it back. It's mine again.",
+	"cut_land": "There's land east of my store. Every lot I get is another Bone Mart. And my boys... they'll be paying you visits.",
+	"cut_thug": "Nice store. Be a shame if somebody... smashed it.",
+	"cut_war": "From now on, it's war.",
+	"cut_rotto_1": "Heard you got a skeleton problem. Me and my crew crack bones for a living.",
+	"cut_rotto_2": "Put us on the payroll and we'll guard your stores. Hire us on the computer: the Turf app.",
+	"cut_rotto_3": "And get yourself something to swing. Some nunchucks... or a Glock.",
+	"cut_you": "Let's crack some skulls.",
+	"cut_card": [
+		"Buy land east of Bone Mart to open new stores. Bone Mart is buying too.",
+		"Bone Mart's gangs will raid your stores: fight them off, or let your gang do it.",
+		"Hire a zombie gang and get nunchucks or a Glock in the computer's Turf app.",
+		"Send your gang to raid Bone Mart and take its stores.",
+	],
+	"textures": {
+		"bone_gang": [preload("res://assets/sprites/gang_skeleton_0.png"), preload("res://assets/sprites/gang_skeleton_1.png"), preload("res://assets/sprites/gang_skeleton_2.png")],
+		"zombie_gang": [preload("res://assets/sprites/gang_zombie_0.png"), preload("res://assets/sprites/gang_zombie_1.png"), preload("res://assets/sprites/gang_zombie_2.png")],
+		"zombie_boss": preload("res://assets/sprites/gang_rotto.png"),
+		"bones": preload("res://assets/sprites/gang_bones.png"),
+		"nunchucks": preload("res://assets/sprites/weapon_nunchucks.png"),
+		"glock": preload("res://assets/sprites/weapon_glock.png"),
+		"flash": preload("res://assets/sprites/weapon_flash.png"),
+		"icon_fists": preload("res://assets/sprites/weapon_icon_fists.png"),
+		"icon_nunchucks": preload("res://assets/sprites/weapon_icon_nunchucks.png"),
+		"icon_glock": preload("res://assets/sprites/weapon_icon_glock.png"),
+		"your_sign": preload("res://assets/sprites/branch_sign_yours.png"),
+		"bone_sign": preload("res://assets/sprites/branch_sign_bone.png"),
+		"crew": preload("res://assets/sprites/staff_cashier.png"),
+		"bone_crew": preload("res://assets/sprites/skeleton_stocker.png"),
+	},
 }
 
 ## What people are called and what they say.

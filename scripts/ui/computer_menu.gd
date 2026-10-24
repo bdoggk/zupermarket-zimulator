@@ -11,12 +11,15 @@ extends PanelContainer
 ##   Upgrades        one-time purchases like the handheld scanner, faster
 ##                   deliveries and a bigger delivery zone
 ##   Loans           borrow from Count Vlad (Brand.LOAN), and pay him back
+##   Turf            the gang war (from store level 15, GangWar): buy land
+##                   for branch stores, hire your gang, buy nunchucks or a Glock,
+##                   and send your gang to raid Bone Mart
 ## The window's X goes back to the desktop; "Close PC" (or Esc) closes it.
 
-enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES, LOANS }
+enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES, LOANS, TURF }
 
-const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades", "Loans"]
-const APP_ICONS := ["stock", "products", "staff", "upgrades", "loans"]
+const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades", "Loans", "Turf"]
+const APP_ICONS := ["stock", "products", "staff", "upgrades", "loans", "turf"]
 const TASKBAR_HEIGHT := 50.0
 const WALLPAPER := preload("res://assets/sprites/pc_wallpaper.png")
 const GIRL := preload("res://assets/sprites/pc_girl.png")
@@ -115,6 +118,8 @@ func _ready() -> void:
 	Game.market_changed.connect(_rebuild_if_open)
 	Game.staff_changed.connect(_rebuild_if_open)
 	Game.loan_changed.connect(_rebuild_if_open)
+	Game.war.changed.connect(_rebuild_if_open)
+	Game.war.rival_closed_changed.connect(_rebuild_if_open)
 
 
 ## The home screen: wallpaper, the girl, app icons and a sticky note.
@@ -436,6 +441,8 @@ func go_home() -> void:
 	window.visible = false
 	for b in tab_buttons:
 		b.set_pressed_no_signal(false)
+	for b in desktop_icons:
+		b.focus_mode = Control.FOCUS_ALL
 	_refresh_note()
 	if visible and UI.wants_focus():
 		desktop_icons[tab].grab_focus.call_deferred()
@@ -446,6 +453,8 @@ func show_tab(t: Tab) -> void:
 	tab = t
 	for i in tab_buttons.size():
 		tab_buttons[i].set_pressed_no_signal(i == t)
+	for b in desktop_icons:  # (behind the window: the d-pad mustn't wander off to them)
+		b.focus_mode = Control.FOCUS_NONE
 	window_title.text = TAB_NAMES[t]
 	window_icon.texture = desktop_icons[t].icon
 	window.visible = true
@@ -565,6 +574,8 @@ func _rebuild() -> void:
 			_build_upgrades()
 		Tab.LOANS:
 			_build_loans()
+		Tab.TURF:
+			_build_turf()
 
 
 func _grid(columns: int) -> GridContainer:
@@ -659,7 +670,7 @@ func _chain(row: Array) -> void:
 		c.focus_neighbor_right = c.get_path_to(row[mini(i + 1, row.size() - 1)])
 
 
-## Opens app `t` with its first button selected (LB / RB, Tab, 1-5).
+## Opens app `t` with its first button selected (LB / RB, Tab, 1-6).
 func _open_app(t: int) -> void:
 	show_tab(t as Tab)
 	if _keys():
@@ -740,7 +751,7 @@ func _input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 					return
 	# LB / RB or Tab / Shift+Tab: the app to the left / right (from the
-	# desktop: the first / last). 1-5 open an app straight away.
+	# desktop: the first / last). 1-6 open an app straight away.
 	var step := 0
 	if event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
 		step = -1 if event.button_index == JOY_BUTTON_LEFT_SHOULDER else 1
@@ -773,7 +784,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _build_stock() -> void:
-	var rival := Game.store.town != null and not Game.rival_owned
+	var rival := Game.store.town != null
 	_refresh_markup()
 	var g := _grid(10 if rival else 9)
 	var heads := ["", "Product", "Market", "", "Your price", "", "", "", "Stock"]
@@ -1218,3 +1229,169 @@ func _build_loan_owed() -> void:
 		var cell := UI.label("Day %d\n$%s\n%s" % [d, Game.cash(due_by - Game.loan_due_by(d - 1)), state if state != "" else ("last" if d == int(ln.due) else "")], color)
 		cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		g.add_child(cell)
+
+
+# ---------------------------------------------------------------- turf tab
+
+## The gang war (GangWar): the land east of Bone Mart, your gang, your
+## weapons, and raiding Bone Mart. Big Rotto runs the show.
+func _build_turf() -> void:
+	var war := Game.war
+	var w: Dictionary = Brand.WAR
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 16)
+	body.add_child(top)
+	top.add_child(UI.icon(w.textures.zombie_boss, Vector2(40, 80)))
+	var intro := VBoxContainer.new()
+	intro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	intro.alignment = BoxContainer.ALIGNMENT_CENTER
+	top.add_child(intro)
+	var name_label := UI.label("%s'S TURF" % (w.zombie_boss as String).to_upper(), UI.GOOD)
+	name_label.add_theme_font_size_override("font_size", 24)
+	intro.add_child(name_label)
+	var pitch := UI.label("\"%s\"" % w.cut_rotto_1, UI.DIM)
+	pitch.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.add_child(pitch)
+	body.add_child(HSeparator.new())
+	if not war.on:
+		footer_label.text = ""
+		var wait := UI.label("%s isn't happy about how big your store is getting. At store level %d, it's war: land to fight over, a gang to hire, and something to swing." % [Brand.RIVAL.owner, GangWar.LEVEL], UI.WARN)
+		wait.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body.add_child(wait)
+		_show_top.call_deferred()
+		return
+	footer_label.text = "Your gang stands guard outside your store and jumps into every fight. %s's gangs come once or twice a day while you're open." % Brand.RIVAL.name
+	var turf: Turf = Game.store.town.turf if Game.in_game() and Game.store.town else null
+	var fighting := turf != null and turf.fighting()
+
+	# The land
+	body.add_child(UI.label("LAND EAST OF %s" % Brand.RIVAL.name.to_upper(), UI.WARN))
+	var land := _grid(3)
+	for i in war.plots.size():
+		var who: String = war.plots[i]
+		var info := UI.label()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		land.add_child(UI.icon(w.textures.your_sign if who == GangWar.YOU else (w.textures.bone_sign if who == GangWar.BONE else Town.FOR_SALE), Vector2(32, 40)))
+		land.add_child(info)
+		var plot := i
+		if who == GangWar.YOU:
+			info.text = "%s\nYour %s: about $%d a day" % [GangWar.plot_name(i).capitalize(), w.your_branch, int(war.branch_take())]
+			UI.set_color(info, UI.GOOD)
+			var l := UI.label("Yours", UI.GOOD)
+			l.custom_minimum_size = Vector2(240, 52)
+			l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			land.add_child(l)
+		elif who == GangWar.BONE:
+			info.text = "%s\nA %s: send your gang to take it" % [GangWar.plot_name(i).capitalize(), w.bone_branch]
+			UI.set_color(info, UI.BAD)
+			var b := _row_button("", func(): war.send_raid(plot, turf != null and turf.fighting()), Vector2(240, 52))
+			land.add_child(b)
+			_updaters.append(func():
+				var problem := war.send_problem(plot, turf != null and turf.fighting())
+				b.disabled = problem != ""
+				b.text = "Raid it" if problem == "" else problem
+			)
+		else:
+			info.text = "%s\nFor sale: open a %s that runs itself" % [GangWar.plot_name(i).capitalize(), w.your_branch]
+			var b := _row_button("", func(): war.buy_plot(plot), Vector2(240, 52))
+			land.add_child(b)
+			_updaters.append(func():
+				var problem := war.buy_problem(plot)
+				b.disabled = problem != ""
+				b.text = "Buy $%s" % Game.cash(war.plot_cost()).trim_suffix(".00") if problem == "" else "%s ($%s)" % [problem, Game.cash(war.plot_cost()).trim_suffix(".00")]
+			)
+	body.add_child(HSeparator.new())
+
+	# Raiding Bone Mart itself
+	body.add_child(UI.label("RAID %s" % Brand.RIVAL.name.to_upper(), UI.WARN))
+	var raid_row := HBoxContainer.new()
+	raid_row.add_theme_constant_override("separation", 12)
+	body.add_child(raid_row)
+	var loot := GangWar.LOOT + GangWar.LOOT_PER_LEVEL * maxi(0, Game.level - GangWar.LEVEL)
+	var what := UI.label("Smash it up: it's closed for the rest of the day (every shopper comes to you), and your gang takes about $%d from its till. %d skeletons guard it." % [int(loot), war.defenders(GangWar.MAIN)])
+	what.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	raid_row.add_child(what)
+	var go := _row_button("", func(): war.send_raid(GangWar.MAIN, turf != null and turf.fighting()), Vector2(240, 52))
+	raid_row.add_child(go)
+	_updaters.append(func():
+		var problem := war.send_problem(GangWar.MAIN, turf != null and turf.fighting())
+		go.disabled = problem != ""
+		go.text = "Send your gang" if problem == "" else problem
+	)
+	body.add_child(HSeparator.new())
+
+	# Your gang
+	body.add_child(UI.label("YOUR GANG (%d/%d)" % [war.gang_size(), GangWar.GANG_MAX], UI.WARN))
+	var hire_row := HBoxContainer.new()
+	hire_row.add_theme_constant_override("separation", 12)
+	body.add_child(hire_row)
+	var how := UI.label("Hire $%d, then $%d a day each. Knocked out in a fight, they're back tomorrow." % [int(GangWar.GANG_HIRE), int(GangWar.GANG_WAGE)])
+	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	how.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hire_row.add_child(how)
+	var hire := _row_button("", func(): war.hire(), Vector2(240, 52))
+	hire_row.add_child(hire)
+	_updaters.append(func():
+		var problem := war.hire_problem()
+		hire.disabled = problem != ""
+		hire.text = "Hire a gangster" if problem == "" else problem
+	)
+	if not war.gang.is_empty():
+		var team := _grid(4)
+		var looks: Array = w.textures.zombie_gang
+		for g: Dictionary in war.gang:
+			team.add_child(UI.icon(looks[int(g.look) % looks.size()], Vector2(20, 44)))
+			team.add_child(UI.label(str(g.name)))
+			var status := UI.label("", UI.INFO)
+			status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			team.add_child(status)
+			var id := int(g.id)
+			_updaters.append(func():
+				var m: Gangster = turf.members.get(id) if turf else null
+				if not war.is_ready(g):
+					status.text = "Out cold until tomorrow"
+					UI.set_color(status, UI.BAD)
+				elif is_instance_valid(m) and m.foe != null:
+					status.text = "Fighting!"
+					UI.set_color(status, UI.WARN)
+				elif is_instance_valid(m) and m.job == Gangster.Job.RAID:
+					status.text = "On a raid"
+					UI.set_color(status, UI.WARN)
+				else:
+					status.text = "Guarding the store"
+					UI.set_color(status, UI.INFO)
+			)
+			var fire := _row_button("Let go", func(): war.fire(id), Vector2(120, 52))
+			fire.add_theme_color_override("font_color", UI.BAD)
+			team.add_child(fire)
+	body.add_child(HSeparator.new())
+
+	# Weapons
+	body.add_child(UI.label("SOMETHING TO SWING", UI.WARN))
+	var arms := _grid(3)
+	for id: String in w.weapons:
+		var info: Dictionary = w.weapons[id]
+		arms.add_child(UI.icon(w.textures["icon_" + id], Vector2(36, 36)))
+		var d := UI.label("%s\n%s" % [info.name, info.desc])
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		d.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		arms.add_child(d)
+		if id == "fists" or war.weapons.has(id):
+			var l := UI.label("In your hand" if war.weapon() == id else "Owned", UI.GOOD)
+			l.custom_minimum_size = Vector2(240, 52)
+			l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			arms.add_child(l)
+		else:
+			var b := _row_button("", func(): war.buy_weapon(id), Vector2(240, 52))
+			arms.add_child(b)
+			_updaters.append(func():
+				var problem := war.weapon_problem(id)
+				b.disabled = problem != ""
+				b.text = "Buy $%d" % int(info.cost) if problem == "" else "%s ($%d)" % [problem, int(info.cost)]
+			)
+	var tip := UI.label("In a fight, walk up to one of %s's gang and %s to hit them. With the Glock you can shoot from across the store." % [Brand.RIVAL.name, "tap them" if Game.touch_ui else "press E (or click them)"], UI.DIM)
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_child(tip)
+	_show_top.call_deferred()

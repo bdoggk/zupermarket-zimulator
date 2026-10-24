@@ -75,6 +75,7 @@ var _in_shop := ""  # the shop you're in (its keeper says hello as you walk in)
 var _vampires: Array[Wanderer] = []  # out for the night
 var _vampires_out := false
 var folk: Array[Wanderer] = []  # townsfolk with a kind (meta "kind": a Brand.SHOPPERS key): they talk
+var turf: Turf  # the land east of Bone Mart and the gang war (P in the map)
 var _talk_timer := 6.0
 var _clock := 0.0
 
@@ -93,6 +94,7 @@ func build(s: Store) -> void:
 			if (rows[y] as String)[x] == "#":
 				rival_min = Vector2i(mini(rival_min.x, x), mini(rival_min.y, y))
 	var shops := shop_layout(rows)
+	var plot_cells: Array[Vector2i] = []
 	for y in size.y:
 		var row: String = rows[y]
 		assert(row.length() == size.x, "Every TOWN row must be the same length (row %d)" % y)
@@ -100,6 +102,9 @@ func build(s: Store) -> void:
 			var cell := Vector2i(x, y)
 			var ch := row[x]
 			if ch == "@":
+				continue
+			if ch == "P":
+				plot_cells.append(cell)  # (the Turf builds these)
 				continue
 			if ch.is_valid_int():
 				var k := int(ch)
@@ -139,7 +144,7 @@ func build(s: Store) -> void:
 					_prop(cell, [prop_sprite(ch, cell)])
 				"S":
 					rival_sign = _prop(cell, [], Brand.RIVAL.slogan, true)
-					rival_sign.textures = [Brand.RIVAL.textures.sign_sold if Game.rival_owned else Brand.RIVAL.textures.sign]
+					rival_sign.textures = [Brand.RIVAL.textures.sign_closed if Game.war.rival_closed else Brand.RIVAL.textures.sign]
 				"T":
 					_prop(cell, [prop_sprite(ch, cell)], "", true)
 				"C":
@@ -162,6 +167,10 @@ func build(s: Store) -> void:
 					fires.append(pot.add_light(Color(0.45, 1.0, 0.4), Vector2(0, -14), 0.8, 1.6))
 					pot.flicker = true
 	_build_lots()
+	if not plot_cells.is_empty():
+		turf = Turf.new()
+		add_child(turf)
+		turf.setup(self, plot_cells)
 
 
 ## One piece of a little shop (Brand.SHOPS): `part` is which of its map
@@ -267,11 +276,11 @@ static func counter_step(info: Dictionary) -> int:
 ## Once the store is built: staff the rival and stock its shelves.
 func start() -> void:
 	Game.day_started.connect(func(_d): refresh_rival_stock())
-	Game.rival_bought.connect(_on_rival_bought)
+	Game.war.rival_closed_changed.connect(_on_rival_closed_changed)
 	Game.rival_spy_sent.connect(send_rival_spy)
 	Settings.changed.connect(_apply_settings)
 	refresh_rival_stock()
-	if not Game.rival_owned:
+	if not Game.war.rival_closed:
 		_hire_rival_staff()
 	for id: String in _keeper_cells:
 		var keeper := _walker(Brand.SHOPS[id].keeper_look, _keeper_cells[id], [], 1.0)
@@ -282,6 +291,8 @@ func start() -> void:
 		shop_keepers[id] = keeper
 	_add_locals()
 	_apply_settings()
+	if turf:
+		turf.start()
 
 
 func _process(delta: float) -> void:
@@ -300,7 +311,7 @@ func _process(delta: float) -> void:
 		obj.cutaway = p.position.y < obj.position.y and p.position.y > obj.position.y - 96.0 \
 			and absf(p.position.x - obj.position.x) < 34.0
 	var inside := rival_floor.has(p.current_cell())
-	if inside and not _player_in_rival and not Game.rival_owned and owner_cell != NO_CELL:
+	if inside and not _player_in_rival and not Game.war.rival_closed and owner_cell != NO_CELL:
 		Game.show_popup(Iso.cell_to_world(owner_cell) + Vector2(0, -46), Brand.RIVAL.hello, Color(0.92, 0.9, 0.82))
 	_player_in_rival = inside
 	var in_shop: String = shop_floor.get(p.current_cell(), "")
@@ -561,8 +572,8 @@ func refresh_rival_stock() -> void:
 	var pool := yours + others
 	for i in rival_shelves.size():
 		var sh := rival_shelves[i]
-		sh.product_id = "" if Game.rival_owned else pool[i % pool.size()]
-		sh.stock = 0 if Game.rival_owned else 5 + rng.randi() % 8
+		sh.product_id = "" if Game.war.rival_closed else pool[i % pool.size()]
+		sh.stock = 0 if Game.war.rival_closed else 5 + rng.randi() % 8
 		sh.queue_redraw()
 
 
@@ -664,7 +675,7 @@ func _vampires_come_out() -> void:
 
 ## The rival sends a spy over to your store (Game.rival_spies).
 func send_rival_spy() -> RivalSpy:
-	if rival_door == NO_CELL or Game.rival_owned or not Brand.RIVAL.textures.has("spy"):
+	if rival_door == NO_CELL or Game.war.rival_closed or not Brand.RIVAL.textures.has("spy"):
 		return null
 	var spy := RivalSpy.new()
 	spy.setup(store, rival_door)
@@ -677,7 +688,8 @@ func send_rival_spy() -> RivalSpy:
 func _random_town_cell() -> Vector2i:
 	for i in 40:
 		var c := Vector2i(randi_range(1, size.x - 2), randi_range(12, size.y - 2))
-		if ground.has(c) and not rival_floor.has(c) and not shop_floor.has(c) and store.is_walkable(c) and store.reachable.has(c):
+		if ground.has(c) and not rival_floor.has(c) and not shop_floor.has(c) and store.is_walkable(c) and store.reachable.has(c) \
+				and not (turf and turf.plot_cells.has(c)):
 			return c
 	return NO_CELL
 
@@ -707,14 +719,20 @@ static func _kind_id(kind: Dictionary) -> String:
 	return str(id) if id != null else ""
 
 
-func _on_rival_bought() -> void:
-	for w in rival_staff:
-		if is_instance_valid(w):
-			w.leave()
-			w.stops = [[rival_door, 0.0], [spawns.pick_random(), 0.0]]
-	rival_staff.clear()
+## Your gang smashed Bone Mart up (it's closed for the rest of the day), or
+## it's morning and it's open again.
+func _on_rival_closed_changed() -> void:
+	var closed := Game.war.rival_closed
+	if closed:
+		for w in rival_staff:
+			if is_instance_valid(w):
+				w.leave()
+				w.stops = [[rival_door, 0.0], [spawns.pick_random(), 0.0]]
+		rival_staff.clear()
+	elif rival_staff.is_empty():
+		_hire_rival_staff()
 	refresh_rival_stock()
 	if rival_sign:
-		rival_sign.textures = [Brand.RIVAL.textures.sign_sold]
-		rival_sign.prompt = "Bought out by you!"
+		rival_sign.textures = [Brand.RIVAL.textures.sign_closed if closed else Brand.RIVAL.textures.sign]
+		rival_sign.prompt = "Closed for the day: your gang smashed it up!" if closed else Brand.RIVAL.slogan
 		rival_sign.queue_redraw()

@@ -153,7 +153,7 @@ func _app() -> void:
 	Game.money = 200.0
 	hud.open_computer()
 	await _frames(2)
-	check(pc.TAB_NAMES.size() == 5 and pc.desktop_icons.size() == 5 and pc.TAB_NAMES[4] == "Loans", "the computer has a Loans app")
+	check(pc.TAB_NAMES.size() == pc.desktop_icons.size() and pc.TAB_NAMES[4] == "Loans", "the computer has a Loans app")
 	await _key(KEY_5)
 	check(pc.is_app_open() and pc.tab == 4, "5 opens it")
 	var borrow := _button(pc.body, "Borrow $")

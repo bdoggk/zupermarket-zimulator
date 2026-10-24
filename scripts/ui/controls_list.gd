@@ -32,7 +32,7 @@ static func rows() -> Array:
 		["Pause menu", "Esc or P", "Start", "II button"],
 		["Recent messages", "M, or the Log button", "Back / View", "Log button"],
 		["Menus", "Arrow keys, Enter, Esc", "D-pad, A, B", "Tap; drag a list to scroll it"],
-		["Store computer: other apps", "Tab / Shift+Tab, or 1-5", "LB / RB", "Tap an app"],
+		["Store computer: other apps", "Tab / Shift+Tab, or 1-6", "LB / RB", "Tap an app"],
 	]
 
 

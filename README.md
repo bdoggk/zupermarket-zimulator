@@ -38,6 +38,40 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.13.0
+
+- **Gang war.** When your store reaches **level 15**, Mr. Bones walks in with two of his
+  thugs, and a cutscene starts the war between Bone Mart's skeletons and your zombies.
+  Then Big Rotto and his crew show up to offer their help.
+- **Bone Mart isn't for sale anymore.** Instead there's **land east of Bone Mart**: four
+  lots you can buy in the new **Turf** app on the store computer ($5,000, then $6,500,
+  $8,000 and $9,500 as the land runs out).
+  - Each lot becomes a **Zupermarket Express**: a branch store with its own shelves,
+    counter and crew. It runs itself and makes about $400 a day (more at higher levels).
+  - **Bone Mart buys land too**: one lot straight away and another every 3 days. Every
+    Bone Mart Express sends it more shoppers.
+- **Bone Mart's gangs raid you** once a day while you're open (twice once it has two
+  branches). A gang of skeletons walks over from Bone Mart and either goes for your store
+  or for one of your branches.
+  - **Your store:** they smash a shelf (its stock is gone), scare your shoppers out, and
+    rob the register (15% of your money, up to $2,500).
+  - **A branch:** if they hold its counter for 20 seconds, it becomes a Bone Mart Express.
+- **Fight them off yourself.** Walk up to one and press **E** (A on a controller, or tap
+  them) to hit them. A health bar shows during a fight. If they knock you out, they rob
+  you while you're down.
+  - **Fists** are free and take four hits.
+  - **Nunchucks** ($400) take two hits (they whirl right round).
+  - A **Glock** ($2,500) takes two shots, from across the store (15 rounds, then a reload).
+- **Hire a zombie gang** in the Turf app ($300, then $80 a day each, up to 6). They stand
+  guard outside your store and jump into every fight. Knocked out, they're back the next
+  day.
+- **Raid Bone Mart.** Send your gang (it meets up down the street, then charges in):
+  - **Bone Mart itself:** win, and it's closed for the rest of the day (every shopper
+    comes to you) and you take $500 from its till.
+  - **A Bone Mart Express:** win, and it's yours.
+- If you'd bought Bone Mart in an earlier version, Mr. Bones buys it back and pays you your
+  $3,000.
+
 ## What's new in 0.12.0
 
 - **First person.** Press **V** (R3 on a controller, or the **View** button in the corner)
@@ -635,9 +669,8 @@ board to see the whole price list. Prices you've checked show up in a **Bone Mar
 column in your computer's Stock & Prices tab (with the day you checked). The day
 summary tells you how many shoppers went there instead of you.
 
-**Buy Bone Mart out** ($3000, store level 5) from its price list. Its staff leave,
-Mr. Bones throws in his leftover stock, and every shopper in town comes to you from
-then on (and no more spies).
+Bone Mart isn't for sale. From store level 15 it's war instead (see **The gang war**
+below).
 
 ### Spies
 **Bone Mart's spies:** from day 2, Bone Mart sends a spy over once a day (twice from
@@ -889,6 +922,56 @@ can pay early, or pay it all off, any time. On the night of the last day, whatev
 owed comes out of your money at closing. If you can't cover it, Count Vlad comes for your
 head: you lose everything and start over from day 1.
 
+### The gang war
+At **store level 15** a cutscene starts the war: Mr. Bones and his thugs pay you a visit
+(Bone Mart isn't for sale, and every lot he gets east of his store is another Bone Mart),
+and then Big Rotto offers you his crew. Everything is in the store computer's **Turf** app.
+
+**Land east of Bone Mart.** Four lots, behind fences, with FOR SALE signs:
+- Buy one ($5,000 for the first lot anyone buys, then $6,500, $8,000 and $9,500), and a
+  **Zupermarket Express** opens on it. It has its own shelves, counter and crew, it runs
+  itself, and it makes **$400 a day** plus $25 for every store level past 15. That money
+  comes in at closing, and the day summary shows it.
+- **Bone Mart buys lots too**: one when the war starts, then another every 3 days while
+  any are left.
+- Each branch sends shoppers one way: Bone Mart's send more of them to Bone Mart, yours
+  send fewer (3% each).
+
+**Bone Mart's raids.** While you're open, a gang of 2 to 5 skeletons comes once a day
+(twice once Bone Mart has two branches). A RAID! banner, your health and your weapon show
+in the middle of the screen.
+- **On your store:** each skeleton smashes a shelf (the stock on it is gone) and then they
+  rob the register: 15% of your money, up to $2,500. Shoppers near them run out (it counts
+  as a walkout). No new shoppers come in while they're inside.
+- **On one of your branches:** if they hold its counter for 20 seconds, it becomes a Bone
+  Mart Express.
+- At closing time they go home.
+
+**Fighting.** Walk up to one of Bone Mart's skeletons and press **E** (A on a controller,
+click or tap them) to hit them. Knock one out and it falls apart into a heap of bones.
+
+| Weapon | Cost | Skeletons (4 health) go down in |
+|---|---|---|
+| Fists | free | 4 punches |
+| Nunchucks | $400 | 2 hits |
+| Glock | $2,500 | 2 shots, from up to 8 tiles away (15 rounds, then a reload) |
+
+You have 10 health and get it back a few seconds after the fighting stops. If they knock
+you out, you're down for 3 seconds, and if they're in your store they rob the register
+while you're down. Every skeleton you or your gang knock out earns 10 XP.
+
+**Your gang.** Hire up to 6 zombie gangsters ($300 each, then $80 a day each, paid with
+your staff's wages). They stand guard on the sidewalk outside your store and run to every
+fight, at your store or at a branch. A gangster who gets knocked out is back the next day.
+
+**Raiding Bone Mart.** Send your gang (everyone who's ready) while you're open. They meet
+up down the street, then charge in together, and you can join the fight.
+- **Bone Mart itself** (3 to 5 skeletons guard it): win, and it's closed for the rest of
+  the day. Its staff go home, the sign says CLOSED and every shopper comes to you. You also
+  take $500 (plus $50 a level past 15) from its till. It opens again the next morning.
+- **A Bone Mart Express** (2 skeletons): win, and it's yours.
+- Lose, and your gang is out cold until tomorrow.
+
 ### Upgrades for bigger stores
 | Level | Upgrade | Cost | What it does |
 |---|---|---|---|
@@ -906,7 +989,7 @@ head: you lose everything and start over from day 1.
 |---|---|---|
 | Move | WASD / arrow keys, or click a spot | Tap a spot (sliding a finger just looks, it doesn't walk) |
 | Sprint | Hold Shift | RUN button (tap again to stop) |
-| Interact: pick up / drop boxes, stock or empty shelves, ring up shoppers, take over a register, racks, the computer, the OPEN sign, the mop, a jammed self-checkout, Bone Mart's prices, the shop counters across the road, throwing out Bone Mart's spies | E (or click the thing) | Tap it, or the big button |
+| Interact: pick up / drop boxes, stock or empty shelves, ring up shoppers, take over a register, racks, the computer, the OPEN sign, the mop, a jammed self-checkout, Bone Mart's prices, the shop counters across the road, throwing out Bone Mart's spies, hitting Bone Mart's gangsters | E (or click the thing) | Tap it, or the big button |
 | Scan a shelf | Q | SCAN button |
 | Next day (end of the day) | Space (only Space: you can keep working after closing) | Tap the bar at the bottom |
 | Build mode | B | Build button |
@@ -918,7 +1001,7 @@ head: you lose everything and start over from day 1.
 | Pause menu | Esc or P | II button / back button |
 | Recent messages | M, or the Log button | Log button |
 | Close / cancel | Esc | Back button |
-| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-5 switch apps, Esc goes back | Tap |
+| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-6 switch apps, Esc goes back | Tap |
 
 A gamepad works too: left stick to move, LT or L3 (sprint), A (use), X (scan), Y
 (build), R3 (first / third person; the right stick looks around in first person),
@@ -960,6 +1043,10 @@ scripts/
                        registers and their lines, deliveries, decor, staff, spills,
                        customer spawning, the lots next door
   town.gd              The town outside, the lots for sale and Bone Mart
+  gang_war.gd          The gang war's score: land, your gang, weapons, raids (Game.war)
+  turf.gd              The gang war in town: the lots east of Bone Mart, branch stores, the fights
+  gangster.gd          A gangster (Bone Mart's skeletons, your zombie gang): walking and fighting
+  branch_shelf.gd      A shelf in a branch store
   wanderer.gd          People walking around town (Bone Mart's shoppers and staff)
   prop.gd              Town scenery (trees, cars, lamps, ruins, fences...)
   rival_shelf.gd       Bone Mart's shelves (check its prices)
@@ -988,11 +1075,12 @@ scripts/
   computer.gd          Opens the store computer
   floor.gd             Draws the floor tiles and the tap marker
   hud.gd               Main UI (status bar, prompts, messages, summary)
-  ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades tabs
-  ui/rival_panel.gd    Bone Mart's price list (and buying it out)
+  ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades / Loans / Turf
+  ui/rival_panel.gd    Bone Mart's price list
   ui/tutorial.gd       The first-day tips
   ui/build_bar.gd      The build mode toolbar, decorations row and paint menu
   ui/loan_cutscene.gd  Count Vlad's visit when a loan isn't paid back in time
+  ui/war_cutscene.gd   The gang war starting (store level 15)
   first_person.gd      First person: the store in 3D, built from the 2D one, and the controls
   fp_art.gd            Turns the iso art into what first person needs (flat floor tiles, box sides)
   ui/pause_menu.gd     The in-game pause menu
@@ -1004,7 +1092,7 @@ scripts/
 assets/sprites/        All the pixel art
 assets/sounds/         Sounds (.ogg / .wav). A shopper kind's "sound" in brand.gd is what it growls
 tools/make_sprites.py  The Python script that draws the placeholder art (for both games)
-tools/make_sounds.py   Makes Count Vlad's sound effects (organ, bats, the rip...) from scratch
+tools/make_sounds.py   Makes the sound effects (Count Vlad's visit, the gang war's punches, shots...) from scratch
 tests/                 Automated checks (not included in exports, safe to ignore)
 Update Mac App.command Rebuilds the Mac app and installs it (see "Mac app")
 ```
@@ -1112,6 +1200,7 @@ godot --headless --path . --fixed-fps 60 res://tests/rules_test.tscn  # how staf
 godot --headless --path . --fixed-fps 60 res://tests/levels_test.tscn # levels with no cap, levels 7-14, decorations, the new upgrades
 godot --headless --path . -s res://tests/loan_test.gd                 # loans, the payments, Count Vlad's visit and starting over
 godot --headless --path . --fixed-fps 60 res://tests/fp_test.tscn     # first person: the 3D store, walking, looking, using, tapping
+godot --headless --path . --fixed-fps 60 res://tests/war_test.tscn    # the gang war: land, branches, raids both ways, fighting, the cutscene
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)
 ```
 
@@ -1119,7 +1208,7 @@ The flow and chaos tests back up your real saves and settings first and put them
 afterwards.
 
 **Chaos play** (`tests/chaos_test.gd`) plays for hours of game time doing random things a
-player could do (walking, using things, the computer, build mode, the shops, spies,
+player could do (walking, using things, the computer, build mode, the shops, spies, the gang war,
 clicking and pressing keys anywhere, saving and loading, settings, letting days go by)
 and checks every few frames that the game still makes sense: no script errors, nothing
 in the wrong place, no stock appearing or vanishing, nobody stuck, no day that never
@@ -1213,7 +1302,7 @@ The project uses the Compatibility renderer, so it runs on older phones too.
 ## Ideas for what to build next
 
 
-- A second store of your own (run Bone Mart once you've bought it)
+- Run a branch store yourself (walk in and stock it), and more turf to fight over
 - More upgrades: a faster checkout scanner, bigger delivery trucks
 - More staff: a security guard, a manager who hires for you
 - Real walk animations (4 directions) with `AnimatedSprite2D`

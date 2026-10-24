@@ -103,11 +103,15 @@ func _ready() -> void:
 	var pull_low := Game.rival_pull(any_list, kind)
 	check(pull_high > pull_low + 0.2, "beating the rival's prices wins shoppers back (%.2f -> %.2f)" % [pull_high, pull_low])
 	check(Game.rival_pull(any_list, Brand.SHOPPERS.skeleton) > pull_low, "skeletons like %s more" % Brand.RIVAL.name)
-	Game.prices[id0] = Game.rival_price(id0) * 2.0
+	var was_prices: Dictionary = Game.prices.duplicate()
+	for id: String in Game.prices:  # (everything, whatever a shopper's list is)
+		Game.prices[id] = Game.rival_price(id) * 2.0
 	var lost: int = Game.stats.lost
 	for i in 40:
 		store._new_shopper()
 	check(Game.stats.lost > lost + 15, "overpriced: most shoppers go to the rival (%d of 40)" % (Game.stats.lost - lost))
+	Game.prices = was_prices
+	Game.prices[id0] = Game.rival_price(id0) * 2.0
 	check(town.walkers.size() > 5, "you can see them walking there")
 	Game.match_all_prices()
 	for s in store.customers.duplicate():
@@ -129,10 +133,9 @@ func _ready() -> void:
 	check(Game.rival_seen.size() >= Game.unlocked_ids().size(), "and notes down all its prices")
 	hud.rival_panel.close()
 
+	check(not Game.has_method("buy_out_rival") and not ("buy_button" in hud.rival_panel), "it's not for sale (from level %d it's war instead)" % GangWar.LEVEL)
 	Game.level = 1
-	check(Game.rival_buyout_problem() != "", "can't buy the rival out right away: " + Game.rival_buyout_problem())
 	Game.add_xp(5000.0)
-	check(Game.rival_buyout_problem() == "", "can buy it out at level %d" % Game.level)
 
 	# ---- the lots next door
 	var w0 := store.width
@@ -288,20 +291,24 @@ func _ready() -> void:
 	sc.interact(p)
 	check(not sc.jammed, "and you can fix it")
 
-	# ---- buying the rival out
-	Game.money = 20000.0
+	# ---- closed for the day (your gang smashed it up, in the gang war)
 	var staff_before := town.rival_staff.size()
 	check(staff_before >= 1, "%s has skeleton staff" % Brand.RIVAL.name)
-	check(Game.buy_out_rival(), "bought %s" % Brand.RIVAL.name)
+	Game.war.rival_closed = true
+	Game.war.rival_closed_changed.emit()
 	await _frames(2)
-	check(Game.rival_owned and Game.rival_pull(any_list, kind) == 0.0, "nobody goes there anymore")
+	check(Game.rival_pull(any_list, kind) == 0.0, "closed for the day: nobody goes there")
 	check(town.rival_staff.is_empty() and town.rival_shelves.all(func(s): return s.stock == 0), "its staff leave and the shelves are empty")
-	check(store.pending_deliveries.size() >= 4, "its leftover stock is on the way")
+	check(town.rival_sign.textures[0] == Brand.RIVAL.textures.sign_closed, "the sign says CLOSED")
+	Game.war.rival_closed = false
+	Game.war.rival_closed_changed.emit()
+	await _frames(2)
+	check(not town.rival_staff.is_empty() and town.rival_shelves.any(func(s): return s.stock > 0), "open again: staff and stock are back")
 
 	# ---- saving keeps all of it
 	var saved := Game.to_dict()
 	var sd := store.to_dict()
-	check(int(saved.expansions) == 1 and bool(saved.rival.owned), "the save has the lot and the buyout")
+	check(int(saved.expansions) == 1 and saved.has("war"), "the save has the lot and the gang war")
 	check(sd.fixtures.delivery.cell == [new_anchor.x, new_anchor.y], "the save has the delivery zone")
 	var regs: Array = sd.fixtures.registers
 	check(regs.any(func(r): return r.get("id") == "selfcheckout"), "the save has the self-checkout")

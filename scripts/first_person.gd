@@ -434,6 +434,38 @@ func _draw_crosshair() -> void:
 		var mop: Texture2D = Player.MOP_TEXTURE
 		var at := Vector2(crosshair.size.x * 0.72, crosshair.size.y - mop.get_height() * k * 0.9)
 		crosshair.draw_texture_rect(mop, Rect2(at, mop.get_size() * k), false)
+	else:
+		_draw_weapon(k)
+	if player._hurt_flash > 0.0 or player.knocked_out > 0.0:  # (you got hit)
+		crosshair.draw_rect(Rect2(Vector2.ZERO, crosshair.size), Color(0.8, 0.0, 0.0, 0.35 if player.knocked_out > 0.0 else 0.25))
+
+
+## The nunchucks or the Glock in your hand in a fight (the gang war), big
+## at the bottom right: the nunchucks whirl, the Glock kicks and flashes.
+func _draw_weapon(k: float) -> void:
+	var w := player.weapon_shown()
+	if w == "":
+		return
+	var tex: Texture2D = Brand.WAR.textures[w]
+	var size := tex.get_size() * k * (3.0 if w == "nunchucks" else 4.0)
+	var base := Vector2(crosshair.size.x * 0.7, crosshair.size.y - size.y * (0.75 if w == "nunchucks" else 0.9))
+	if w == "nunchucks":  # held up at the right; a hit whirls them round their chain
+		var swing := player._swing / 0.2 if player._swing > 0.0 else 0.0
+		var angle := -0.45 + TAU * (1.0 - swing) if swing > 0.0 else -0.45
+		var center := Vector2(crosshair.size.x * 0.76, crosshair.size.y - size.y * 0.42)
+		crosshair.draw_set_transform(center, angle, Vector2.ONE)
+		crosshair.draw_texture_rect(tex, Rect2(-size / 2.0, size), false)
+		crosshair.draw_set_transform(Vector2.ZERO)
+	else:  # pointing in, toward the + in the middle
+		var kick := Vector2(0, -12.0 * k) if player._shot_t > 0.0 else Vector2.ZERO
+		var at := Vector2(crosshair.size.x * 0.62, base.y) + kick
+		crosshair.draw_set_transform(at + Vector2(size.x, 0), 0.0, Vector2(-1, 1))
+		crosshair.draw_texture_rect(tex, Rect2(Vector2.ZERO, size), false)
+		if player._shot_t > 0.0:
+			var flash: Texture2D = Brand.WAR.textures.flash
+			var fs := flash.get_size() * k * 4.0
+			crosshair.draw_texture_rect(flash, Rect2(Vector2(size.x * 0.85, -fs.y * 0.25), fs), false)
+		crosshair.draw_set_transform(Vector2.ZERO)
 
 
 # ---------------------------------------------------------------- building the 3D store

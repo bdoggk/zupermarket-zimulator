@@ -1,15 +1,13 @@
 extends PanelContainer
 ## The rival store's price list (use its counter or its price board, down
-## the street). Shows what it charges today next to your prices, and once
-## your store is big enough, lets you buy the place out. Looking at it notes
-## down its prices, so they show up at your computer too.
+## the street). Shows what it charges today next to your prices. Looking at
+## it notes down its prices, so they show up at your computer too. (It's
+## not for sale: from store level 15 it's war instead, see GangWar.)
 
 var title: Label
 var grid: GridContainer
 var footer_label: Label
-var buy_button: Button
 var close_button: Button
-var _confirming := false
 var _updaters: Array[Callable] = []
 
 
@@ -39,26 +37,19 @@ func _ready() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	col.add_child(row)
-	buy_button = UI.button("", _on_buy, Vector2(0, 52))
-	buy_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(buy_button)
+	row.alignment = BoxContainer.ALIGNMENT_END
 	close_button = UI.button("Close", close, Vector2(130, 52))
 	row.add_child(close_button)
 	Game.rival_requested.connect(open)
-	Game.rival_bought.connect(func(): if visible: _rebuild())
 
 
 func open() -> void:
 	visible = true
-	_confirming = false
 	Game.scout_rival(Game.unlocked_ids())
 	_rebuild()
-	if UI.has_pad():  # pick Buy out (or Close) with the d-pad and A
-		for u in _updaters:
-			u.call()  # (is Buy out possible?)
-		UI.pad_focus(buy_button)
+	if UI.has_pad():  # Close with A
 		UI.pad_focus(close_button)
-		(buy_button if buy_button.visible and not buy_button.disabled else close_button).grab_focus.call_deferred()
+		close_button.grab_focus.call_deferred()
 
 
 func close() -> void:
@@ -76,11 +67,6 @@ func _rebuild() -> void:
 	UI.clear(grid)
 	_updaters.clear()
 	title.text = "%s PRICE LIST  -  Day %d" % [Brand.RIVAL.name.to_upper(), Game.day]
-	if Game.rival_owned:
-		grid.add_child(UI.label("%s is yours. Every shopper in town comes to your store now." % Brand.RIVAL.name, UI.GOOD))
-		footer_label.text = ""
-		buy_button.visible = false
-		return
 	for h in ["", "Product", Brand.RIVAL.name, "You", ""]:
 		grid.add_child(UI.label(h, UI.DIM))
 	for id: String in Game.unlocked_ids():
@@ -113,27 +99,3 @@ func _rebuild() -> void:
 				UI.set_color(verdict, UI.BAD)
 		)
 	footer_label.text = "Shoppers compare prices: the more of yours beat %s's, the more of them shop with you. A messy store sends them here too." % Brand.RIVAL.name
-	buy_button.visible = true
-	_updaters.append(_update_buy_button)
-
-
-func _update_buy_button() -> void:
-	var problem := Game.rival_buyout_problem()
-	var cost := int(Brand.RIVAL.buyout)
-	buy_button.disabled = problem != ""
-	if problem != "":
-		_confirming = false
-		buy_button.text = "Buy out %s: $%d  (%s)" % [Brand.RIVAL.name, cost, problem]
-	elif _confirming:
-		buy_button.text = "Really buy %s for $%d? Press again" % [Brand.RIVAL.name, cost]
-	else:
-		buy_button.text = "Buy out %s: $%d" % [Brand.RIVAL.name, cost]
-
-
-func _on_buy() -> void:
-	if not _confirming:
-		_confirming = true
-		return
-	_confirming = false
-	if Game.buy_out_rival():
-		_rebuild()

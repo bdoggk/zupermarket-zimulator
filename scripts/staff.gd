@@ -324,8 +324,8 @@ func status_text() -> String:
 		Job.CHASING:
 			return "Throwing out %s's spy!" % Brand.RIVAL.name
 	if role == "spy":
-		if Game.rival_owned:
-			return "%s is yours: nothing to spy on" % Brand.RIVAL.name
+		if Game.war.rival_closed:
+			return "%s is closed today: nothing to spy on" % Brand.RIVAL.name
 		if Game.day_over:
 			return "Off duty for the night"
 		return "Keeping watch by the door (next trip about %s)" % Game.time_text(roundi(next_trip() / 30.0) * 30)
@@ -1054,7 +1054,7 @@ func _spy(delta: float) -> void:
 				_go_to(chasing.current_cell())
 			_walk(delta)
 		Job.TO_RIVAL:
-			if Game.rival_owned or Game.day_over:
+			if Game.war.rival_closed or Game.day_over:
 				_give_up()
 			elif _walk(delta):
 				_start(Job.SNOOPING, SNOOP_SECONDS / speed)
@@ -1093,7 +1093,7 @@ func next_trip() -> float:
 
 
 func _trip_due() -> bool:
-	if Game.rival_owned or Game.day_over or store.town == null or store.computer == null:
+	if Game.war.rival_closed or Game.day_over or store.town == null or store.computer == null:
 		return false
 	return Game.minute >= next_trip() and Game.minute < Game.CLOSE_MINUTE
 
@@ -1132,7 +1132,7 @@ func _next_snoop() -> void:
 			job = Job.TO_RIVAL
 			return
 	snooping_at = Store.NO_CELL
-	if Game.rival_owned or not is_instance_valid(store.computer):
+	if Game.war.rival_closed or not is_instance_valid(store.computer):
 		_give_up()
 		return
 	var stand := store.stand_cell_for(store.computer.cell, current_cell())

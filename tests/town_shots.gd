@@ -26,12 +26,10 @@ func _ready() -> void:
 		p.camera.reset_smoothing()
 		await _seconds(1.0)
 		await _shot("town_" + spot[0])
-	# after buying two lots and the rival
+	# after buying two lots
 	Game.add_xp(5000.0)
 	Game.buy_expansion()
 	Game.buy_expansion()
-	Game.money += 3000.0
-	Game.buy_out_rival()
 	await _seconds(2.0)
 	p.position = Iso.cell_to_world(Vector2i(16, 9))
 	p.camera.zoom = Vector2(1.5, 1.5)

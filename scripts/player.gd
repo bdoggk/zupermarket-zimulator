@@ -23,6 +23,18 @@ const MAX_ZOOM := 5.0
 
 const MOP_TEXTURE := preload("res://assets/sprites/mop_held.png")
 
+# The gang war (GangWar): you can hit Bone Mart's gangsters, and they hit back.
+const MAX_HEALTH := 10.0
+const REGEN_AFTER := 4.0  # seconds without being hit: then you get better...
+const REGEN_PER_SECOND := 2.0  # ...this fast
+const KNOCKED_OUT_SECONDS := 3.0
+const GLOCK_RANGE := 8.0  # cells
+const GLOCK_ROUNDS := 15
+const RELOAD_SECONDS := 1.4
+## Damage per hit and seconds between hits, for each weapon.
+const WEAPONS := {"fists": {"damage": 1, "every": 0.4}, "nunchucks": {"damage": 2, "every": 0.5}, "glock": {"damage": 2, "every": 0.3}}
+const HAND := Vector2(5, -17)  # where your hand is, from your feet (facing right)
+
 var store: Store
 var carry_product := ""
 var carry_count := 0
@@ -53,6 +65,18 @@ var look_dir := Vector2.ZERO  # first person: where you're looking (you face tha
 var _stuck_time := 0.0
 var _last_prompt := ["-", false, "-"]
 
+var health := MAX_HEALTH
+var knocked_out := 0.0  # seconds before you're back on your feet
+var rounds := GLOCK_ROUNDS  # left in the Glock
+var reloading := 0.0
+var _attack_cd := 0.0
+var _since_hurt := 99.0
+var _hurt_flash := 0.0
+var _swing := 0.0  # a punch or the nunchucks whirling (counts down)
+var _shot_t := 0.0  # the muzzle flash (counts down)
+var _shot_to := Vector2.ZERO  # where the last shot went (from you)
+var fight_t := 0.0  # seconds left showing what's in your hand after a fight
+
 @onready var sprite: Sprite2D = $Sprite
 @onready var carry_sprite: Sprite2D = $CarryBox
 @onready var camera: Camera2D = $Camera
@@ -72,6 +96,12 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_tick_fighting(delta)
+	if knocked_out > 0.0:
+		velocity = Vector2.ZERO
+		path.clear()
+		queue_redraw()
+		return
 	var typing := is_typing() or Game.menu_open  # (the keys are working the menu)
 	var fp := first_person()
 	var input := Vector2.ZERO if typing else (fp.move_input() if fp else Input.get_vector("move_left", "move_right", "move_up", "move_down"))
@@ -156,6 +186,7 @@ func _over_menu() -> bool:
 
 
 func _draw() -> void:
+	_draw_weapon()
 	if is_carrying():
 		draw_texture(Game.icon(carry_product), Vector2(-4, -56))
 	if not is_busy():
@@ -176,7 +207,7 @@ func _draw() -> void:
 
 ## Uses whatever is focused (E key / Space / the on-screen button).
 func try_interact() -> void:
-	if is_busy():
+	if is_busy() or knocked_out > 0.0:
 		return
 	if is_instance_valid(focused) and focused.can_interact(self):
 		use(focused)
@@ -186,7 +217,7 @@ func try_interact() -> void:
 
 ## Scans the nearest shelf with the handheld scanner (Q / the SCAN button).
 func try_scan() -> void:
-	if is_busy():
+	if is_busy() or knocked_out > 0.0:
 		return
 	if is_instance_valid(scan_focus) and scan_focus.can_scan(self):
 		_start_action(scan_focus, scan_focus.get_scan_time(self), Action.SCAN)
@@ -366,6 +397,11 @@ func _on_tap(world_pos: Vector2) -> void:
 	if is_busy():
 		cancel_action()
 	var obj := store.interactable_at_point(world_pos, holding_mop)
+	if obj is Gangster and obj.can_interact(self):  # close enough to hit (or in the Glock's range)
+		path.clear()
+		tap_target = null
+		use(obj)
+		return
 	if obj and not obj is Decoration:
 		if obj is Spill and not holding_mop:
 			obj = null  # just walk there
@@ -426,6 +462,7 @@ func _animate(delta: float) -> void:
 			sprite.flip_h = velocity.x < 0.0
 	else:
 		sprite.position.y = 0.0
+	sprite.position.x = (-2.0 if sprite.flip_h else 2.0) if _swing > 0.1 and Game.war.weapon() == "fists" else 0.0  # (a punch)
 	carry_sprite.position.y = -14.0 + sprite.position.y
 	mop_sprite.position = Vector2(-6.0 if sprite.flip_h else 6.0, -16.0 + sprite.position.y)
 	mop_sprite.flip_h = sprite.flip_h
@@ -442,8 +479,15 @@ func _update_focus() -> void:
 	var best_pr := -1
 	var info_d := INF
 	var scan_d := INF
-	for obj in store.interactables_near(current_cell()):
+	var near := store.interactables_near(current_cell())
+	var turf := _turf()
+	if turf and Game.war.weapon() == "glock":  # anyone in range, not just next to you
+		for g in turf.enemies_within(current_cell(), GLOCK_RANGE):
+			near.append(g)
+	for obj in near:
 		var d := position.distance_to(obj.position)
+		if obj is Gangster and Game.war.weapon() == "glock":
+			d *= 0.25  # (anyone in the Glock's range is close enough)
 		if obj.can_interact(self):
 			var pr := obj.use_priority(self)
 			# Same priority: what's in front of you counts as up to 40% closer.
@@ -494,3 +538,148 @@ func _update_focus() -> void:
 	if now != _last_prompt:
 		_last_prompt = now
 		Game.prompt_changed.emit(text, can, scan_text)
+
+
+# ---------------------------------------------------------------- fighting (the gang war)
+
+func _turf() -> Turf:
+	return store.town.turf if store and store.town else null
+
+
+## You can hit (or shoot) gangster `g` from where you are.
+func can_hit(g: Gangster) -> bool:
+	if knocked_out > 0.0 or Game.cutscene:
+		return false
+	if Game.war.weapon() == "glock":
+		return Vector2(g.current_cell() - current_cell()).length() <= GLOCK_RANGE
+	return Iso.chebyshev(g.current_cell(), current_cell()) <= 1
+
+
+## Bone Mart's gangsters can hit you (not while you're down, or in a cutscene).
+func can_be_hit() -> bool:
+	return knocked_out <= 0.0 and not Game.cutscene
+
+
+## Hits (or shoots) gangster `g` with whatever you've got (GangWar.weapon).
+func attack(g: Gangster) -> void:
+	if not can_hit(g) or _attack_cd > 0.0:
+		return
+	var w := Game.war.weapon()
+	var turf := _turf()
+	if w == "glock":
+		if reloading > 0.0:
+			return
+		if rounds <= 0:
+			_reload()
+			return
+		rounds -= 1
+		_shot_t = 0.07
+		_shot_to = g.position + Vector2(0, -20) - position
+		if turf:
+			turf.play("shot", position)
+	else:
+		_swing = 0.2
+		if turf:
+			turf.play("nunchucks" if w == "nunchucks" else "punch", g.position)
+	_attack_cd = float(WEAPONS[w].every)
+	fight_t = 6.0
+	sprite.flip_h = g.position.x < position.x
+	facing = (g.position - position).normalized()
+	cancel_action()
+	Settings.vibrate(0.35 if w == "glock" else 0.25, 0.06)
+	g.hurt(int(WEAPONS[w].damage), self)
+	if w == "glock" and rounds <= 0:
+		_reload()
+
+
+func _reload() -> void:
+	if reloading > 0.0:
+		return
+	reloading = RELOAD_SECONDS
+	var turf := _turf()
+	if turf:
+		turf.play("reload", position)
+
+
+## A gangster hit you. At no health you're knocked out for a few seconds
+## (and if Bone Mart's gang is in your store, they help themselves to the till).
+func hurt(amount: int, from: Node2D) -> void:
+	if not can_be_hit():
+		return
+	health = maxf(0.0, health - amount)
+	_since_hurt = 0.0
+	_hurt_flash = 0.2
+	fight_t = 6.0
+	cancel_action()
+	Settings.vibrate(0.5, 0.12)
+	Game.show_popup(position + Vector2(0, -48), "-%d" % amount, Color(1.0, 0.3, 0.3))
+	if from:
+		var pushed := position + (position - from.position).normalized() * 3.0  # (knocked back a little)
+		if store.is_walkable(Iso.world_to_cell(pushed)):
+			position = pushed
+	if health <= 0.0:
+		knocked_out = KNOCKED_OUT_SECONDS
+		path.clear()
+		tap_target = null
+		Settings.vibrate(1.0, 0.5)
+		var turf := _turf()
+		if turf:
+			turf.player_knocked_out()
+		else:
+			Game.message.emit(Brand.WAR.knocked_out)
+
+
+func _tick_fighting(delta: float) -> void:
+	_attack_cd = maxf(0.0, _attack_cd - delta)
+	_swing = maxf(0.0, _swing - delta)
+	_shot_t = maxf(0.0, _shot_t - delta)
+	_hurt_flash = maxf(0.0, _hurt_flash - delta)
+	fight_t = maxf(0.0, fight_t - delta)
+	_since_hurt += delta
+	if reloading > 0.0:
+		reloading -= delta
+		if reloading <= 0.0:
+			reloading = 0.0
+			rounds = GLOCK_ROUNDS
+	if knocked_out > 0.0:
+		knocked_out -= delta
+		sprite.rotation = lerpf(sprite.rotation, -PI / 2.0 if sprite.flip_h else PI / 2.0, minf(1.0, delta * 12.0))
+		if knocked_out <= 0.0:
+			knocked_out = 0.0
+			health = MAX_HEALTH
+			sprite.rotation = 0.0
+	elif health < MAX_HEALTH and _since_hurt > REGEN_AFTER:
+		health = minf(MAX_HEALTH, health + REGEN_PER_SECOND * delta)
+	sprite.modulate = Color(1.6, 0.5, 0.5) if _hurt_flash > 0.0 else Color.WHITE
+	var turf := _turf()
+	if turf and turf.fighting() and not turf.enemies_within(current_cell(), 10.0).is_empty():
+		fight_t = maxf(fight_t, 1.0)
+
+
+## What's in your hand in a fight: "nunchucks", "glock" or "" (fists, or no fight).
+func weapon_shown() -> String:
+	if fight_t <= 0.0 or knocked_out > 0.0 or is_carrying() or holding_mop:
+		return ""
+	var w := Game.war.weapon()
+	return "" if w == "fists" else w
+
+
+func _draw_weapon() -> void:
+	var w := weapon_shown()
+	if w == "":
+		return
+	var flip := -1.0 if sprite.flip_h else 1.0
+	var hand := Vector2(HAND.x * flip, HAND.y + sprite.position.y)
+	if w == "nunchucks":
+		# Hanging from your hand; a hit whirls them right round.
+		var angle := PI - 0.4 if _swing <= 0.0 else PI - 0.4 + TAU * (1.0 - _swing / 0.2)
+		draw_set_transform(hand, angle * flip, Vector2(flip, 1))
+		draw_texture(Brand.WAR.textures.nunchucks, Vector2(-2, -17))
+	else:
+		draw_set_transform(hand + Vector2(0, 2), 0.0, Vector2(flip, 1))
+		draw_texture(Brand.WAR.textures.glock, Vector2(-1, -4))
+		if _shot_t > 0.0:
+			draw_texture(Brand.WAR.textures.flash, Vector2(7, -8))
+	draw_set_transform(Vector2.ZERO)
+	if w == "glock" and _shot_t > 0.0:
+		draw_line(hand + Vector2(9 * flip, 0), _shot_to, Color(1.0, 0.9, 0.5, 0.8), 1.0)

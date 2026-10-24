@@ -652,7 +652,7 @@ def _with_shadow(body):
 
 
 def zombie(skin, hair, shirt, pants, seed, shoes=(52, 46, 40), apron=None, long_hair=False,
-           reaching=True, bald=False, cap=None, vest=None):
+           reaching=True, bald=False, cap=None, vest=None, extra=None):
     """A zombie. Shoppers reach forward; staff keep their hands to themselves."""
     random.seed(seed)
     body = new(16, 36)
@@ -719,6 +719,8 @@ def zombie(skin, hair, shirt, pants, seed, shoes=(52, 46, 40), apron=None, long_
     rect(body, 6, 9, 9, 9, (60, 22, 22))  # mouth
     dot(body, 7, 9, (222, 214, 184))  # a tooth
     dot(body, 8, 10, BLOOD)  # drool
+    if extra:  # anything else drawn on (before the outline goes around it)
+        extra(body)
     outline_outside(body)
     return _with_shadow(body)
 
@@ -1125,6 +1127,11 @@ SIGN_GLYPHS = {  # 4x5 letters
     "R": ["###.", "#..#", "###.", "#.#.", "#..#"],
     "T": ["####", ".#..", ".#..", ".#..", ".#.."],
     "F": ["####", "#...", "###.", "#...", "#..."],
+    "Z": ["####", "...#", ".##.", "#...", "####"],
+    "U": ["#..#", "#..#", "#..#", "#..#", ".##."],
+    "X": ["#..#", "#..#", ".##.", "#..#", "#..#"],
+    "W": ["#..#", "#..#", "#..#", "####", "#..#"],
+    "K": ["#..#", "#.#.", "##..", "#.#.", "#..#"],
 }
 
 
@@ -1876,6 +1883,22 @@ def price_board():
     return img
 
 
+POLE_M = ["#...#", "##.##", "#.#.#", "#...#", "#...#"]  # a wider M for the big pole signs (the 4-wide one reads as H)
+
+
+def pole_sign_word(img, word, y0, ink):
+    """One word across a pole sign (Bone Mart's, a branch's), centered."""
+    glyphs = [POLE_M if ch == "M" else SIGN_GLYPHS[ch] for ch in word]
+    width = sum(len(g[0]) + 1 for g in glyphs) - 1
+    x = 32 - width // 2
+    for g in glyphs:
+        for y, bits in enumerate(g):
+            for gx, bit in enumerate(bits):
+                if bit == "#":
+                    dot(img, x + gx, y0 + y, ink)
+        x += len(g[0]) + 1
+
+
 def rival_sign(sold=False):
     """The tall Bone Mart sign out front."""
     img = new(64, 120)
@@ -1889,12 +1912,7 @@ def rival_sign(sold=False):
     rect(img, 12, by - 96, 51, by - 68, BONE_WHITE)
     skull_pixels(img, 28, by - 94, big=True)
     for line, word in enumerate(("BONE", "MART")):
-        x0 = 32 - (len(word) * 5 - 1) // 2
-        for i, ch in enumerate(word):
-            for y, bits in enumerate(SIGN_GLYPHS[ch]):
-                for x, bit in enumerate(bits):
-                    if bit == "#":
-                        dot(img, x0 + i * 5 + x, by - 86 + line * 7 + y, (40, 34, 36))
+        pole_sign_word(img, word, by - 86 + line * 7, (40, 34, 36))
     if sold:  # a red SOLD banner pasted across it
         rect(img, 8, by - 88, 55, by - 78, (150, 30, 30))
         rect(img, 8, by - 87, 55, by - 79, (200, 50, 44))
@@ -1913,7 +1931,7 @@ def rival_sign(sold=False):
 # Skeletons and the other kinds of zombie shoppers
 # --------------------------------------------------------------------------
 def skeleton(seed, hat=None, bowtie=None, vest=None, bag=False, cap=None, apron=None,
-             coat=None, fedora=None, shades=False, notepad=False):
+             coat=None, fedora=None, shades=False, notepad=False, extra=None):
     random.seed(seed)
     body = new(16, 36)
     B, D = BONE_WHITE, BONE_DARK
@@ -1996,6 +2014,8 @@ def skeleton(seed, hat=None, bowtie=None, vest=None, bag=False, cap=None, apron=
     if bag:  # a shopping bag
         rect(body, 12, 19, 14, 24, (196, 172, 120))
         dot(body, 13, 18, (120, 100, 70))
+    if extra:  # anything else drawn on (before the outline goes around it)
+        extra(body)
     outline_outside(body)
     return _with_shadow(body)
 
@@ -2042,10 +2062,9 @@ def rich_zombie():
     return img
 
 
-def brute():
+def brute(skin=(130, 152, 110), shirt=(98, 104, 84), pants=(70, 64, 60), extra=None):
     """A big zombie (20x40) with a basket's worth of appetite."""
     body = new(20, 40)
-    skin, shirt, pants = (130, 152, 110), (98, 104, 84), (70, 64, 60)
     random.seed(62)
     rect(body, 5, 27, 9, 35, pants)
     rect(body, 10, 27, 14, 35, shade(pants, 0.82))
@@ -2068,6 +2087,8 @@ def brute():
     dot(body, 8, 10, (222, 214, 184))
     dot(body, 11, 10, (222, 214, 184))
     dot(body, 9, 11, BLOOD)
+    if extra:
+        extra(body)
     outline_outside(body)
     img = new(20, 40)
     sh = img.load()
@@ -3398,9 +3419,343 @@ def loan_content():
     save(bat(1), "bat_1")
 
 
+# --------------------------------------------------------------------------
+# The gang war (0.13): skeleton and zombie gangs, weapons, branch stores
+# --------------------------------------------------------------------------
+JACKET = (40, 36, 44)
+JACKET_D = (28, 26, 32)
+BAT_WOOD = (176, 128, 74)
+BAT_WOOD_D = (132, 92, 52)
+STEEL = (162, 164, 172)
+STEEL_D = (102, 104, 114)
+GOLD = (236, 200, 80)
+GANG_RED = (184, 36, 42)
+GANG_GREEN = (74, 160, 64)
+
+
+def _bandana(img, color, y=2):
+    """A bandana tied around the head, its ends hanging off the back."""
+    rect(img, 4, y, 11, y + 1, color)
+    dot(img, 6, y, shade(color, 1.3))
+    dot(img, 9, y + 1, shade(color, 0.7))
+    dot(img, 12, y + 1, color)
+    dot(img, 13, y + 2, shade(color, 0.8))
+    dot(img, 12, y + 2, shade(color, 0.8))
+
+
+def _jacket(img, color=JACKET, studs=True, sleeves_to=19):
+    """A leather jacket over the chest and arms (hands showing below)."""
+    dark = shade(color, 0.72)
+    rect(img, 4, 13, 11, 21, color)
+    rect(img, 10, 13, 11, 21, dark)
+    rect(img, 2, 14, 3, sleeves_to, color)
+    rect(img, 12, 14, 13, sleeves_to, dark)
+    for y in range(14, 21):
+        dot(img, 7, y, STEEL_D if y % 2 else shade(color, 0.55))  # the zip
+    dot(img, 5, 12, color)  # collar
+    dot(img, 10, 12, dark)
+    if studs:
+        dot(img, 4, 13, STEEL)
+        dot(img, 11, 13, STEEL)
+
+
+def _held_bat(img, wood=BAT_WOOD, hand=(12, 22), top=9):
+    """A bat held in the right hand, resting up against the shoulder."""
+    hx, hy = hand
+    for y in range(top, hy + 1):
+        x = hx + (hy - y) * 2 // max(1, hy - top)
+        c = wood if (y // 2) % 3 else shade(wood, 0.8)
+        dot(img, x, y, c)
+        if y < top + 5:  # the fat end
+            dot(img, min(15, x + 1), y, shade(wood, 0.85))
+    dot(img, hx, hy + 1, shade(wood, 0.6))  # the knob
+
+
+def _held_chain(img, hand=(12, 22)):
+    hx, hy = hand
+    for i, (dx, dy) in enumerate([(1, 1), (1, 2), (2, 3), (2, 4), (1, 5), (1, 6), (2, 7)]):
+        dot(img, min(15, hx + dx), hy + dy, STEEL if i % 2 == 0 else STEEL_D)
+
+
+def gang_skeleton(seed, bandana=GANG_RED, held="bat", shades=False, jacket=JACKET):
+    """One of Bone Mart's gang: a skeleton in a leather jacket and a red
+    bandana, with a bat, a chain or a pipe."""
+    def extra(img):
+        _jacket(img, jacket)
+        _bandana(img, bandana)
+        if shades:
+            rect(img, 5, 5, 10, 6, (18, 18, 24))
+            dot(img, 6, 5, (90, 100, 120))
+        if held == "bat":
+            _held_bat(img, hand=(12, 22))
+        elif held == "chain":
+            _held_chain(img, hand=(12, 22))
+        elif held == "pipe":
+            _held_bat(img, wood=STEEL, hand=(12, 22), top=11)
+        dot(img, 8, 10, GOLD)  # a gold tooth
+    return skeleton(seed, extra=extra)
+
+
+def gang_zombie(seed, shirt, held=None, bandana=GANG_GREEN, chain=False, beanie=None, skin=(136, 168, 118)):
+    """One of your gang: a zombie in green colors, with a bat or a crowbar."""
+    def extra(img):
+        if beanie:
+            rect(img, 4, 0, 11, 3, beanie)
+            rect(img, 4, 3, 11, 3, shade(beanie, 0.7))
+            dot(img, 7, 0, shade(beanie, 1.3))
+        elif bandana:
+            _bandana(img, bandana, y=2)
+        if chain:
+            for x, y in [(5, 13), (6, 14), (7, 15), (8, 15), (9, 14), (10, 13)]:
+                dot(img, x, y, GOLD)
+        if held == "bat":
+            _held_bat(img, hand=(12, 22))
+        elif held == "crowbar":
+            _held_bat(img, wood=(160, 40, 36), hand=(12, 22), top=11)
+        elif held == "knuckles":
+            for x in (2, 3):
+                dot(img, x, 21, GOLD)
+            for x in (12, 13):
+                dot(img, x, 21, GOLD)
+    return zombie(skin, (40, 36, 30), shirt, (44, 46, 52), seed=seed, reaching=False, extra=extra)
+
+
+def big_rotto():
+    """The zombie gang's boss: a big zombie in a black tank top, a green
+    bandana, shades, a gold chain and a bat."""
+    def extra(img):
+        rect(img, 6, 2, 13, 3, GANG_GREEN)
+        dot(img, 14, 3, GANG_GREEN)
+        dot(img, 15, 4, shade(GANG_GREEN, 0.8))
+        rect(img, 7, 6, 12, 7, (18, 18, 24))  # shades
+        dot(img, 8, 6, (90, 100, 120))
+        for x, y in [(6, 13), (7, 14), (8, 15), (9, 16), (10, 16), (11, 15), (12, 14), (13, 13)]:
+            dot(img, x, y, GOLD)
+        rect(img, 9, 17, 10, 18, GOLD)
+        for y in range(8, 26):  # the bat over his shoulder
+            x = 17 + (25 - y) * 2 // 17
+            dot(img, min(19, x), y, BAT_WOOD if (y // 2) % 3 else BAT_WOOD_D)
+            if y < 13:
+                dot(img, min(19, x + 1), y, BAT_WOOD_D)
+    return brute(skin=(124, 156, 104), shirt=(30, 30, 36), pants=(50, 54, 62), extra=extra)
+
+
+def bone_pile():
+    """A skeleton beaten to pieces (16x36, like a person, the pile at their feet)."""
+    img = new(16, 36)
+    B, D = BONE_WHITE, BONE_DARK
+    px = img.load()
+    for y in range(31, 36):  # a little shadow
+        for x in range(16):
+            if ((x + 0.5 - 8) / 7.5) ** 2 + ((y + 0.5 - 33.5) / 2.2) ** 2 <= 1:
+                px[x, y] = (0, 0, 0, 60)
+    body = new(16, 36)
+    for x0, y0, x1 in [(2, 32, 9), (6, 30, 13), (3, 28, 7), (9, 33, 14)]:  # bones
+        rect(body, x0, y0, x1, y0, B)
+        dot(body, x0, y0 - 1, B)
+        dot(body, x1, y0 - 1, D)
+        dot(body, x0, y0 + 1, D)
+        dot(body, x1, y0 + 1, D)
+    for y in (29, 31):  # a few ribs
+        rect(body, 10, y, 13, y, D)
+    rect(body, 4, 24, 8, 28, B)  # the skull, on its side
+    rect(body, 8, 25, 8, 28, D)
+    dot(body, 5, 26, (24, 20, 22))
+    dot(body, 7, 26, (24, 20, 22))
+    dot(body, 6, 28, (60, 54, 52))
+    rect(body, 9, 26, 12, 27, GANG_RED)  # what's left of the bandana
+    dot(body, 11, 29, JACKET)
+    rect(body, 0, 30, 1, 31, JACKET)
+    outline_outside(body)
+    img.alpha_composite(body)
+    return img
+
+
+CHUCK_STICK = (34, 28, 30)  # black lacquer...
+CHUCK_SHINE = (92, 80, 84)
+CHUCK_BAND = (190, 40, 40)  # ...with red bands
+CHUCK_CHAIN = (168, 168, 178)
+
+
+def weapon_nunchucks():
+    """The nunchucks in your hand (5x19): the stick you hold at the bottom,
+    the chain, and the other stick above it."""
+    img = new(5, 19)
+    for y0 in (1, 11):  # the two sticks, 7 tall
+        for y in range(y0, y0 + 7):
+            dot(img, 1, y, CHUCK_STICK)
+            dot(img, 2, y, CHUCK_STICK)
+            dot(img, 3, y, CHUCK_SHINE if y % 3 else CHUCK_STICK)
+        for y in (y0 + 1, y0 + 5):
+            rect(img, 1, y, 3, y, CHUCK_BAND)
+    for y, x in [(8, 2), (9, 1), (10, 2)]:  # the chain between them
+        dot(img, x, y, CHUCK_CHAIN)
+    outline_outside(img)
+    return img
+
+
+def weapon_glock():
+    """The Glock in your hand (9x7), pointing right."""
+    img = new(9, 7)
+    dark, mid = (36, 36, 40), (64, 64, 70)
+    rect(img, 1, 1, 8, 2, mid)  # slide
+    rect(img, 1, 1, 8, 1, shade(mid, 1.3))
+    rect(img, 1, 3, 4, 3, dark)
+    rect(img, 1, 3, 3, 6, dark)  # grip
+    dot(img, 4, 4, dark)  # trigger guard
+    dot(img, 8, 0, mid)  # sight
+    outline_outside(img)
+    return img
+
+
+def muzzle_flash():
+    img = new(9, 9)
+    for x, y in [(4, 0), (4, 1), (4, 7), (4, 8), (0, 4), (1, 4), (7, 4), (8, 4), (2, 2), (6, 6), (6, 2), (2, 6)]:
+        dot(img, x, y, (255, 200, 80))
+    rect(img, 3, 3, 5, 5, (255, 236, 150))
+    dot(img, 4, 4, (255, 255, 240))
+    return img
+
+
+def weapon_icon(kind):
+    """24x24 pictures for the Turf app."""
+    img = new(24, 24)
+    if kind == "fists":
+        skin = (136, 168, 118)
+        rect(img, 5, 7, 18, 16, skin)
+        rect(img, 5, 7, 18, 7, shade(skin, 1.15))
+        for x in (8, 11, 14):
+            rect(img, x, 7, x, 12, shade(skin, 0.75))  # between the knuckles
+        rect(img, 3, 11, 6, 17, skin)  # thumb
+        rect(img, 8, 16, 18, 20, shade(skin, 0.85))  # wrist
+        dot(img, 12, 14, BLOOD)
+    elif kind == "nunchucks":
+        for (x0, y0, dx) in [(3, 21, 1), (20, 21, -1)]:  # two sticks leaning in, joined at the top
+            for i in range(11):
+                x, y = x0 + dx * (i // 2), y0 - i
+                c = CHUCK_BAND if i in (2, 8) else CHUCK_STICK
+                dot(img, x, y, c)
+                dot(img, x + dx, y, CHUCK_SHINE if c == CHUCK_STICK and i % 3 else c)
+        for x, y in [(9, 9), (10, 7), (11, 6), (12, 6), (13, 7), (14, 9)]:  # the chain
+            dot(img, x, y, CHUCK_CHAIN)
+    elif kind == "glock":
+        dark, mid = (40, 40, 46), (72, 72, 80)
+        rect(img, 3, 6, 21, 10, mid)
+        rect(img, 3, 6, 21, 6, shade(mid, 1.35))
+        rect(img, 4, 11, 12, 12, dark)
+        rect(img, 4, 11, 9, 20, dark)
+        rect(img, 10, 13, 12, 14, dark)
+        dot(img, 20, 5, mid)
+        for x in range(13, 21, 2):
+            dot(img, x, 8, shade(mid, 0.7))
+    outline_outside(img)
+    return img
+
+
+def branch_sign(bone=False):
+    """The sign in front of a branch store (64x120, like Bone Mart's)."""
+    img = new(64, 120)
+    by = img.height - 16
+    post = (64, 62, 66)
+    for x in (22, 41):
+        for y in range(by - 70, by + 1):
+            dot(img, x, y, post)
+            dot(img, x + 1, y, shade(post, 0.8))
+    rect(img, 10, by - 98, 53, by - 66, (34, 30, 34))
+    if bone:
+        rect(img, 12, by - 96, 51, by - 68, BONE_WHITE)
+        skull_pixels(img, 28, by - 94, big=True)
+        words, ink = ("BONE", "MART"), (40, 34, 36)
+    else:
+        rect(img, 12, by - 96, 51, by - 68, (182, 214, 150))
+        for x, y in _ellipse_pixels(31.5, by - 90, 4.5, 3.2):  # a brain on top
+            dot(img, x, y, (226, 150, 160))
+        for x in (29, 32, 35):
+            dot(img, x, by - 90, (180, 96, 110))
+        words, ink = ("ZUPER", "MARKET"), (34, 70, 38)
+    for line, word in enumerate(words):
+        pole_sign_word(img, word, by - 86 + line * 7, ink)
+    band = (170, 34, 40) if bone else (60, 130, 54)
+    rect(img, 8, by - 72, 55, by - 63, shade(band, 0.75))
+    rect(img, 8, by - 71, 55, by - 64, band)
+    word = "EXPRESS"
+    x0 = 32 - (len(word) * 5 - 1) // 2
+    for i, ch in enumerate(word):
+        for y, bits in enumerate(SIGN_GLYPHS[ch]):
+            for x, bit in enumerate(bits):
+                if bit == "#":
+                    dot(img, x0 + i * 5 + x, by - 70 + y, (250, 244, 232))
+    outline_object(img, 0.6)
+    return img
+
+
+def rival_sign_closed():
+    """Bone Mart's sign with a CLOSED banner, after your gang smashed it up."""
+    img = rival_sign()
+    by = img.height - 16
+    rect(img, 6, by - 88, 57, by - 78, (120, 24, 24))
+    rect(img, 6, by - 87, 57, by - 79, (190, 40, 36))
+    word = "CLOSED"
+    x0 = 32 - (len(word) * 5 - 1) // 2
+    for i, ch in enumerate(word):
+        for y, bits in enumerate(SIGN_GLYPHS[ch]):
+            for x, bit in enumerate(bits):
+                if bit == "#":
+                    dot(img, x0 + i * 5 + x, by - 85 + y, (250, 240, 230))
+    for x, y in [(14, by - 60), (40, by - 52), (24, by - 44)]:  # a few cracks in the posts' paint
+        dot(img, x, y, (30, 26, 28))
+    return img
+
+
+def turf_icon():
+    """The Turf app: a bat and a bone crossed."""
+    img = new(32, 32)
+    for i in range(22):  # the bat, top left to bottom right
+        x, y = 5 + i, 5 + i
+        c = BAT_WOOD if i % 4 else BAT_WOOD_D
+        dot(img, x, y, c)
+        dot(img, x + 1, y, shade(c, 0.85))
+        if i < 9:
+            dot(img, x, y + 1, c)
+            dot(img, x - 1, y, c)
+    rect(img, 24, 24, 27, 27, (50, 40, 34))
+    for i in range(18):  # the bone, bottom left to top right
+        x, y = 7 + i, 25 - i
+        dot(img, x, y, BONE_WHITE)
+        dot(img, x + 1, y, BONE_DARK)
+    for cx, cy in [(6, 26), (8, 27), (25, 6), (27, 8)]:
+        rect(img, cx - 1, cy - 1, cx + 1, cy + 1, BONE_WHITE)
+    rect(img, 13, 2, 19, 4, GANG_RED)  # a red bandana knot up top
+    dot(img, 20, 5, GANG_RED)
+    outline_outside(img)
+    return img
+
+
+def war_content():
+    """The gang war (0.13)."""
+    save(gang_skeleton(170, held="bat"), "gang_skeleton_0")
+    save(gang_skeleton(171, held="chain", shades=True), "gang_skeleton_1")
+    save(gang_skeleton(172, held="pipe", jacket=(96, 30, 34)), "gang_skeleton_2")
+    save(gang_zombie(180, (52, 96, 58), held="bat"), "gang_zombie_0")
+    save(gang_zombie(181, (36, 36, 42), held="crowbar", chain=True), "gang_zombie_1")
+    save(gang_zombie(182, (74, 84, 56), held="knuckles", beanie=(40, 92, 50), skin=(150, 160, 120)), "gang_zombie_2")
+    save(big_rotto(), "gang_rotto")
+    save(bone_pile(), "gang_bones")
+    save(weapon_nunchucks(), "weapon_nunchucks")
+    save(weapon_glock(), "weapon_glock")
+    save(muzzle_flash(), "weapon_flash")
+    for kind in ("fists", "nunchucks", "glock"):
+        save(weapon_icon(kind), f"weapon_icon_{kind}")
+    save(branch_sign(), "branch_sign_yours")
+    save(branch_sign(bone=True), "branch_sign_bone")
+    save(rival_sign_closed(), "rival_sign_closed")
+    save(turf_icon(), "pc_app_turf")
+
+
 def new_content():
     """Everything above, saved: called from main()."""
     loan_content()
+    war_content()
     save(mummy(), "shopper_mummy_0")
     save(mummy(wrap=(196, 186, 150), eyes=(120, 230, 120), seed=82), "shopper_mummy_1")
     save(ghost(), "shopper_ghost_0")

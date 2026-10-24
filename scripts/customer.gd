@@ -477,7 +477,7 @@ func on_checked_out() -> void:
 
 
 func _tick_patience(delta: float) -> void:
-	if is_instance_valid(register) and register.is_serving(self):
+	if (is_instance_valid(register) and register.is_serving(self)) or Game.cutscene:
 		return
 	patience -= delta * (Game.WINE_PATIENCE if Game.has_effect("wine") else 1.0)
 	if patience <= 0.0:
@@ -489,6 +489,22 @@ func _tick_patience(delta: float) -> void:
 			register.leave_line(self)
 		basket.clear()
 		_leave()
+
+
+## A gang is smashing up the store: they drop everything and run (it
+## counts as a walkout). Not once they're paying, or on their way out.
+func scare() -> void:
+	if state in [State.ENTERING, State.ARRIVING, State.LEAVING, State.WALKING_AWAY, State.EXITING]:
+		return
+	if is_instance_valid(register) and register.is_serving(self):
+		return
+	_think(Brand.WAR.get("scared", "AAAH!"))
+	Game.record_walkout()
+	if is_instance_valid(register):
+		register.leave_line(self)
+	basket.clear()
+	speed = maxf(speed, SPEED * 1.6)  # running for it
+	_leave()
 
 
 ## Makes this shopper's sound, if it has one (not too often: if another

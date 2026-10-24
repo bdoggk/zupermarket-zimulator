@@ -63,6 +63,7 @@ func _ready() -> void:
 	# ---- the rest of the game, unlocked
 	Game.money = 99999.0
 	Game.add_xp(100000.0)
+	Game.war.pending = false  # (no gang war cutscene here: war_test.gd plays that)
 	for id: String in Game.PRODUCTS:
 		if Game.can_license(id):
 			Game.buy_license(id)

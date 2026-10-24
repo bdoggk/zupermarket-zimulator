@@ -26,7 +26,6 @@ signal staff_changed  # someone was hired or fired
 signal staff_leveled(id: int, level: int)
 signal store_expanded  # bought the next lot
 signal rival_requested  # open the rival's price list
-signal rival_bought
 signal rival_spy_sent  # Bone Mart sends a spy over to your store (the town does the walking)
 signal shop_requested(shop: String)  # use a little shop's counter (Brand.SHOPS)
 signal rack_requested(rack: StorageRack)  # pick which box to take off a storage rack
@@ -160,7 +159,7 @@ var menu_open := false  # a window is open over the store (the computer, a shop.
 var staff: Array[Dictionary] = []  # everyone you've hired: [{id, role, name, xp, level}]
 var _next_staff_id := 1
 var expansions := 0  # lots next door you've bought (Brand.EXPANSIONS)
-var rival_owned := false  # bought out the rival store
+var war := GangWar.new()  # the gang war against Bone Mart (from store level 15)
 var rival_factor := {}  # product id -> the rival's price today / market price
 var rival_deal := ""  # the rival's deal of the day
 var rival_seen := {}  # product id -> [price, day] when you last checked the rival
@@ -224,7 +223,7 @@ func reset() -> void:
 	staff = []
 	_next_staff_id = 1
 	expansions = 0
-	rival_owned = false
+	war = GangWar.new()
 	rival_seen = {}
 	rival_spies = []
 	tutorial = {}
@@ -559,9 +558,9 @@ func scout_rival(ids: Array) -> void:
 ## of you. It's cheaper for most things, so match or beat its prices. A
 ## messy store drives shoppers away; decorations bring them in.
 func rival_pull(list: Array, kind: Dictionary) -> float:
-	if rival_owned or has_effect("stake"):
-		return 0.0  # it's yours, or there's a stake in its door
-	var pull: float = Brand.RIVAL.share + float(kind.get("rival", 0.0))
+	if war.rival_closed or has_effect("stake"):
+		return 0.0  # your gang smashed it up today, or there's a stake in its door
+	var pull: float = Brand.RIVAL.share + float(kind.get("rival", 0.0)) + war.rival_pull_change()
 	if not list.is_empty():
 		var diff := 0.0
 		for item: Dictionary in list:
@@ -580,34 +579,13 @@ func rival_pull(list: Array, kind: Dictionary) -> float:
 	return clampf(pull, 0.05, 0.85)
 
 
-## Why you can't buy out the rival yet ("" means you can).
-func rival_buyout_problem() -> String:
-	if rival_owned:
-		return "It's yours"
-	if level < int(Brand.RIVAL.buyout_level):
-		return "Reach store level %d" % int(Brand.RIVAL.buyout_level)
-	if money + 0.001 < Brand.RIVAL.buyout:
-		return "Not enough money"
-	return ""
-
-
-func buy_out_rival() -> bool:
-	if rival_buyout_problem() != "" or not spend(Brand.RIVAL.buyout):
-		return false
-	rival_owned = true
-	Settings.vibrate(0.8, 0.4)
-	message.emit(Brand.RIVAL.bought)
-	rival_bought.emit()
-	return true
-
-
 # ---------------------------------------------------------------- spying
 
 ## When the rival's spies come over today (none on the first days, none
-## once you own it). Called each morning.
+## while it's closed). Called each morning.
 func roll_rival_spies() -> void:
 	rival_spies = []
-	if rival_owned or Brand.RIVAL.is_empty() or day < int(Brand.RIVAL.get("spy_from_day", 1 << 20)):
+	if war.rival_closed or Brand.RIVAL.is_empty() or day < int(Brand.RIVAL.get("spy_from_day", 1 << 20)):
 		return
 	var per_day: Array = Brand.RIVAL.get("spies_per_day", [1, 1])
 	var count: int = per_day[1] if level >= 3 else per_day[0]
@@ -619,7 +597,7 @@ func roll_rival_spies() -> void:
 
 ## The rival's next spy is due: the town sends it over.
 func check_rival_spies() -> void:
-	if not is_open or rival_owned or rival_spies.is_empty() or minute < float(rival_spies[0]):
+	if not is_open or war.rival_closed or rival_spies.is_empty() or minute < float(rival_spies[0]):
 		return
 	rival_spies.pop_front()
 	rival_spy_sent.emit()
@@ -630,7 +608,7 @@ func check_rival_spies() -> void:
 ## day (what's announced goes in your notes on its prices too).
 func rival_spy_got_away(seen: Array) -> void:
 	stats.spies_escaped = int(stats.get("spies_escaped", 0)) + 1
-	if rival_owned:
+	if war.rival_closed:
 		return
 	var cut: Array[String] = []
 	for id: String in seen:
@@ -662,7 +640,7 @@ func rival_spy_caught(by := "") -> void:
 ## and deal of the day, when its next spy is coming, and a rumor that keeps
 ## shoppers away from it for a while.
 func spy_report(who: String) -> void:
-	if rival_owned:
+	if war.rival_closed:
 		return
 	stats.spy_reports = int(stats.get("spy_reports", 0)) + 1
 	scout_rival(PRODUCTS.keys())
@@ -907,6 +885,7 @@ func add_xp(amount: float) -> void:
 		message.emit("Level bonus: +$%d!" % int(bonus))
 	unlocks_changed.emit()
 	leveled_up.emit(from, level)
+	war.check_level(level)
 
 
 ## Takes XP away (blood on the floor), but never below the start of your
@@ -953,8 +932,8 @@ func unlocks_at(lv: int) -> Array[String]:
 		var count: int = loves.values().reduce(func(n, names): return n + names.size(), 0)
 		lines.append("; ".join(loves.keys().map(func(who): return "%s love %s" % [who, " and ".join(loves[who])]))
 			+ (" (stock it to bring more of them in)" if count == 1 else " (stock them to bring more in)"))
-	if not Brand.RIVAL.is_empty() and int(Brand.RIVAL.get("buyout_level", 0)) == lv and not rival_owned:
-		lines.append("You can buy out %s ($%d)" % [Brand.RIVAL.name, int(Brand.RIVAL.buyout)])
+	if not Brand.WAR.is_empty() and lv == GangWar.LEVEL:
+		lines.append("The gang war against %s starts!" % Brand.RIVAL.name)
 	if lv <= TRAFFIC_LEVELS:
 		lines.append("%d%% more shoppers come by" % roundi(Store.LEVEL_TRAFFIC * 100.0))
 	return lines
@@ -987,8 +966,6 @@ func staff_cap(role: String) -> int:
 
 ## Why you can't hire a `role` right now ("" means you can).
 func hire_problem(role: String) -> String:
-	if role == "spy" and rival_owned:
-		return "%s is yours: nobody to spy on" % Brand.RIVAL.name
 	if staff_count(role) >= staff_limit(role):
 		if role == "cashier" and staff_count(role) < STAFF[role].max:
 			return "Buy another register first (Build mode)"
@@ -1071,6 +1048,11 @@ func daily_wages() -> float:
 	for s in staff:
 		total += STAFF[s.role].wage
 	return total
+
+
+## Everyone you pay at the end of the day: your staff and your gang.
+func all_wages() -> float:
+	return daily_wages() + war.wages()
 
 
 func _pick_staff_name() -> String:
@@ -1372,7 +1354,8 @@ func to_dict() -> Dictionary:
 		"floor_style": floor_style, "wall_color": wall_color, "stats": stats,
 		"play_time": play_time,
 		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
-		"rival": {"owned": rival_owned, "factor": rival_factor, "deal": rival_deal, "seen": rival_seen, "spies": rival_spies},
+		"rival": {"factor": rival_factor, "deal": rival_deal, "seen": rival_seen, "spies": rival_spies},
+		"war": war.to_dict(),
 		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden, "effects": effects, "loan": loan,
 		"market": {"factor": market.factor, "previous": market.previous, "demand": market.demand, "news": market.news},
 	}
@@ -1445,7 +1428,11 @@ func from_dict(d: Dictionary) -> void:
 		loan = {"amount": float(ln.get("amount", 0.0)), "total": float(ln.total), "payment": float(ln.get("payment", loan_payment(float(ln.total)))),
 			"paid": float(ln.get("paid", 0.0)), "day": int(ln.get("day", day)), "due": int(ln.get("due", day + LOAN_DAYS))}
 	var r: Dictionary = d.get("rival", {})
-	rival_owned = bool(r.get("owned", false))
+	war.from_dict(d.get("war", {}), level)
+	if bool(r.get("owned", false)):  # from when you could buy Bone Mart: Mr. Bones buys it back
+		money += float(Brand.RIVAL.old_buyout)
+		war.bought_back = true
+		Saves.pending_notice = Brand.RIVAL.bought_back
 	var factors: Dictionary = r.get("factor", {})
 	for id: String in factors:
 		if PRODUCTS.has(id):
@@ -1487,8 +1474,6 @@ func has_effect(id: String) -> bool:
 func brew_problem(id: String) -> String:
 	if str(Brand.BREWS[id].get("shop", "")) == "":
 		return "Not for sale"
-	if id == "stake" and rival_owned:
-		return "%s is yours already" % Brand.RIVAL.name
 	if float(effects.get(id, 0.0)) + float(Brand.BREWS[id].seconds) > MAX_EFFECT_SECONDS + 0.01:
 		return "You've got plenty"
 	if money + 0.001 < float(Brand.BREWS[id].cost):
@@ -1535,16 +1520,20 @@ func end_day() -> void:
 	if day_over:
 		return
 	day_over = true
-	var wages := daily_wages()
+	var wages := all_wages()
 	if wages > 0.0:
 		money -= wages  # wages are always paid, even if it puts you in the red
 		stats.wages += wages
+	var take := war.branch_income()
+	if take > 0.0:  # what your branches made today
+		money += take
+		stats.branches += take
 	if not _loan_night():
 		loan_defaulted.emit()  # the lender comes for your head (no summary tonight)
 		return
 	var summary := stats.duplicate()
 	summary.day = day
-	summary.profit = stats.revenue - stats.spent - stats.invested - stats.wages
+	summary.profit = stats.revenue + stats.branches + stats.looted - stats.spent - stats.invested - stats.wages - stats.robbed
 	_reset_stats()  # anything bought overnight counts toward tomorrow
 	day_ended.emit(summary)
 
@@ -1577,7 +1566,8 @@ func start_next_day() -> void:
 	message.emit(Brand.SAY.morning % day)
 	_loan_morning()
 	update_market(true)
-	if not rival_owned and rival_deal != "":
+	war.morning()
+	if not war.rival_closed and rival_deal != "":
 		message.emit(Brand.RIVAL.deal_news % product_name(rival_deal))
 
 
@@ -1604,4 +1594,5 @@ func clock_text() -> String:
 
 func _reset_stats() -> void:
 	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0, "wanted": {}, "wanted_by": {}, "xp_lost": 0.0, "brews": 0,
-		"spies_caught": 0, "spies_escaped": 0, "spy_reports": 0, "borrowed": 0.0, "loan_paid": 0.0}
+		"spies_caught": 0, "spies_escaped": 0, "spy_reports": 0, "borrowed": 0.0, "loan_paid": 0.0,
+		"branches": 0.0, "robbed": 0.0, "looted": 0.0, "raids_won": 0, "raids_lost": 0}

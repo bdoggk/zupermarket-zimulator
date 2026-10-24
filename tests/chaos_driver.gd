@@ -43,6 +43,8 @@ var done := false
 var baseline := -1
 var ordered := 0
 var _taken_seen := 0  # Customer.items_taken last time
+var _smashed_seen := 0  # Turf.items_smashed last time
+var war_cuts := 0  # the gang war's cutscene played
 var _last_nonbasket := -1
 
 # Stuck watching
@@ -155,7 +157,7 @@ func _finish() -> void:
 	Engine.time_scale = 1.0
 	_drain_errors()
 	print("")
-	print("CHAOS done: %d frames, %.0f game seconds, %d days, %d loads, %d visits from Count Vlad" % [frame, game_time, days_played, loads, visits])
+	print("CHAOS done: %d frames, %.0f game seconds, %d days, %d loads, %d visits from Count Vlad, %d gang war cutscenes" % [frame, game_time, days_played, loads, visits, war_cuts])
 	var acts := counts.keys()
 	acts.sort()
 	print("actions: " + ", ".join(acts.map(func(a): return "%s %d" % [a, counts[a]])))
@@ -245,7 +247,6 @@ func _wait_for_store() -> void:
 	changing_scene = false
 	if not Game.box_ordered.is_connected(_on_ordered):
 		Game.box_ordered.connect(_on_ordered)
-		Game.rival_bought.connect(func(): baseline = -1)
 		Game.day_started.connect(func(_d): days_played += 1)
 
 
@@ -294,6 +295,9 @@ func _set_up_big_store() -> void:
 
 
 func _act() -> void:
+	if is_instance_valid(hud.war_cutscene):
+		await _war_cut()
+		return
 	if is_instance_valid(hud.cutscene):
 		await _vlad()
 		return
@@ -339,9 +343,11 @@ func _act() -> void:
 		"mop": 5.0, "computer": 3.0, "build": 1.5, "shop": 1.5, "rival": 0.5, "pause": 0.5,
 		"saveload": 0.5 if saveload else 0.0, "spawn": 2.0, "zoom": 1.0, "staff": 2.0, "teleport": 3.0,
 		"settings": 0.4, "wait": 6.0, "click": 4.0, "key": 4.0, "wheel": 0.5, "spy": 1.0,
-		"finger": 6.0 if touch else 0.0, "loan": 0.8, "view": 0.6,
+		"finger": 6.0 if touch else 0.0, "loan": 0.8, "view": 0.6, "war": 1.5,
 	})
 	match what:
+		"war":
+			await _war()
 		"view":
 			if Game.fp:
 				Game.fp.toggle()
@@ -619,6 +625,99 @@ func _loan() -> void:
 		Game.take_loan(a)
 
 
+## The gang war: get it started (store level 15), then buy land, hire and
+## fire, buy weapons, send the gang, bring on a raid, or hit someone.
+func _war() -> void:
+	var war: GangWar = Game.war
+	var turf: Turf = store.town.turf if store.town else null
+	if turf == null:
+		return
+	if not war.on:
+		if not war.pending and rng.randf() < 0.25:
+			_note("war: up to level %d" % GangWar.LEVEL)
+			Game.add_xp(maxf(0.0, Game.xp_for_level(GangWar.LEVEL) - Game.xp) + 1.0)
+		return
+	var r := rng.randf()
+	if r < 0.15:
+		var i := rng.randi() % war.plots.size()
+		_note("war: buy plot %d (%s)" % [i, war.buy_problem(i)])
+		war.buy_plot(i)
+	elif r < 0.3:
+		_note("war: hire (%s)" % war.hire_problem())
+		war.hire()
+	elif r < 0.35 and not war.gang.is_empty():
+		var g: Dictionary = war.gang[rng.randi() % war.gang.size()]
+		_note("war: fire %s" % g.name)
+		war.fire(int(g.id))
+	elif r < 0.45:
+		var w: String = ["nunchucks", "glock"][rng.randi() % 2]
+		_note("war: buy %s (%s)" % [w, war.weapon_problem(w)])
+		war.buy_weapon(w)
+	elif r < 0.6:
+		var targets: Array = [GangWar.MAIN] + war.owned_by(GangWar.BONE)
+		var t: int = targets[rng.randi() % targets.size()]
+		_note("war: send the gang to %d (%s)" % [t, war.send_problem(t, turf.fighting())])
+		war.send_raid(t, turf.fighting())
+	elif r < 0.72:
+		if Game.is_open and not turf.fighting():
+			var targets: Array = [GangWar.MAIN] + war.owned_by(GangWar.YOU)
+			var t: int = targets[rng.randi() % targets.size()]
+			_note("war: Bone Mart raids %d" % t)
+			turf.start_defense(t)
+	elif r < 0.9:
+		var near := turf.enemies_within(p.current_cell(), Player.GLOCK_RANGE)
+		if not near.is_empty():
+			var g: Gangster = near[rng.randi() % near.size()]
+			_note("war: go for %s (%s)" % [g.gang_name, war.weapon()])
+			if p.can_hit(g):
+				p.attack(g)
+			else:
+				p._on_tap(g.position + Vector2(0, -12))
+	else:
+		_note("war: the Turf app")
+		hud.open_computer()
+		await _frames(2)
+		hud.computer.show_tab(hud.computer.Tab.TURF)
+		await _frames(2)
+		hud.computer.close()
+
+
+## The gang war's cutscene: let it play (with the odd key press, click or
+## Esc), then press Let's go.
+func _war_cut() -> void:
+	var c: Node = hud.war_cutscene
+	war_cuts += 1
+	_note("the gang war's cutscene")
+	var t0 := Time.get_ticks_msec()
+	while is_instance_valid(c) and not c.card.visible:
+		if Time.get_ticks_msec() - t0 > 120000:
+			_fail("the gang war's cutscene never ended", c.step)
+			c.skip()
+			t0 = Time.get_ticks_msec()
+		var r := rng.randf()
+		if r < 0.02:
+			var k: Key = [KEY_SPACE, KEY_E, KEY_W, KEY_B, KEY_ESCAPE, KEY_ENTER, KEY_6, KEY_V][rng.randi() % 8]
+			_note("war cutscene: key %s (%s)" % [OS.get_keycode_string(k), c.step])
+			for down in [true, false]:
+				var e := InputEventKey.new()
+				e.keycode = k
+				e.physical_keycode = k
+				e.pressed = down
+				get_viewport().push_input(e)
+		elif r < 0.03:
+			_note("war cutscene: click (%s)" % c.step)
+			var sz := get_viewport().get_visible_rect().size
+			_click(Vector2(rng.randf() * sz.x, rng.randf() * sz.y), MOUSE_BUTTON_LEFT)
+		await _frames(1)
+	await _frames(3)
+	if is_instance_valid(c):
+		_note("war cutscene: Let's go")
+		c.go_button.pressed.emit()
+	await _frames(3)
+	if not Game.war.on or Game.cutscene or not hud.visible:
+		_fail("the gang war didn't start", "on %s, cutscene %s" % [Game.war.on, Game.cutscene])
+
+
 ## Count Vlad's here: let it play (with the odd key press, click or Esc),
 ## then start over, and pick up the new store.
 func _vlad() -> void:
@@ -770,10 +869,6 @@ func _rival() -> void:
 	_note("rival: price list")
 	Game.rival_requested.emit()
 	await _frames(2)
-	if rng.randf() < 0.3:
-		_note("rival: buy out (%s)" % Game.rival_buyout_problem())
-		hud.rival_panel._on_buy()
-		hud.rival_panel._on_buy()
 	hud._back()
 	await _frames(1)
 
@@ -1162,8 +1257,9 @@ func _check_stock() -> void:
 	var total := 0
 	for k in parts:
 		total += int(parts[k])
-	var taken := Customer.items_taken - _taken_seen
+	var taken := Customer.items_taken - _taken_seen + Turf.items_smashed - _smashed_seen
 	_taken_seen = Customer.items_taken
+	_smashed_seen = Turf.items_smashed
 	if baseline < 0:
 		baseline = total
 		ordered = 0

@@ -131,7 +131,6 @@ func _ready() -> void:
 		town.start()
 	_sync_staff()
 	Game.store_expanded.connect(expand)
-	Game.rival_bought.connect(_on_rival_bought)
 	Game.box_ordered.connect(_on_box_ordered)
 	Game.store_opened.connect(_on_store_opened)
 	Game.decor_changed.connect(_apply_decor)
@@ -876,8 +875,8 @@ func placement_error(cell: Vector2i, furniture_id: String, moving: Interactable 
 		if s.current_cell() == cell or s.next_cell() == cell:
 			return "%s is in the way" % s.staff_name
 	for m in movers:
-		if is_instance_valid(m) and (m.cell == cell or (m is RivalSpy and not m.path.is_empty() and m.path[0] == cell)):
-			return "%s's spy is in the way" % Brand.RIVAL.name
+		if is_instance_valid(m) and (m.cell == cell or (m.get("path") is Array and not m.path.is_empty() and m.path[0] == cell)):
+			return "%s's spy is in the way" % Brand.RIVAL.name if m is RivalSpy else "Someone is in the way"
 	var needs_access := true
 	if moving:
 		needs_access = not moving is Decoration
@@ -1682,8 +1681,9 @@ func _update_customers(delta: float) -> void:
 			spawn_timer = randf_range(SPAWN_MIN, SPAWN_MAX) / traffic_multiplier()
 			if town:
 				spawn_timer /= TOWN_TRAFFIC
-			_new_shopper()
-	elif Game.opened and not Game.day_over and customers.is_empty() and not movers.any(func(m): return is_instance_valid(m) and floor_cells.has(m.cell)):
+			if not (town and town.turf and town.turf.raid_on_store()):  # (nobody walks into a gang fight)
+				_new_shopper()
+	elif Game.opened and not Game.day_over and not Game.cutscene and customers.is_empty() and not movers.any(func(m): return is_instance_valid(m) and floor_cells.has(m.cell)):
 		Game.end_day()  # closing time and the last customer (and any spy) has left
 
 
@@ -1694,7 +1694,7 @@ func _new_shopper() -> void:
 	var kind := Game.pick_shopper_kind()
 	var list := _make_shopping_list(kind)
 	var full := shoppers_inside() >= max_customers()
-	if town and not Game.rival_owned and (full or randf() < Game.rival_pull(list, kind)):
+	if town and not Game.war.rival_closed and (full or randf() < Game.rival_pull(list, kind)):
 		town.send_to_rival(kind)
 		Game.record_lost()
 	elif not full:
@@ -1781,17 +1781,9 @@ func _weighted_pick(ids: Array, likes: Array = []) -> String:
 func _on_store_opened() -> void:
 	spawn_timer = FIRST_CUSTOMER_DELAY
 	_warned_spill = false
-	if town and not Game.rival_owned and not _told_about_rival:
+	if town and not _told_about_rival:
 		_told_about_rival = true
 		Game.message.emit("Some %s shop at %s down the street. Walk out the front door to check its prices." % [Brand.SAY.shoppers, Brand.RIVAL.name])
-
-
-## Bought out the rival: its owner throws in his leftover stock.
-func _on_rival_bought() -> void:
-	var ids := Game.unlocked_ids()
-	for i in 4:
-		pending_deliveries.append({"id": ids.pick_random(), "time": 2.0 + i * 1.5, "warned": false})
-	Game.message.emit("%s threw in his leftover stock: 4 boxes are on the way." % Brand.RIVAL.owner)
 
 
 # ---------------------------------------------------------------- visuals

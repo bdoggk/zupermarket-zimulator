@@ -99,15 +99,12 @@ func _ready() -> void:
 	# ---- Bone Mart's price list
 	Game.rival_requested.emit()
 	await _frames(2)
-	check(hud.rival_panel.visible and _focus() == hud.rival_panel.buy_button, "Bone Mart's list opens with Buy out selected: " + _focus_name())
-	await _button(JOY_BUTTON_DPAD_RIGHT)
-	check(_focus() == hud.rival_panel.close_button, "right: Close")
+	check(hud.rival_panel.visible and _focus() == hud.rival_panel.close_button, "Bone Mart's list opens with Close selected (it's not for sale): " + _focus_name())
 	await _button(JOY_BUTTON_A)
 	check(not hud.rival_panel.visible, "A closes it")
 	Game.money = 10.0
 	Game.rival_requested.emit()
 	await _frames(2)
-	check(_focus() == hud.rival_panel.close_button, "when you can't buy it out, Close is selected")
 	await _button(JOY_BUTTON_B)
 	check(not hud.rival_panel.visible, "B closes it")
 	check(not hud.pause_menu.visible, "B never opens the pause menu by itself")
@@ -238,7 +235,7 @@ func _ready() -> void:
 		if _focus() == pc.window_close:
 			break
 		await _button(JOY_BUTTON_DPAD_UP)
-	check(_focus() == pc.window_close, "up from the list: the window's X")
+	check(_focus() == pc.window_close, "up from the list: the window's X (" + _focus_name() + ")")
 	await _button(JOY_BUTTON_A)
 	check(pc.visible and not pc.is_app_open(), "A on the X: back to the desktop")
 	await _button(JOY_BUTTON_RIGHT_SHOULDER)

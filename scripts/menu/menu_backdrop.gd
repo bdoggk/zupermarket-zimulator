@@ -37,7 +37,7 @@ func _ready() -> void:
 	add_child(world)
 	if not Brand.TOWN.is_empty():
 		var rival: Variant = game.get("rival", {})
-		_town(floor_layer, world, expansions, rival is Dictionary and bool(rival.get("owned", false)))
+		_town(floor_layer, world, expansions)
 
 	# The store's map, made wider by the lots you've bought.
 	var layout: Array = []
@@ -177,7 +177,7 @@ func _ready() -> void:
 
 ## The town around the store: ground, scenery, the lots for sale and the
 ## rival store (just the look of it; nothing moves).
-func _town(floor_layer: FloorLayer, world: Node2D, expansions: int, rival_owned: bool) -> void:
+func _town(floor_layer: FloorLayer, world: Node2D, expansions: int) -> void:
 	var rows: Array = Brand.TOWN
 	var front := 0
 	var right := 0
@@ -232,13 +232,12 @@ func _town(floor_layer: FloorLayer, world: Node2D, expansions: int, rival_owned:
 					d.texture = load("res://assets/sprites/%s.png" % ("rival_counter" if ch == "r" else "rival_board"))
 					_place(world, d, cell)
 				"S":
-					_sprite(world, Brand.RIVAL.textures.sign_sold if rival_owned else Brand.RIVAL.textures.sign, cell)
+					_sprite(world, Brand.RIVAL.textures.sign, cell)
 				"C":
 					var tex: Texture2D = load("res://assets/sprites/%s.png" % Town.variant("prop_car_%d", 3, cell))
 					_sprite(world, tex, cell + Vector2i(1, 0)).offset = -Vector2(64, tex.get_height() - 17)
 				"m":
-					if not rival_owned:
-						_sprite(world, Brand.RIVAL.textures.owner, cell, true)
+					_sprite(world, Brand.RIVAL.textures.owner, cell, true)
 				"Q":
 					_sprite(world, load("res://assets/sprites/prop_coffin.png"), cell)
 				"K":

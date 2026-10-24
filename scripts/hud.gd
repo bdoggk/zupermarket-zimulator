@@ -13,6 +13,7 @@ const Tutorial := preload("res://scripts/ui/tutorial.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
 const LoanCutsceneScript := preload("res://scripts/ui/loan_cutscene.gd")
+const WarCutsceneScript := preload("res://scripts/ui/war_cutscene.gd")
 const MARGIN := 14.0
 const WANTED_SHOWN := 6  # the day's summary names this many of the things shoppers asked for
 const MAX_MESSAGES := 4
@@ -51,6 +52,12 @@ var scanner_icon: TextureRect
 var mess_label: Label
 var loan_label: Label  # what you owe Count Vlad, and when it's due
 var cutscene: CanvasLayer  # Count Vlad collecting (scripts/ui/loan_cutscene.gd)
+var war_cutscene: CanvasLayer  # the gang war starting (scripts/ui/war_cutscene.gd)
+var fight_panel: PanelContainer  # the gang war: what's going on, your health, your weapon
+var fight_label: Label
+var health_bar: Control
+var weapon_icon: TextureRect
+var ammo_label: Label
 var first_person: FirstPerson  # the store in 3D (V)
 var view_button: Button
 var zoom_buttons: Array[Button] = []
@@ -112,6 +119,7 @@ func _ready() -> void:
 	_build_status()
 	_build_corner_buttons()
 	_build_prompt()
+	_build_fight_panel()
 	message_box = VBoxContainer.new()
 	message_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(message_box)
@@ -234,6 +242,10 @@ func _process(delta: float) -> void:
 	scan_button.visible = is_touch and not building and not summing_up and not menu_open and _prompt[2] != ""
 	run_button.visible = is_touch and not building and not paused and not summing_up and not menu_open
 	_update_shopper_card(delta, building or paused or menu_open or levelup_panel.visible or Game.day_over)
+	_update_fight_panel(building or paused or menu_open or summing_up)
+	if Game.war.pending and not Game.cutscene and not is_instance_valid(war_cutscene) and not is_instance_valid(cutscene) \
+			and not building and not paused and not menu_open and not levelup_panel.visible and not summing_up:
+		_start_war_cutscene()
 
 	# Keep things pinned to the screen edges whatever the window size.
 	var s := root.size
@@ -258,6 +270,8 @@ func _process(delta: float) -> void:
 	_place(use_button, Vector2(s.x - use_button.size.x - MARGIN, s.y - use_button.size.y - MARGIN))
 	_place(scan_button, Vector2(s.x - use_button.size.x - scan_button.size.x - 2 * MARGIN, s.y - scan_button.size.y - MARGIN))
 	_place(run_button, Vector2(MARGIN, s.y - run_button.size.y - MARGIN))
+	var above := s.y - MARGIN - (prompt_panel.size.y + 10.0 if prompt_panel.visible else 0.0) - (use_button.size.y + 10.0 if use_button.visible else 0.0)
+	_place(fight_panel, Vector2((s.x - fight_panel.size.x) / 2.0, above - fight_panel.size.y))
 	_place(computer, (s - computer.size * computer.scale) / 2.0)
 	_center(rival_panel, s)
 	_center(shop_panel, s)
@@ -918,7 +932,10 @@ func _show_summary(s: Dictionary) -> void:
 		"Sales: $%.2f" % s.revenue,
 		"Stock bought: $%.2f" % s.spent,
 		"Store upgrades: $%.2f" % s.invested,
-		"Staff wages: $%.2f" % s.wages,
+		("Wages (staff and gang): $%.2f" if Game.war.gang_size() > 0 else "Staff wages: $%.2f") % s.wages,
+		"Your branches made: $%.2f" % float(s.get("branches", 0.0)) if float(s.get("branches", 0.0)) > 0.0 else "--",
+		"Taken from %s: $%.2f" % [Brand.RIVAL.name, float(s.get("looted", 0.0))] if float(s.get("looted", 0.0)) > 0.0 else "--",
+		"Robbed by %s's gang: $%.2f" % [Brand.RIVAL.name, float(s.get("robbed", 0.0))] if float(s.get("robbed", 0.0)) > 0.0 else "--",
 		"Profit: $%.2f" % s.profit,
 		"Borrowed: $%.2f" % float(s.get("borrowed", 0.0)) if float(s.get("borrowed", 0.0)) > 0.0 else "--",
 		"Loan payments: $%.2f" % float(s.get("loan_paid", 0.0)) if float(s.get("loan_paid", 0.0)) > 0.0 else "--",
@@ -934,6 +951,7 @@ func _show_summary(s: Dictionary) -> void:
 	summary_notes.text = "\n".join([
 		_wanted_line(s.get("wanted", {})),
 		_spies_line(s),
+		_war_line(s),
 		"Your spy's reports: %d" % int(s.get("spy_reports", 0)) if int(s.get("spy_reports", 0)) > 0 else "--",
 		"XP lost to blood on the floor: %d" % roundi(float(s.get("xp_lost", 0.0))) if Brand.SPILLS and roundi(float(s.get("xp_lost", 0.0))) > 0 else "--",
 		_loan_line(),
@@ -953,6 +971,99 @@ static func _loan_line() -> String:
 	var due := int(Game.loan.due)
 	var when := "TOMORROW NIGHT" if due == Game.day + 1 else "the night of day %d" % due
 	return "%s's loan: $%s left, all due %s. A payment comes out every morning." % [Brand.LOAN.lender, Game.cash(Game.loan_left()), when]
+
+
+## "Gang fights won: 2, lost: 1", or "--".
+static func _war_line(s: Dictionary) -> String:
+	var won := int(s.get("raids_won", 0))
+	var lost := int(s.get("raids_lost", 0))
+	if won + lost == 0:
+		return "--"
+	return "Gang fights won: %d%s" % [won, ", lost: %d" % lost if lost > 0 else ""]
+
+
+## Your store reached level 15: the gang war starts with a cutscene.
+func _start_war_cutscene() -> void:
+	for panel in [computer, rival_panel, shop_panel, rack_panel]:
+		panel.close()
+	message_log.close()
+	visible = false
+	war_cutscene = WarCutsceneScript.new()
+	get_parent().add_child(war_cutscene)
+	war_cutscene.finished.connect(func(): visible = true)
+	war_cutscene.play(self)
+
+
+## Under the middle of the screen during a fight (and while you get your
+## breath back): what's going on, your health and what's in your hand.
+func _build_fight_panel() -> void:
+	fight_panel = PanelContainer.new()
+	fight_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fight_panel.visible = false
+	root.add_child(fight_panel)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	fight_panel.add_child(col)
+	fight_label = UI.label("", UI.BAD)
+	fight_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(fight_label)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	col.add_child(row)
+	row.add_child(UI.label("Health", UI.DIM))
+	health_bar = Control.new()
+	health_bar.custom_minimum_size = Vector2(180 if is_touch else 150, 18 if is_touch else 14)
+	health_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	health_bar.draw.connect(_draw_health)
+	row.add_child(health_bar)
+	weapon_icon = UI.icon(null, Vector2(28, 28))
+	row.add_child(weapon_icon)
+	ammo_label = UI.label("", UI.DIM)
+	row.add_child(ammo_label)
+
+
+func _draw_health() -> void:
+	var p: Player = Game.player
+	var r := Rect2(Vector2.ZERO, health_bar.size)
+	health_bar.draw_rect(r, Color(0.08, 0.08, 0.1))
+	var f := clampf(p.health / Player.MAX_HEALTH, 0.0, 1.0) if is_instance_valid(p) else 1.0
+	var fill := UI.GOOD.lerp(UI.BAD, 1.0 - f) if f > 0.0 else UI.BAD
+	health_bar.draw_rect(Rect2(1, 1, (r.size.x - 2) * f, r.size.y - 2), fill)
+	health_bar.draw_rect(r, UI.PANEL_BORDER, false, 1.0)
+
+
+func _update_fight_panel(hidden: bool) -> void:
+	var p: Player = Game.player
+	var turf: Turf = Game.store.town.turf if Game.store.town else null
+	var fight: Dictionary = turf.fight if turf else {}
+	var show := Game.war.on and not hidden and not Game.cutscene and is_instance_valid(p) \
+		and (not fight.is_empty() or p.health < Player.MAX_HEALTH - 0.01 or p.fight_t > 0.0 or p.knocked_out > 0.0)
+	fight_panel.visible = show
+	if not show:
+		return
+	var text := ""
+	if p.knocked_out > 0.0:
+		text = "KNOCKED OUT!"
+	elif not fight.is_empty():
+		var target := int(fight.target)
+		var where: String = "your %s on %s" % [Brand.WAR.your_branch, GangWar.plot_name(target)]
+		if fight.kind == "defend":
+			text = "RAID! %s's gang is %s" % [Brand.RIVAL.name, "at your store" if target == GangWar.MAIN else "taking " + where]
+		else:
+			text = "Your gang is raiding %s" % (Brand.RIVAL.name if target == GangWar.MAIN else "%s on %s" % [Brand.WAR.bone_branch, GangWar.plot_name(target)])
+	fight_label.text = text
+	fight_label.visible = text != ""
+	UI.set_color(fight_label, UI.BAD if fight.get("kind", "defend") == "defend" or p.knocked_out > 0.0 else UI.WARN)
+	health_bar.queue_redraw()
+	var w := Game.war.weapon()
+	weapon_icon.texture = Brand.WAR.textures["icon_" + w]
+	weapon_icon.tooltip_text = Brand.WAR.weapons[w].name
+	if w == "glock":
+		ammo_label.text = "Reloading..." if p.reloading > 0.0 else "%d/%d" % [p.rounds, Player.GLOCK_ROUNDS]
+	else:
+		ammo_label.text = Brand.WAR.weapons[w].name
+	fight_panel.reset_size()
 
 
 ## The loan's last night, and it isn't paid: Count Vlad comes for your head.

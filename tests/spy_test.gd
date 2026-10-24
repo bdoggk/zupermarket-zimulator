@@ -174,13 +174,12 @@ func _ready() -> void:
 
 	check(hud._spies_line({"spies_caught": 1, "spies_escaped": 2}) == "%s's spies: 1 thrown out, 2 got away" % Brand.RIVAL.name, "the day summary says how it went")
 
-	# ---- once Bone Mart is yours
-	Game.rival_owned = true
-	check(Game.hire_problem("spy").contains("nobody"), "no hiring spies once Bone Mart is yours: " + Game.hire_problem("spy"))
+	# ---- while Bone Mart is closed (your gang smashed it up)
+	Game.war.rival_closed = true
 	Game.roll_rival_spies()
-	check(Game.rival_spies.is_empty() and town.send_rival_spy() == null, "and it sends no more")
+	check(Game.rival_spies.is_empty() and town.send_rival_spy() == null, "Bone Mart closed for the day: it sends no spies")
 	check(agent.status_text().contains("nothing to spy on"), "your spy: " + agent.status_text())
-	Game.rival_owned = false
+	Game.war.rival_closed = false
 
 	print("RESULT: %d failure%s" % [fails, "" if fails == 1 else "s"])
 	get_tree().quit(1 if fails > 0 else 0)

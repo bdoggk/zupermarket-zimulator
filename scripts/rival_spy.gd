@@ -135,7 +135,7 @@ func _process(delta: float) -> void:
 		_came_in = true
 		Game.message.emit(Brand.RIVAL.spy_in)
 		Settings.vibrate(0.3, 0.1)
-	if state in [State.IN, State.SNOOPING] and (not Game.is_open or Game.rival_owned):
+	if state in [State.IN, State.SNOOPING] and (not Game.is_open or Game.war.rival_closed):
 		_leave()  # closing time: off it goes with whatever it has
 	if not path.is_empty():
 		_walk(delta)

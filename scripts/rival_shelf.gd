@@ -22,7 +22,7 @@ func _draw() -> void:
 
 
 func get_prompt(_p: Player) -> String:
-	if Game.rival_owned or product_id == "":
+	if Game.war.rival_closed or product_id == "":
 		return "Empty shelf"
 	var text := "%s %s: $%.2f" % [Brand.RIVAL.name, Game.product_name(product_id), Game.rival_price(product_id)]
 	if Game.is_licensed(product_id):
@@ -33,7 +33,7 @@ func get_prompt(_p: Player) -> String:
 
 
 func can_interact(_p: Player) -> bool:
-	return not Game.rival_owned and product_id != ""
+	return not Game.war.rival_closed and product_id != ""
 
 
 func get_action_label(_p: Player) -> String:

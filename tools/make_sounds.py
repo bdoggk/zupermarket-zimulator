@@ -1,4 +1,5 @@
-"""Makes the sound effects for Count Vlad's visit (the loan cutscene).
+"""Makes the sound effects for Count Vlad's visit (the loan cutscene) and
+the gang war.
 
     python3 tools/make_sounds.py
 
@@ -11,6 +12,14 @@ you like: keep the same file names.
   vlad_rip.wav     the head coming off (a wet tear and a pop)
   vlad_thud.wav    the body hitting the floor
   vlad_laugh.wav   a low "ha... ha... ha" as he walks off
+
+  war_sting.wav    the gang war starts: a hit on a low drum and a brass stab
+  war_punch.wav    a fist (or a skeleton's) landing
+  war_nunchucks.wav  nunchucks whooshing round and cracking a skull
+  war_shot.wav     the Glock
+  war_reload.wav   a fresh magazine clicking in
+  war_crack.wav    a skeleton falling apart into a heap of bones
+  war_smash.wav    a shelf (or the register) getting smashed
 """
 import wave
 from pathlib import Path
@@ -126,12 +135,94 @@ def laugh():
     return lowpass(x, 1600)
 
 
+def war_sting():
+    tt = t(2.6)
+    drum = np.sin(2 * np.pi * (55 - 20 * tt) * tt) * np.exp(-tt * 3.5)
+    hit = lowpass(rng.uniform(-1, 1, len(tt)), 900) * np.exp(-tt * 10)
+    brass = np.zeros_like(tt)
+    for f in [73.42, 87.31, 110.0, 146.83]:  # a dark D minor stab, with a growl
+        saw = 2 * ((f * tt) % 1.0) - 1
+        brass += saw
+    brass = lowpass(brass, 1100) * envelope(len(tt), 0.03, 1.6) * (1 + 0.08 * np.sin(2 * np.pi * 6 * tt))
+    return drum * 1.4 + hit * 0.8 + brass * 0.35
+
+
+def punch():
+    tt = t(0.22)
+    body = np.sin(2 * np.pi * (110 - 60 * tt / 0.22) * tt) * np.exp(-tt * 22)
+    slap = lowpass(rng.uniform(-1, 1, len(tt)), 2400) * np.exp(-tt * 60)
+    return body * 1.2 + slap * 0.9
+
+
+def nunchucks():
+    tt = t(0.42)
+    # A whoosh (a band of noise sweeping up), then the crack of wood on bone.
+    noise = rng.uniform(-1, 1, len(tt))
+    sweep = np.clip(tt / 0.22, 0, 1)
+    whoosh = (lowpass(noise, 700) - lowpass(noise, 250)) * np.sin(np.pi * sweep) * (tt < 0.22)
+    hit_t = tt - 0.2
+    crack = np.where(hit_t > 0, rng.uniform(-1, 1, len(tt)) * np.exp(-hit_t * 70), 0)
+    knock = np.where(hit_t > 0, sum(np.sin(2 * np.pi * f * hit_t) * np.exp(-hit_t * d) for f, d in [(620, 35), (930, 45)]), 0)
+    return whoosh * 2.2 + crack * 0.8 + knock * 0.6
+
+
+def shot():
+    tt = t(0.5)
+    blast = rng.uniform(-1, 1, len(tt)) * np.exp(-tt * 28)
+    boom = np.sin(2 * np.pi * (140 - 80 * np.clip(tt * 6, 0, 1)) * tt) * np.exp(-tt * 12)
+    tail = lowpass(rng.uniform(-1, 1, len(tt)), 700) * np.exp(-tt * 7) * 0.5
+    return blast + boom * 0.9 + tail
+
+
+def reload():
+    out = []
+    for f, length in [(2600, 0.03), (0, 0.12), (1800, 0.05)]:
+        tt = t(length)
+        if f == 0:
+            out.append(np.zeros(len(tt)))
+        else:
+            click = rng.uniform(-1, 1, len(tt)) * np.exp(-tt * 120) + 0.5 * np.sin(2 * np.pi * f * tt) * np.exp(-tt * 90)
+            out.append(click)
+    return np.concatenate(out)
+
+
+def bone_crack():
+    tt = t(0.7)
+    out = np.zeros_like(tt)
+    for start in [0.0, 0.07, 0.16, 0.24, 0.35, 0.47]:  # bones clattering down
+        tk = tt - start - rng.uniform(0, 0.02)
+        f = rng.uniform(900, 1800)
+        clack = np.where(tk > 0, np.sin(2 * np.pi * f * tk) * np.exp(-tk * 45), 0)
+        out += clack * rng.uniform(0.5, 1.0)
+    snap = rng.uniform(-1, 1, len(tt)) * np.exp(-tt * 80)
+    return out + snap
+
+
+def smash():
+    tt = t(0.9)
+    crash = rng.uniform(-1, 1, len(tt)) * np.exp(-tt * 6)
+    glass = np.zeros_like(tt)
+    for i in range(14):  # bits of glass and tins bouncing
+        start = rng.uniform(0.02, 0.6)
+        tk = tt - start
+        glass += np.where(tk > 0, np.sin(2 * np.pi * rng.uniform(2500, 6000) * tk) * np.exp(-tk * 35), 0) * rng.uniform(0.2, 0.6)
+    thump = np.sin(2 * np.pi * 80 * tt) * np.exp(-tt * 10)
+    return lowpass(crash, 3500) * 0.9 + glass * 0.6 + thump
+
+
 def main():
     save("vlad_sting", sting(), 0.85)
     save("vlad_bats", bats(), 0.7)
     save("vlad_rip", rip(), 0.9)
     save("vlad_thud", thud(), 0.9)
     save("vlad_laugh", laugh(), 0.8)
+    save("war_sting", war_sting(), 0.85)
+    save("war_punch", punch(), 0.8)
+    save("war_nunchucks", nunchucks(), 0.85)
+    save("war_shot", shot(), 0.9)
+    save("war_reload", reload(), 0.6)
+    save("war_crack", bone_crack(), 0.8)
+    save("war_smash", smash(), 0.85)
 
 
 if __name__ == "__main__":
