@@ -3752,10 +3752,105 @@ def war_content():
     save(turf_icon(), "pc_app_turf")
 
 
+# --------------------------------------------------------------------------
+# First person (0.15): your zombie hands and the store's ceiling
+# --------------------------------------------------------------------------
+HAND_SKIN = (150, 176, 130)  # the player's skin and shirt (see main())
+HAND_SLEEVE = (80, 92, 110)
+HAND_NAIL = (78, 86, 66)
+
+
+def fp_hand(pose):
+    """Your right hand in first person (22x34), the forearm coming up from
+    the bottom of the screen in a torn sleeve. "idle": the fingers curled;
+    "reach": open, fingers spread, grabbing for something. The left hand
+    is this one mirrored."""
+    img = new(22, 34)
+    skin, dark, light = HAND_SKIN, shade(HAND_SKIN, 0.78), shade(HAND_SKIN, 1.12)
+    # the sleeve, torn at the top
+    rect(img, 5, 25, 17, 33, HAND_SLEEVE)
+    rect(img, 14, 25, 17, 33, shade(HAND_SLEEVE, 0.8))
+    for x, top in [(5, 26), (6, 25), (7, 27), (8, 25), (9, 24), (10, 26), (11, 25), (12, 24), (13, 26), (14, 25), (15, 27), (16, 25), (17, 26)]:
+        for y in range(24, top):
+            img.load()[x, y] = (0, 0, 0, 0)
+    # the forearm
+    rect(img, 7, 13, 15, 25, skin)
+    rect(img, 7, 13, 7, 25, light)
+    rect(img, 13, 13, 15, 25, dark)
+    for x, y in [(8, 18), (9, 17), (10, 17), (11, 17), (12, 18), (8, 21), (9, 22), (11, 22), (12, 21)]:  # a bite
+        dot(img, x, y, BLOOD)
+    rect(img, 9, 19, 11, 20, shade(skin, 0.7))
+    dot(img, 10, 20, (210, 204, 186))  # bone showing through
+    dot(img, 12, 23, BLOOD_WET)
+    # the back of the hand
+    rect(img, 6, 7, 16, 14, skin)
+    rect(img, 6, 7, 6, 14, light)
+    rect(img, 14, 7, 16, 14, dark)
+    dot(img, 12, 10, shade(skin, 0.86))  # knuckle lines
+    dot(img, 9, 10, shade(skin, 0.86))
+    rect(img, 10, 12, 12, 12, BLOOD)
+    if pose == "reach":
+        fingers = [(6, 1, 1), (9, 0, 1), (12, 0, 1), (15, 2, 1)]  # x, top row, width-1
+        rect(img, 2, 9, 5, 11, skin)  # thumb, out to the side
+        rect(img, 1, 6, 3, 9, skin)
+        dot(img, 1, 6, HAND_NAIL)
+    else:
+        fingers = [(6, 4, 1), (9, 3, 1), (12, 3, 1), (15, 5, 1)]
+        rect(img, 4, 9, 6, 13, skin)  # thumb, tucked in
+        dot(img, 4, 9, HAND_NAIL)
+    for x, top, wide in fingers:
+        rect(img, x, top, x + wide, 7, skin)
+        dot(img, x + wide, top + 1, dark)
+        rect(img, x, top, x + wide, top, HAND_NAIL)
+        if pose != "reach":
+            rect(img, x, top + 2, x + wide, top + 2, dark)  # curled: the middle joint
+    outline_outside(img)
+    return img
+
+
+def fp_ceiling(stained):
+    """A ceiling tile for first person (32x32: one cell): a dirty drop
+    ceiling panel in its metal grid, with little holes, and some with a
+    brown water stain."""
+    img = new(32, 32)
+    rng = random.Random(330 + stained)
+    base = (118, 122, 110)
+    rect(img, 0, 0, 31, 31, base)
+    for _ in range(70):
+        x, y = rng.randrange(2, 30), rng.randrange(2, 30)
+        dot(img, x, y, shade(base, rng.choice([0.84, 0.9, 1.06])))
+    if stained:
+        cx, cy = rng.randrange(10, 21), rng.randrange(10, 21)
+        bumps = [rng.uniform(0, 6.28) for _ in range(3)]
+        for y in range(32):
+            for x in range(32):
+                d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+                a = math.atan2(y - cy, x - cx)
+                edge = 6.0 + 1.6 * math.sin(2 * a + bumps[0]) + 1.1 * math.sin(3 * a + bumps[1]) + 0.7 * math.sin(5 * a + bumps[2])
+                if d < edge:
+                    c = img.getpixel((x, y))
+                    ring = d > edge - 1.2
+                    dot(img, x, y, (112, 90, 62) if ring else (int(c[0] * 0.9 + 14), int(c[1] * 0.82 + 4), int(c[2] * 0.68)))
+    grid = (70, 72, 66)
+    rect(img, 0, 0, 31, 0, grid)
+    rect(img, 0, 0, 0, 31, grid)
+    rect(img, 0, 31, 31, 31, shade(grid, 1.3))
+    rect(img, 31, 0, 31, 31, shade(grid, 1.3))
+    return img
+
+
+def fp_content():
+    save(fp_hand("idle"), "fp_hand_idle")
+    save(fp_hand("reach"), "fp_hand_reach")
+    save(fp_ceiling(False), "fp_ceiling_a")
+    save(fp_ceiling(True), "fp_ceiling_b")
+
+
 def new_content():
     """Everything above, saved: called from main()."""
     loan_content()
     war_content()
+    fp_content()
     save(mummy(), "shopper_mummy_0")
     save(mummy(wrap=(196, 186, 150), eyes=(120, 230, 120), seed=82), "shopper_mummy_1")
     save(ghost(), "shopper_ghost_0")

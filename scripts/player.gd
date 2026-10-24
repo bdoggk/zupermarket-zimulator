@@ -17,6 +17,7 @@ enum Action { USE, DROP, SCAN }
 const WALK_SPEED := 3.2  # cells per second going left or right (up and down is as fast on screen)
 const SPRINT_SPEED := 5.2  # holding Shift (or the RUN button)
 const DROP_SECONDS := 0.25
+const REACH_SECONDS := 0.3  # first person: your hands reaching out when you use something
 const DEFAULT_ZOOM := 2.5  # before rounding to whole screen pixels
 const MIN_ZOOM := 1.0
 const MAX_ZOOM := 5.0
@@ -76,6 +77,7 @@ var _swing := 0.0  # a punch or the nunchucks whirling (counts down)
 var _shot_t := 0.0  # the muzzle flash (counts down)
 var _shot_to := Vector2.ZERO  # where the last shot went (from you)
 var fight_t := 0.0  # seconds left showing what's in your hand after a fight
+var reach_t := 0.0  # you just used or grabbed something (counts down): first person's hands reach out
 
 @onready var sprite: Sprite2D = $Sprite
 @onready var carry_sprite: Sprite2D = $CarryBox
@@ -230,6 +232,7 @@ func use(obj: Interactable) -> void:
 			Game.message.emit(why)
 		return
 	var t := obj.get_action_time(self)
+	reach_t = REACH_SECONDS
 	if t <= 0.0:
 		obj.interact(self)
 	else:
@@ -633,6 +636,7 @@ func _tick_fighting(delta: float) -> void:
 	_attack_cd = maxf(0.0, _attack_cd - delta)
 	_swing = maxf(0.0, _swing - delta)
 	_shot_t = maxf(0.0, _shot_t - delta)
+	reach_t = maxf(0.0, reach_t - delta)
 	_hurt_flash = maxf(0.0, _hurt_flash - delta)
 	fight_t = maxf(0.0, fight_t - delta)
 	_since_hurt += delta

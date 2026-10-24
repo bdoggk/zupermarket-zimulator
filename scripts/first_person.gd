@@ -12,20 +12,25 @@ extends Node
 ## (it's only hidden), so everything plays the same: this only draws it,
 ## and turns your keys, mouse, stick and taps into walking and looking.
 ##
-## It's drawn at half the screen's resolution (chunky pixels, like the
-## art, and quick on phones). One cell of the map is one unit; heights
-## come from the art: PX_UP art pixels to a unit.
+## It's drawn at the screen's resolution (Options > First person > Sharp,
+## PC's default) or half of it (Chunky: big pixels like the art, and quick
+## on phones). One cell of the map is one unit; heights come from the art:
+## PX_UP art pixels to a unit. Counters, cars and fences are little 3D
+## models (FpModels), the sky a ball with clouds, stars and a moon
+## (shaders/fp_sky.gdshader), and your own zombie hands are at the bottom
+## of the screen when they're free.
 ##
 ## With ray tracing on (Options > Graphics, see RayTracer) the floor, walls
 ## and shelves are lit by its lightmap, shadows and all, and the billboards
-## by the light where they stand. Otherwise it's all unlit, dimmed at night.
+## by the light where they stand. Otherwise it's all unlit, dimmed at night,
+## with a soft shadow under everyone and the sides of things shaded.
 
 signal toggled(on: bool)
 
 const PX_UP := 32.0  # art pixels in one unit of height
 const PX_ACROSS := 45.25  # art pixels across a cell seen from the side (64 px is its diagonal)
 const EYE := 0.88  # your eyes, above the floor
-const RES_DIV := 2  # the 3D view's pixels are this many screen pixels across
+const RES_DIV := 2  # Chunky: the 3D view's pixels are this many screen pixels across
 const FOV := 72.0
 const MOUSE_LOOK := 0.0032  # radians per mouse pixel
 const TOUCH_LOOK := 0.006  # radians per finger pixel
@@ -36,8 +41,13 @@ const TAP_SLOP := 24.0  # a finger that moves farther than this is looking, not 
 const REACH := 16.0  # how far away (cells) a tap can pick a spot
 const RESYNC_EVERY := 4  # frames between checks on things that rarely change
 const SKY := Color(0.4, 0.46, 0.46)
-const CEILING := Color(0.16, 0.16, 0.18)
+const CEILING_TILES: Array[Texture2D] = [preload("res://assets/sprites/fp_ceiling_a.png"), preload("res://assets/sprites/fp_ceiling_b.png")]
 const CEILING_LIGHT := Color(0.85, 1.0, 0.78)
+const HAND_IDLE := preload("res://assets/sprites/fp_hand_idle.png")
+const HAND_REACH := preload("res://assets/sprites/fp_hand_reach.png")
+const SKY_NIGHT := Color(0.1, 0.13, 0.15)  # the horizon at night (see fp_sky.gdshader)
+const SHADOW_SIZE := Vector2(0.5, 0.36)  # the soft shadow under someone (cells)
+const HAND_LEAN := 0.18  # radians your hands lean in toward the middle of the screen
 const NO_SPOT := Vector2(INF, INF)
 
 var active := false
@@ -64,6 +74,9 @@ var _finger_moved := 0.0
 var _bob := 0.0
 var _rt := false  # built for ray tracing (its lightmap lights everything)
 var _lit_next := 0  # the next billboard to work out the light for (a few each frame)
+var sky: MeshInstance3D  # a ball around the camera
+var _sky_mat: ShaderMaterial
+var _walk := 0.0  # how much you're walking (0-1, eased), for the hands' sway
 
 
 func _ready() -> void:
@@ -102,10 +115,23 @@ func _ready() -> void:
 	env.fog_enabled = true
 	env.fog_light_color = SKY
 	env.fog_density = 0.03
+	env.fog_sky_affect = 0.0
 	we.environment = env
 	view.add_child(we)
 	world = Node3D.new()
 	view.add_child(world)
+	sky = MeshInstance3D.new()
+	var ball := SphereMesh.new()
+	ball.radius = 60.0
+	ball.height = 120.0
+	ball.radial_segments = 24
+	ball.rings = 12
+	sky.mesh = ball
+	_sky_mat = ShaderMaterial.new()
+	_sky_mat.shader = load("res://shaders/fp_sky.gdshader")
+	sky.material_override = _sky_mat
+	sky.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	view.add_child(sky)
 	_floor = Node3D.new()
 	world.add_child(_floor)
 	camera = Camera3D.new()
@@ -250,7 +276,8 @@ func _process(delta: float) -> void:
 	if not active or store == null or not is_instance_valid(player):
 		return
 	var win := get_viewport().get_visible_rect().size
-	var want := Vector2i(maxi(16, int(win.x / RES_DIV)), maxi(16, int(win.y / RES_DIV)))
+	var div := 1 if Settings.fp_sharp else RES_DIV
+	var want := Vector2i(maxi(16, int(win.x / div)), maxi(16, int(win.y / div)))
 	if view.size != want:
 		view.size = want
 	screen.size = win
@@ -261,14 +288,12 @@ func _process(delta: float) -> void:
 	# The night (and the day's light) the normal view has. Ray tracing's
 	# lightmap has it in already; the sky and fog get it here.
 	var mood: Color = store.mood.color
-	if _rt:
-		screen.modulate = Color.WHITE
-		env.background_color = SKY * mood
-		env.fog_light_color = SKY * mood
-	else:
-		screen.modulate = Color.WHITE.lerp(mood, 0.55)
-		env.background_color = SKY
-		env.fog_light_color = SKY
+	var night := clampf((Game.minute - 17 * 60) / 180.0, 0.0, 1.0)
+	var horizon := SKY.lerp(SKY_NIGHT, night)
+	_sky_mat.set_shader_parameter("night", night)
+	env.background_color = horizon
+	env.fog_light_color = horizon
+	screen.modulate = Color.WHITE if _rt else Color.WHITE.lerp(mood, 0.55)
 	# Looking: the right stick, and Left / Right on the arrow keys.
 	if not Game.menu_open and not get_tree().paused:
 		var stick := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
@@ -286,6 +311,8 @@ func _process(delta: float) -> void:
 	var at := to_3d(player.position, EYE + (sin(_bob) * 0.025 if moving else 0.0))
 	camera.position = at
 	camera.rotation = Vector3(pitch, yaw, 0.0)
+	sky.position = at
+	_walk = move_toward(_walk, 1.0 if moving else 0.0, delta * 4.0)
 	_frame += 1
 	_sync(_frame % RESYNC_EVERY == 0)
 	if _rt:
@@ -453,10 +480,64 @@ func _draw_crosshair() -> void:
 		var mop: Texture2D = Player.MOP_TEXTURE
 		var at := Vector2(crosshair.size.x * 0.72, crosshair.size.y - mop.get_height() * k * 0.9)
 		crosshair.draw_texture_rect(mop, Rect2(at, mop.get_size() * k), false)
-	else:
+	elif player.weapon_shown() != "":
 		_draw_weapon(k)
+	else:
+		_draw_hands(k)
 	if player._hurt_flash > 0.0 or player.knocked_out > 0.0:  # (you got hit)
 		crosshair.draw_rect(Rect2(Vector2.ZERO, crosshair.size), Color(0.8, 0.0, 0.0, 0.35 if player.knocked_out > 0.0 else 0.25))
+
+
+## Your zombie hands, when they're free, coming up from the bottom corners:
+## they sway as you walk, reach out when you use something, work away
+## while you stock or ring up, and in a fist fight they're up and punching.
+## As light or dark as where you're standing.
+func _draw_hands(k: float) -> void:
+	if player.knocked_out > 0.0:
+		return
+	var w := crosshair.size.x
+	var h := crosshair.size.y
+	var size := HAND_IDLE.get_size() * k * 2.0
+	var t := Time.get_ticks_msec() / 1000.0
+	var tex := HAND_IDLE
+	var lift: Array[float] = [0.0, 0.0]  # left, right: up (in hand heights)
+	var inward: Array[float] = [0.0, 0.0]  # toward the middle (in screen widths)
+	var breathe := sin(t * 1.7) * 0.012
+	for i in 2:
+		lift[i] = breathe + absf(sin(_bob + i * PI * 0.5)) * 0.035 * _walk
+	var fists := player.fight_t > 0.0 and Game.war.weapon() == "fists"
+	if player.is_busy():  # stocking, ringing up, scanning: hands at work
+		tex = HAND_REACH
+		for i in 2:
+			lift[i] += 0.16 + sin(t * 13.0 + i * 2.2) * 0.04
+			inward[i] += 0.04
+	elif player.reach_t > 0.0:
+		var p := sin((1.0 - player.reach_t / Player.REACH_SECONDS) * PI)
+		tex = HAND_REACH if p > 0.25 else HAND_IDLE
+		for i in 2:
+			lift[i] += 0.22 * p
+			inward[i] += 0.06 * p
+	elif fists:  # up, guarding; the right one punches
+		for i in 2:
+			lift[i] += 0.14
+			inward[i] += 0.03
+		if player._swing > 0.0:
+			var p := sin((1.0 - player._swing / 0.2) * PI)
+			lift[1] += 0.2 * p
+			inward[1] += 0.12 * p
+	var tint := light_at(player.position) if _rt else screen.modulate
+	for i in 2:
+		# where the bottom of the arm is (off the bottom of the screen), and
+		# the arm leaning in toward the middle; the left hand is the right
+		# one mirrored
+		var side := -1.0 if i == 0 else 1.0
+		var foot := Vector2(w * (0.5 + side * (0.25 - inward[i])), h + size.y * (0.45 - lift[i]))
+		var turn := -side * (HAND_LEAN - inward[i] * 0.8)
+		var flip := Vector2(side, 1.0)
+		var pivot := Vector2(size.x * 0.5, size.y)
+		crosshair.draw_set_transform(foot - (pivot * flip).rotated(turn), turn, flip)
+		crosshair.draw_texture_rect(tex, Rect2(Vector2.ZERO, size), false, tint)
+	crosshair.draw_set_transform(Vector2.ZERO)
 
 
 ## The nunchucks or the Glock in your hand in a fight (the gang war), big
@@ -531,6 +612,8 @@ func _kind_of(n: Node) -> String:
 		return "rack"
 	if n is RivalShelf:
 		return "box"
+	if n is Register or n is Computer or n is ShopCounter or (n is RivalDesk and not n.is_board):
+		return "counter"
 	if n is Sprite2D:
 		var tex: Texture2D = (n as Sprite2D).texture
 		return "wall" if tex and tex.resource_path.get_file().begins_with("wall_") else "skip"
@@ -541,6 +624,12 @@ func _kind_of(n: Node) -> String:
 				return "wall"
 			if f.begins_with("shop_shelf"):
 				return "box"
+			if f.begins_with("prop_car"):
+				return "car"
+			if f.begins_with("prop_fence"):
+				return "fence"
+			if f == "register.png":
+				return "counter"  # (a branch store's)
 		return "sprite"
 	if n is Interactable:
 		return "sprite"
@@ -554,6 +643,15 @@ func _sync_person(n: Node, m: Array) -> void:
 		s = _billboard()
 		world.add_child(s)
 		m[2] = s
+		if not _rt:  # a soft shadow under them (ray tracing casts real ones)
+			var shadow := MeshInstance3D.new()
+			var w := SHADOW_SIZE.x / 2.0 / s.scale.x
+			var d := SHADOW_SIZE.y / 2.0
+			shadow.mesh = FpArt.quad_mesh([Vector3(-w, 0, -d), Vector3(w, 0, -d), Vector3(w, 0, d), Vector3(-w, 0, d)])
+			shadow.material_override = FpArt.shadow_material()
+			shadow.position.y = 0.012
+			shadow.name = "Shadow"
+			s.add_child(shadow)
 	var tex := sp.texture
 	s.visible = n.visible and sp.visible and tex != null and (n as CanvasItem).modulate.a > 0.02
 	if not s.visible:
@@ -594,6 +692,12 @@ func _sync_thing(n: Node, m: Array) -> void:
 			built = _rack(n)
 		"box":
 			built = _box(n)
+		"counter":
+			built = _counter_model(n)
+		"car":
+			built = _car(n)
+		"fence":
+			built = _fence(n)
 		"sprite":
 			built = _sprite_thing(n)
 	m[2] = built
@@ -609,6 +713,8 @@ func _signature(n: Node, kind: String) -> String:
 			return "%s|%d|%s|%d" % [pos, n.rotation_step, n.product_id, n.stock]
 		"rack":
 			return "%s|%d|%s" % [pos, n.rotation_step, ",".join(n.boxes.map(func(b): return b.product_id))]
+		"counter":
+			return "%s|%d|%s|%s" % [pos, n.get("rotation_step") if n.get("rotation_step") != null else 0, _counter_texture(n).get_rid(), n.get("jammed")]
 		"sprite":
 			var layers: Array = n.look_3d()
 			return "%s|%s" % [pos, ",".join(layers.map(func(l): return "%s%s%s" % [l[0].get_rid() if l[0] else 0, l[1], l[2] if l.size() > 2 else false]))]
@@ -777,6 +883,89 @@ func _wall(n: Node2D) -> Node3D:
 	return mi
 
 
+## The sprite a counter is drawn with, seen from the front.
+func _counter_texture(n: Node) -> Texture2D:
+	if n is Prop:
+		return (n as Prop).textures[0]
+	if n is SelfCheckout:
+		return SelfCheckout.SELF_TEXTURE
+	if n is Register:
+		return Register.TEXTURE
+	if n is Computer:
+		return Computer.TEXTURE
+	return n.texture
+
+
+## A counter in 3D (FpModels): its box from the art, and what stands on it
+## (a till, a self-checkout's screen and pole, the computer, Bone Mart's
+## cash box, or the little shops' wares as a billboard).
+func _counter_model(n: Interactable) -> Node3D:
+	var tex := _counter_texture(n)
+	var back: Texture2D = Interactable.view_of(tex, 2)[0]
+	var body := FpModels.counter(tex, back if back != tex else null)
+	if not body.has_meta("top"):
+		body.queue_free()
+		return _sprite_thing(n)
+	var h: float = body.get_meta("top")
+	if n is SelfCheckout:
+		FpModels.self_checkout_parts(body, h, n.jammed)
+	elif n is Register or n is Prop:
+		FpModels.register_machine(body, h)
+	elif n is Computer:
+		FpModels.computer_parts(body, h)
+	elif n is RivalDesk:
+		FpModels.cash_box(body, h)
+	else:  # the shops' counters: candles, bottles, a skull...
+		var layers: Array = n.look_3d()
+		if not layers.is_empty():
+			var layer: Array = layers[0]
+			var on_top := _billboard()
+			on_top.texture = FpArt.above(layer[0], roundi(h * PX_UP))
+			on_top.flip_h = layer.size() > 2 and layer[2]
+			var size: Vector2 = on_top.texture.get_size()
+			var top_left: Vector2 = layer[1]
+			on_top.offset = Vector2(top_left.x + size.x / 2.0, -(top_left.y + size.y / 2.0))
+			body.add_child(on_top)
+	body.position = to_3d(n.position)
+	var step: int = n.get("rotation_step") if n.get("rotation_step") != null else 0
+	body.rotation.y = posmod(step, 4) * PI / 2.0
+	for c in body.get_children():
+		if c is Sprite3D:
+			c.rotation.y = -body.rotation.y  # (a billboard: this only undoes the turn)
+	return body
+
+
+## A wrecked car (FpModels.car): its sprite is drawn from its front cell,
+## so it's half a cell back from there.
+func _car(n: Prop) -> Node3D:
+	var model := FpModels.car(n.textures[0])
+	model.position = to_3d(n.position) + Vector3(-0.5, 0, 0)
+	return model
+
+
+## Chain-link fence panels on the cell's edges (FpModels.fence_panel), and
+## anything else on the cell (a FOR SALE sign) as a billboard.
+func _fence(n: Prop) -> Node3D:
+	var root := Node3D.new()
+	root.position = to_3d(n.position)
+	var rest := []
+	for t in n.textures:
+		var f := t.resource_path.get_file()
+		if f.begins_with("prop_fence"):
+			root.add_child(FpModels.fence_panel(t, f.begins_with("prop_fence_x")))
+		else:
+			rest.append([t, -n.origin, false])
+	if not rest.is_empty():
+		var flat := _flatten(rest)
+		var s := _billboard()
+		s.texture = flat[0]
+		var size: Vector2 = flat[0].get_size()
+		var top_left: Vector2 = flat[1]
+		s.offset = Vector2(top_left.x + size.x / 2.0, -(top_left.y + size.y / 2.0))
+		root.add_child(s)
+	return root
+
+
 func _box(n: Interactable) -> Node3D:
 	var tex: Texture2D = n.TEXTURE if n is RivalShelf else (n as Prop).textures[0]
 	return _box_from(tex, n.position, n.rotation_step)
@@ -875,17 +1064,24 @@ func _build_floor() -> void:
 		if store.town.turf:
 			inside.append_array(store.town.turf.roofed_cells())
 	var ceiling_h := FpArt.box_height(load("res://assets/sprites/wall_rival_tall.png")) / PX_UP
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = FpArt.floor_mesh()
-	mm.instance_count = inside.size()
-	for i in inside.size():
-		var cell: Vector2i = inside[i]
-		mm.set_instance_transform(i, Transform3D(Basis(), Vector3(cell.x, ceiling_h, cell.y)))
-	var ceiling := MultiMeshInstance3D.new()
-	ceiling.multimesh = mm
-	ceiling.material_override = FpArt.color_material(CEILING)
-	_floor.add_child(ceiling)
+	var tiles := [[], []]  # ceiling tiles: plain, and one in five with a water stain
+	for cell: Vector2i in inside:
+		tiles[1 if ((cell.x * 92821) ^ (cell.y * 68917)) % 5 == 0 else 0].append(cell)
+	for k in tiles.size():
+		var cells: Array = tiles[k]
+		if cells.is_empty():
+			continue
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = FpArt.floor_mesh()
+		mm.instance_count = cells.size()
+		for i in cells.size():
+			var cell: Vector2i = cells[i]
+			mm.set_instance_transform(i, Transform3D(Basis(), Vector3(cell.x, ceiling_h, cell.y)))
+		var ceiling := MultiMeshInstance3D.new()
+		ceiling.multimesh = mm
+		ceiling.material_override = FpArt.material(CEILING_TILES[k], true)
+		_floor.add_child(ceiling)
 	var lamps := MultiMesh.new()
 	lamps.transform_format = MultiMesh.TRANSFORM_3D
 	lamps.mesh = FpArt.floor_mesh()

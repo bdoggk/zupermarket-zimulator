@@ -117,6 +117,97 @@ static func prism_height(tex: Texture2D) -> int:
 	return h
 
 
+## The box at the bottom of a counter's sprite (a register, the shops'
+## counters), which can be narrower than a cell: {"x0", "x1": its leftmost
+## and rightmost columns, "top", "bottom": the rows of its left corner, top
+## and bottom}; {} if the sprite has no box at the bottom.
+static func counter_box(tex: Texture2D) -> Dictionary:
+	var key := "cbx:%s" % tex.get_rid()
+	if _cache.has(key):
+		return _cache[key]
+	var src := _image(tex)
+	var w := src.get_width()
+	var h := src.get_height()
+	var x0 := -1
+	var x1 := -1
+	for x in w:
+		for y in h:
+			if src.get_pixel(x, y).a > 0.5:
+				if x0 < 0:
+					x0 = x
+				x1 = x
+				break
+	var box := {}
+	if x0 >= 0:
+		var top := -1
+		var bottom := -1
+		for y in h:
+			if src.get_pixel(x0, y).a > 0.5:
+				if top < 0:
+					top = y
+				bottom = y
+		if bottom - top >= 6:
+			box = {"x0": x0, "x1": x1, "top": top, "bottom": bottom}
+	_cache[key] = box
+	return box
+
+
+## One side of a counter's box (see counter_box), unskewed into a 32-wide
+## rectangle as tall as the box: the left side or the right one.
+static func counter_face(tex: Texture2D, left := true) -> Texture2D:
+	var key := "cface:%s:%s" % [tex.get_rid(), left]
+	if _cache.has(key):
+		return _cache[key]
+	var box := counter_box(tex)
+	var src := _image(tex)
+	var hw := (int(box.x1) - int(box.x0) + 1) / 2.0
+	var tall := int(box.bottom) - int(box.top) + 1
+	var out := Image.create(32, tall, false, Image.FORMAT_RGBA8)
+	for u in 32:
+		var x: int
+		var base: float
+		if left:
+			x = int(box.x0) + int(u * hw / 32.0)
+			base = int(box.bottom) + (x - int(box.x0)) * 0.5
+		else:
+			x = int(box.x0) + int(hw) + int(u * hw / 32.0)
+			base = int(box.bottom) + (int(box.x1) - x) * 0.5
+		for v in tall:
+			var y := int(base) - tall + 1 + v
+			if x >= 0 and y >= 0 and x < src.get_width() and y < src.get_height():
+				var c := src.get_pixel(x, y)
+				out.set_pixel(u, v, Color(c.r, c.g, c.b, 1.0) if c.a > 0.1 else Color(0, 0, 0, 0))
+	var t := ImageTexture.create_from_image(out)
+	_cache[key] = t
+	return t
+
+
+## The color of a counter's top (the commonest one near its left corner,
+## where nothing stands on it).
+static func counter_top_color(tex: Texture2D) -> Color:
+	var key := "ctop:%s" % tex.get_rid()
+	if _cache.has(key):
+		return _cache[key]
+	var box := counter_box(tex)
+	var src := _image(tex)
+	var count := {}
+	for x in range(int(box.x0) + 3, int(box.x0) + 11):
+		for y in range(int(box.top) - 2, int(box.top) + 3):
+			if x < src.get_width() and y >= 0 and y < src.get_height():
+				var c := src.get_pixel(x, y)
+				if c.a > 0.5:
+					var k := c.to_html(false)
+					count[k] = int(count.get(k, 0)) + 1
+	var best := Color(0.6, 0.6, 0.6)
+	var most := 0
+	for k: String in count:
+		if count[k] > most:
+			most = count[k]
+			best = Color.html(k)
+	_cache[key] = best
+	return best
+
+
 ## The sprite with its box (prism_height `h`) cut out: what stands on top
 ## of a counter (a register, a computer), for a billboard.
 static func above(tex: Texture2D, h: int) -> Texture2D:
@@ -259,25 +350,181 @@ static func color_material(c: Color, lit := true) -> Material:
 ## middle: surface 0 is the front (facing +z), 1 the back, 2 the two sides,
 ## 3 the top. Each side shows its whole texture.
 static func box_mesh(height: float, width := 1.0) -> ArrayMesh:
-	var key := "box:%.3f:%.3f" % [height, width]
+	return sized_box_mesh(Vector3(width, height, width))
+
+
+## A box `size` big (x, height, z), its origin on the floor in the middle,
+## with the surfaces of box_mesh().
+static func sized_box_mesh(size: Vector3) -> ArrayMesh:
+	var key := "box:%.3f:%.3f:%.3f" % [size.x, size.y, size.z]
 	if _cache.has(key):
 		return _cache[key]
-	var w := width / 2.0
+	var w := size.x / 2.0
+	var d := size.z / 2.0
+	var height := size.y
 	var mesh := ArrayMesh.new()
 	# front (+z)
-	_quad(mesh, [Vector3(-w, height, w), Vector3(w, height, w), Vector3(w, 0, w), Vector3(-w, 0, w)])
+	_quad(mesh, [Vector3(-w, height, d), Vector3(w, height, d), Vector3(w, 0, d), Vector3(-w, 0, d)])
 	# back (-z), seen from behind
-	_quad(mesh, [Vector3(w, height, -w), Vector3(-w, height, -w), Vector3(-w, 0, -w), Vector3(w, 0, -w)])
+	_quad(mesh, [Vector3(w, height, -d), Vector3(-w, height, -d), Vector3(-w, 0, -d), Vector3(w, 0, -d)])
 	# the two sides (+x and -x) in one surface
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_add_quad(st, [Vector3(w, height, w), Vector3(w, height, -w), Vector3(w, 0, -w), Vector3(w, 0, w)])
-	_add_quad(st, [Vector3(-w, height, -w), Vector3(-w, height, w), Vector3(-w, 0, w), Vector3(-w, 0, -w)])
+	_add_quad(st, [Vector3(w, height, d), Vector3(w, height, -d), Vector3(w, 0, -d), Vector3(w, 0, d)])
+	_add_quad(st, [Vector3(-w, height, -d), Vector3(-w, height, d), Vector3(-w, 0, d), Vector3(-w, 0, -d)])
 	st.commit(mesh)
 	# top
-	_quad(mesh, [Vector3(-w, height, -w), Vector3(w, height, -w), Vector3(w, height, w), Vector3(-w, height, w)])
+	_quad(mesh, [Vector3(-w, height, -d), Vector3(w, height, -d), Vector3(w, height, d), Vector3(-w, height, d)])
 	_cache[key] = mesh
 	return mesh
+
+
+## A box of one color (shaded: the top lightest, the sides darker), `size`
+## big with its origin on the floor in the middle, in one surface: for
+## flat_material(). `bottom`: with a bottom too (something off the floor).
+static func color_box_mesh(size: Vector3, color: Color, bottom := false) -> ArrayMesh:
+	var key := "cbox:%s:%s:%s" % [size, color.to_html(), bottom]
+	if _cache.has(key):
+		return _cache[key]
+	var w := size.x / 2.0
+	var d := size.z / 2.0
+	var h := size.y
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_add_quad(st, [Vector3(-w, h, d), Vector3(w, h, d), Vector3(w, 0, d), Vector3(-w, 0, d)], color)
+	_add_quad(st, [Vector3(w, h, -d), Vector3(-w, h, -d), Vector3(-w, 0, -d), Vector3(w, 0, -d)], color)
+	_add_quad(st, [Vector3(w, h, d), Vector3(w, h, -d), Vector3(w, 0, -d), Vector3(w, 0, d)], color)
+	_add_quad(st, [Vector3(-w, h, -d), Vector3(-w, h, d), Vector3(-w, 0, d), Vector3(-w, 0, -d)], color)
+	_add_quad(st, [Vector3(-w, h, -d), Vector3(w, h, -d), Vector3(w, h, d), Vector3(-w, h, d)], color)
+	if bottom:
+		_add_quad(st, [Vector3(-w, 0, d), Vector3(w, 0, d), Vector3(w, 0, -d), Vector3(-w, 0, -d)], color)
+	var mesh := st.commit()
+	_cache[key] = mesh
+	return mesh
+
+
+## The material for color_box_mesh(): its colors are in the mesh.
+static func flat_material() -> Material:
+	return material(null, true)
+
+
+## Something that glows (a screen, a lamp): never dimmed by the lights,
+## ray traced or not. The colors are in the mesh, times `tex` if there's one.
+static func glow_material(tex: Texture2D = null) -> Material:
+	var key := "glow:%s" % (tex.get_rid() if tex else "none")
+	if _cache.has(key):
+		return _cache[key]
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_texture = tex
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.vertex_color_use_as_albedo = true
+	_cache[key] = m
+	return m
+
+
+## A soft dark blot for under someone's feet (first person without ray
+## tracing).
+static func shadow_material() -> Material:
+	if _cache.has("shadow"):
+		return _cache["shadow"]
+	var g := Gradient.new()
+	g.set_color(0, Color(0, 0, 0, 0.42))
+	g.set_color(1, Color(0, 0, 0, 0))
+	g.add_point(0.55, Color(0, 0, 0, 0.3))
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	t.width = 32
+	t.height = 32
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_texture = t
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.vertex_color_use_as_albedo = false
+	_cache["shadow"] = m
+	return m
+
+
+## One flat quad: corners top-left, top-right, bottom-right, bottom-left
+## as you look at the side that shows (the texture fills it).
+static func quad_mesh(corners: Array) -> ArrayMesh:
+	var key := "quad:%s" % [corners]
+	if _cache.has(key):
+		return _cache[key]
+	var mesh := ArrayMesh.new()
+	_quad(mesh, corners)
+	_cache[key] = mesh
+	return mesh
+
+
+## The commonest color in a sprite (a car's paint).
+static func main_color(tex: Texture2D) -> Color:
+	var key := "main:%s" % tex.get_rid()
+	if _cache.has(key):
+		return _cache[key]
+	var src := _image(tex)
+	var count := {}
+	for y in src.get_height():
+		for x in src.get_width():
+			var c := src.get_pixel(x, y)
+			if c.a > 0.5:
+				var k := c.to_html(false)
+				count[k] = int(count.get(k, 0)) + 1
+	var best := Color(0.5, 0.5, 0.5)
+	var most := 0
+	for k: String in count:
+		if count[k] > most:
+			most = count[k]
+			best = Color.html(k)
+	_cache[key] = best
+	return best
+
+
+## A car's paint, faded and blotchy, with rust spots (32x16).
+static func rust_texture(paint: Color) -> Texture2D:
+	var key := "rust:%s" % paint.to_html(false)
+	if _cache.has(key):
+		return _cache[key]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(key)
+	var img := Image.create(32, 16, false, Image.FORMAT_RGBA8)
+	for y in 16:
+		for x in 32:
+			var k := 1.0 + rng.randf_range(-0.035, 0.035)
+			img.set_pixel(x, y, Color(paint.r * k, paint.g * k, paint.b * k))
+	var rust := Color(0.5, 0.29, 0.15)
+	for i in 14:
+		var at := Vector2i(rng.randi_range(0, 31), rng.randi_range(0, 15))
+		img.set_pixelv(at, rust)
+		if rng.randf() < 0.5:
+			img.set_pixelv(Vector2i(mini(at.x + 1, 31), at.y), rust.darkened(0.2))
+	for x in 32:  # the line along the doors
+		img.set_pixel(x, 7, img.get_pixel(x, 7).darkened(0.18))
+	var t := ImageTexture.create_from_image(img)
+	_cache[key] = t
+	return t
+
+
+## A green computer screen with lines of text on it (16x12).
+static func screen_texture() -> Texture2D:
+	if _cache.has("screen"):
+		return _cache["screen"]
+	var img := Image.create(16, 12, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.07, 0.2, 0.1))
+	var lines := [10, 6, 12, 8, 4]
+	for i in lines.size():
+		for x in lines[i]:
+			img.set_pixel(2 + x, 2 + i * 2, Color(0.45, 0.95, 0.5))
+	img.set_pixel(2, 11, Color(0.45, 0.95, 0.5))  # the cursor
+	var t := ImageTexture.create_from_image(img)
+	_cache["screen"] = t
+	return t
 
 
 ## A flat square on the floor, one cell across (for floor tiles, puddles,
@@ -300,11 +547,24 @@ static func _quad(mesh: ArrayMesh, c: Array) -> void:
 	st.commit(mesh)
 
 
-static func _add_quad(st: SurfaceTool, c: Array) -> void:
+## How bright a side facing `n` is drawn: the top full, the front and back
+## a little darker, the left and right sides darker still, so boxes look
+## solid even without ray tracing (the iso art is shaded the same way).
+static func shade(n: Vector3) -> float:
+	if n.y > 0.5:
+		return 1.0
+	if n.y < -0.5:
+		return 0.6
+	return 0.93 if absf(n.z) >= absf(n.x) else 0.76
+
+
+static func _add_quad(st: SurfaceTool, c: Array, color := Color.WHITE) -> void:
 	var uv := [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]
 	var n: Vector3 = (c[3] - c[0]).cross(c[1] - c[0]).normalized()  # (the side that shows; ray tracing lights it from there)
+	var k := shade(n)
+	var col := Color(color.r * k, color.g * k, color.b * k, color.a)
 	for i in [0, 1, 2, 0, 2, 3]:
-		st.set_color(Color.WHITE)
+		st.set_color(col)
 		st.set_normal(n)
 		st.set_uv(uv[i])
 		st.add_vertex(c[i])

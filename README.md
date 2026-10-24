@@ -38,6 +38,26 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.15.0
+
+First person looks a lot better:
+- **Real 3D counters.** Registers, self-checkouts, the store computer, Bone Mart's counter
+  and the little shops' counters are solid counters now, with the till, the screen and
+  pole, the monitor and keyboard, or the cash box standing on top. A self-checkout's light
+  goes red when it jams.
+- **3D cars and fences.** The wrecked cars in the street are 3D cars (rust, windows, tires),
+  and the chain-link fences around the lots are see-through panels.
+- **A sky.** Clouds drift over the town by day; at night there are stars and a full moon.
+- **Ceiling tiles** over the stores (some with water stains), shaded sides on walls,
+  shelves and counters, and a soft shadow under everyone. With Ray tracing on, everyone
+  casts real shadows instead.
+- **Your zombie hands** are at the bottom of the screen. They sway as you walk and reach
+  out when you use something, and they work away while you stock a shelf or ring someone
+  up. In a fist fight they come up, and the right one punches.
+- **Sharper.** First person draws at full resolution on PC now. **Options > First person**
+  switches between **Sharp** and **Chunky** (half resolution, with big pixels like the
+  art). Phones start on Chunky because it's faster.
+
 ## What's new in 0.14.0
 
 - **Ray tracing.** A new graphics level, **Options > Graphics > Ray tracing**: every
@@ -549,6 +569,7 @@ It has Resume, Save Game, Options, Save & Main Menu, and Save & Quit (PC).
 | Show FPS | A frame counter next to the clock |
 | Sound | How loud the game is, from off to 100% (a slider) |
 | UI size | How big the menus, buttons and text are: 70% to 130%. The store itself stays the same size. On a small window it only goes as big as still fits |
+| First person | **Sharp**: the 3D view at full resolution (PC's default). **Chunky**: half resolution, with big pixels like the art (faster; phones' default) |
 | Graphics | **Low**: simple lighting (older phones, battery life). **Medium**: store lights with darker corners. **High**: adds a flickering light tube and floating dust. **Ray tracing**: High, plus every light casts real shadows (shelves, walls, people), in both views. The default on PC (phones start on Medium) |
 | Automatic updates | Windows: new versions download by themselves and start the next time you open the game. Android: the main menu says when a new version is out. On by default (Windows and Android only) |
 | Vibration | Phone vibration and controller rumble. It turns on when a phone or controller is available, and you feel it when you make a sale, stock a shelf, scan, mop, level up, or when a zombie storms out |
@@ -1117,6 +1138,7 @@ scripts/
   ui/war_cutscene.gd   The gang war starting (store level 15)
   first_person.gd      First person: the store in 3D, built from the 2D one, and the controls
   fp_art.gd            Turns the iso art into what first person needs (flat floor tiles, box sides)
+  fp_models.gd         First person's little 3D models: counters and what's on them, cars, fences
   ui/pause_menu.gd     The in-game pause menu
   ui/message_log.gd    Recent messages (M, the Log button, or the pause menu)
   ui/options_menu.gd   The Options screen (main menu and pause menu)
@@ -1127,6 +1149,7 @@ shaders/
   rt_light.gdshader    Ray tracing: traces the shadow rays, one quad per light
   rt_canvas.gdshader   Ray tracing in the normal view (the floor, boxes, people)
   rt_fp.gdshader       Ray tracing in first person
+  fp_sky.gdshader      First person's sky: clouds by day, stars and the moon at night
 assets/sprites/        All the pixel art
 assets/sounds/         Sounds (.ogg / .wav). A shopper kind's "sound" in brand.gd is what it growls
 tools/make_sprites.py  The Python script that draws the placeholder art (for both games)
@@ -1237,7 +1260,7 @@ godot --headless --path . --fixed-fps 60 res://tests/rack_test.tscn   # picking 
 godot --headless --path . --fixed-fps 60 res://tests/rules_test.tscn  # how staff work: Stock switches, stocker rules, when the manager orders
 godot --headless --path . --fixed-fps 60 res://tests/levels_test.tscn # levels with no cap, levels 7-14, decorations, the new upgrades
 godot --headless --path . -s res://tests/loan_test.gd                 # loans, the payments, Count Vlad's visit and starting over
-godot --headless --path . --fixed-fps 60 res://tests/fp_test.tscn     # first person: the 3D store, walking, looking, using, tapping
+godot --headless --path . --fixed-fps 60 res://tests/fp_test.tscn     # first person: the 3D store and its models, sky, shadows, Sharp / Chunky, walking, looking, using, tapping
 godot --headless --path . --fixed-fps 60 res://tests/war_test.tscn    # the gang war: land, branches, raids both ways, fighting, the cutscene
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/rt_test.tscn  # ray tracing: the setting, the height map, shadows read back from the lightmap, both views
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)

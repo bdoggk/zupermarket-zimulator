@@ -49,7 +49,8 @@ func _ready() -> void:
 	var floor_tiles := 0
 	for mmi in fp._floor.get_children():
 		var mat: Material = mmi.material_override if mmi is MultiMeshInstance3D else null
-		if (mat is StandardMaterial3D and mat.albedo_texture != null) or (mat is ShaderMaterial and mat.get_shader_parameter("use_texture")):
+		var tex: Texture2D = mat.albedo_texture if mat is StandardMaterial3D else (mat.get_shader_parameter("albedo_tex") if mat is ShaderMaterial else null)
+		if tex != null and not tex in FirstPerson.CEILING_TILES:
 			floor_tiles += mmi.multimesh.instance_count
 	check(floor_tiles == store.floor_layer.tiles().size(), "every floor tile, the town's too (%d)" % floor_tiles)
 	var cam := fp.camera.position
@@ -63,6 +64,52 @@ func _ready() -> void:
 	await _frames(fp.RESYNC_EVERY + 2)
 	var after: Node3D = fp._mirrors[sh.get_instance_id()][2]
 	check(after != before and is_instance_valid(after), "stocking a shelf shows on it")
+
+	# ---- 0.15: counters, cars and fences in 3D; the sky, the ceiling, shadows, the picture
+	var reg: Array = fp._mirrors.get(store.register.get_instance_id(), [])
+	check(not reg.is_empty() and reg[1] == "counter" and reg[2] is MeshInstance3D and reg[2].get_child_count() >= 6, "the register is a 3D counter with a till on it")
+	var desk: Array = fp._mirrors.get(store.computer.get_instance_id(), [])
+	check(not desk.is_empty() and desk[1] == "counter" and desk[2].get_child_count() >= 3, "the computer is on a 3D desk")
+	var cars := 0
+	var fences := 0
+	var shop_counters := 0
+	for m: Array in fp._mirrors.values():
+		if not is_instance_valid(m[2]):
+			continue
+		if m[1] == "car" and m[2].get_child_count() > 10:
+			cars += 1
+		elif m[1] == "fence":
+			for c in m[2].get_children():
+				if c is MeshInstance3D:
+					fences += 1
+		elif m[1] == "counter" and m[0] is ShopCounter:
+			shop_counters += 1
+	check(cars > 0, "wrecked cars are 3D models (%d)" % cars)
+	check(fences > 4, "the lots' fences are chain-link panels (%d)" % fences)
+	check(shop_counters == store.town.shop_counters.size(), "the shops' counters are 3D too (%d)" % shop_counters)
+	check(fp.sky != null and fp.sky.is_visible_in_tree() and fp.env.fog_sky_affect == 0.0, "there's a sky")
+	var ceiling := {}
+	for mmi in fp._floor.get_children():
+		var mat: Material = mmi.material_override if mmi is MultiMeshInstance3D else null
+		var tex: Texture2D = mat.albedo_texture if mat is StandardMaterial3D else (mat.get_shader_parameter("albedo_tex") if mat is ShaderMaterial else null)
+		if tex in FirstPerson.CEILING_TILES:
+			ceiling[tex] = true
+	check(ceiling.size() == 2, "the ceiling has tiles (some with water stains)")
+	Settings.set_graphics(Settings.Graphics.HIGH)
+	await _frames(fp.RESYNC_EVERY + 2)
+	var people := _people_shadows(fp)
+	check(people.x > 0 and people.y == people.x, "without ray tracing, people have a soft shadow under them (%d of %d)" % [people.y, people.x])
+	Settings.set_graphics(Settings.Graphics.RAY_TRACING)
+	await _frames(fp.RESYNC_EVERY + 2)
+	people = _people_shadows(fp)
+	check(people.x > 0 and people.y == 0, "with it, they cast real ones instead")
+	var win: Vector2 = get_viewport().get_visible_rect().size
+	Settings.set_fp_sharp(false)
+	await _frames(2)
+	check(fp.view.size == Vector2i(int(win.x / 2), int(win.y / 2)), "Chunky: half resolution (%s)" % fp.view.size)
+	Settings.set_fp_sharp(true)
+	await _frames(2)
+	check(fp.view.size == Vector2i(win), "Sharp: full resolution (%s)" % fp.view.size)
 
 	# ---- walking the way you look
 	var spot := _open_spot(store)
@@ -136,6 +183,9 @@ func _ready() -> void:
 		fp.yaw = PI  # turn around
 		await _frames(4)
 		check(p.focused == b, "turn around: the other one")
+		p.use(b)
+		check(p.reach_t > 0.0, "using it: your hands reach out")
+		p.cancel_action()
 		check(hud.prompt_label.text != "", "with the prompt: " + hud.prompt_label.text)
 		# Popups float over what they're about, wherever it is on the screen.
 		var mid: Vector2 = get_viewport().get_visible_rect().size / 2.0
@@ -187,6 +237,18 @@ func _ready() -> void:
 	Settings.set_first_person(was_setting)
 	print("RESULT: %d failure%s" % [fails, "" if fails == 1 else "s"])
 	get_tree().quit(1 if fails > 0 else 0)
+
+
+## How many people first person shows (x), and how many of them have a
+## soft shadow under them (y).
+func _people_shadows(fp: FirstPerson) -> Vector2i:
+	var n := Vector2i.ZERO
+	for m: Array in fp._mirrors.values():
+		if m[1] == "person" and is_instance_valid(m[2]):
+			n.x += 1
+			if m[2].has_node("Shadow"):
+				n.y += 1
+	return n
 
 
 ## A walkable cell with room all around it.

@@ -10,6 +10,8 @@ extends Node
 ##   Frame rate    a cap on the frames per second (or none)
 ##   Graphics      Low / Medium / High / Ray tracing (see GRAPHICS_INFO);
 ##                 PC starts on Ray tracing, phones on Medium
+##   First person  Sharp (full resolution, PC's default) or Chunky (half
+##                 resolution, big pixels; phones' default)
 ##   UI size       how big the menus, buttons and text are (UI_SCALES); the
 ##                 store itself stays the same size (see UI.fit_layer)
 ##   VSync         on/off (on: the frame rate matches the screen)
@@ -61,6 +63,7 @@ var vibration := true
 var ui_scale := 1.0
 var auto_update := true
 var first_person := false  # the store in first person (V); remembered for next time
+var fp_sharp := true  # first person at full resolution (else half: chunky pixels)
 
 var _applying := false  # we're resizing the window ourselves
 var _save_queued := false
@@ -71,6 +74,7 @@ func _ready() -> void:
 	if is_mobile():
 		graphics = Graphics.MEDIUM
 		fps_limit = 60
+		fp_sharp = false
 	load_settings()
 	apply()
 	Input.joy_connection_changed.connect(func(_device: int, _connected: bool):
@@ -286,6 +290,18 @@ func set_auto_update(on: bool) -> void:
 		Updater.check()
 
 
+func set_fp_sharp(on: bool) -> void:
+	fp_sharp = on
+	save_settings()
+	changed.emit()
+
+
+func fp_sharp_info() -> String:
+	if fp_sharp:
+		return "Sharp: the 3D view at full resolution."
+	return "Chunky: half resolution, with big pixels like the art. Faster on phones."
+
+
 func set_first_person(on: bool) -> void:
 	if first_person == on:
 		return
@@ -332,6 +348,7 @@ func save_settings() -> void:
 	cfg.set_value("controls", "vibration", vibration)
 	cfg.set_value("updates", "automatic", auto_update)
 	cfg.set_value("view", "first_person", first_person)
+	cfg.set_value("view", "fp_sharp", fp_sharp)
 	cfg.save(PATH)
 
 
@@ -357,3 +374,4 @@ func load_settings() -> void:
 	vibration = bool(cfg.get_value("controls", "vibration", vibration))
 	auto_update = bool(cfg.get_value("updates", "automatic", auto_update))
 	first_person = bool(cfg.get_value("view", "first_person", first_person))
+	fp_sharp = bool(cfg.get_value("view", "fp_sharp", fp_sharp))

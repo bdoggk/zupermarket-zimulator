@@ -1,6 +1,7 @@
 extends PanelContainer
 ## The Options screen: display mode, window size (PC), frame rate, graphics
-## level, VSync, an FPS counter, sound volume, vibration and automatic updates
+## level, first person's picture (Sharp / Chunky), VSync, an FPS counter,
+## sound volume, vibration and automatic updates
 ## (Windows and Android). Changes apply right away and
 ## are saved. "Controls" shows every key and button (ControlsList). Used by
 ## the main menu and the in-game pause menu.
@@ -21,6 +22,8 @@ var res_right: Button
 var fps_value: Label
 var gfx_value: Label
 var gfx_info: Label
+var fp_value: Label  # first person: Sharp / Chunky
+var fp_info: Label
 var ui_value: Label
 var ui_info: Label
 var vsync_check: CheckButton
@@ -83,6 +86,8 @@ func _build_settings(parent: Control) -> void:
 
 	gfx_value = _selector(col, "Graphics", _change_graphics)[0]
 	gfx_info = _info(col)
+	fp_value = _selector(col, "First person", func(_step: int): Settings.set_fp_sharp(not Settings.fp_sharp))[0]
+	fp_info = _info(col)
 	ui_value = _selector(col, "UI size", _change_ui_scale)[0]
 	ui_info = _info(col)
 
@@ -349,6 +354,8 @@ func _refresh() -> void:
 	fps_value.text = Settings.fps_name(Settings.fps_limit)
 	gfx_value.text = Settings.GRAPHICS_NAMES[Settings.graphics]
 	gfx_info.text = Settings.GRAPHICS_INFO[Settings.graphics]
+	fp_value.text = "Sharp" if Settings.fp_sharp else "Chunky"
+	fp_info.text = Settings.fp_sharp_info()
 	ui_value.text = Settings.ui_scale_name(Settings.effective_ui_scale())
 	ui_info.text = "How big the menus, buttons and text are. The store itself stays the same size."
 	if Settings.effective_ui_scale() < Settings.ui_scale - 0.001:
