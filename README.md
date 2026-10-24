@@ -24,7 +24,7 @@ over the old one and keep your saves.
 
 **Controls on a handheld:** left stick / d-pad to move, **LT** to sprint, **A** to use,
 **X** to scan a shelf, **Y** for build mode, **RB** to turn things in build mode,
-**Start** to pause (Options > Controls lists everything). Menus (the store computer
+**right stick** up and down to zoom, **Start** to pause (Options > Controls lists everything). Menus (the store computer
 too) work with the d-pad, A and B; in build mode the middle of the screen is the
 cursor (d-pad picks what to buy, A places it). You can tap the touchscreen for anything
 too.
@@ -37,6 +37,31 @@ itself** (see below), and the versions it downloads itself don't get the warning
 It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The two
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
+
+## What's new in 0.15.1
+
+A bug-fix release:
+- **Zoom with a controller.** In the normal view, push the right stick up to zoom in and
+  down to zoom out.
+- **Paint with a controller.** In build mode, Paint is in the d-pad's cycle now: pick a
+  floor or wall color with the d-pad and A, and B closes it.
+- **Boxes behind coolers.** A delivery box behind a cooler, shelf or rack used to be
+  hidden, and tapping it got the cooler. The cooler fades a little now so you can see
+  the box, and tapping the box gets the box.
+- **The level-up box** no longer covers the build bar in build mode or sits on top of the
+  messages.
+- **The top bar** wraps onto a second line when it runs out of room (big UI sizes or a
+  narrow window) instead of running under the 3rd, Log and pause buttons.
+- **First person:** the road's yellow line is a straight dash instead of a jagged one,
+  and Bone Mart's shelves and your branch stores' shelves show what's on them.
+- **Ray tracing:** a shelf you sell or move takes its shadow with it right away (it used
+  to hang on for a moment), and it no longer logs an error when something appears and
+  disappears in the same moment.
+- **The store computer** puts the controller's focus back on the desktop icons properly
+  when you close a window.
+- A new test saves a store with everything in it (the war, the gang, a loan, brews,
+  staff, every kind of furniture), loads it and saves it again, and checks nothing is
+  lost.
 
 ## What's new in 0.15.0
 
@@ -1057,12 +1082,13 @@ up down the street, then charge in together, and you can join the fight.
 | Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-6 switch apps, Esc goes back | Tap |
 
 A gamepad works too: left stick to move, LT or L3 (sprint), A (use), X (scan), Y
-(build), R3 (first / third person; the right stick looks around in first person),
-Start (pause), Back/View (messages), B (back). Every menu works with the d-pad, A and B, the store
-computer and its apps included. In build mode the tile in the middle of the screen is
-the cursor: left stick to look around, d-pad left/right (or LB) to pick what to buy or
-Move / Rotate / Sell / Expand, A to place it (or pick up, sell...), RB to turn it, B to
-cancel. On the store computer the d-pad reaches every button (the markup, Set all prices,
+(build), R3 (first / third person; the right stick looks around in first person, and
+zooms the normal view: up in, down out), Start (pause), Back/View (messages), B (back).
+Every menu works with the d-pad, A and B, the store computer and its apps included. In
+build mode the tile in the middle of the screen is the cursor: left stick to look around,
+d-pad left/right (or LB) to pick what to buy or Move / Rotate / Sell / Paint / Expand, A
+to place it (or pick up, sell...), RB to turn it, B to cancel. On Paint, the d-pad picks
+a floor or wall color and A buys it. On the store computer the d-pad reaches every button (the markup, Set all prices,
 Auto, the window's X and the taskbar too), and LB / RB switch apps.
 
 **Forgot a key?** Pause (Esc) > Options > **Controls** lists them all in the game.

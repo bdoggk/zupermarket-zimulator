@@ -611,7 +611,7 @@ func _kind_of(n: Node) -> String:
 	if n is StorageRack:
 		return "rack"
 	if n is RivalShelf:
-		return "box"
+		return "rival_shelf"
 	if n is Register or n is Computer or n is ShopCounter or (n is RivalDesk and not n.is_board):
 		return "counter"
 	if n is Sprite2D:
@@ -692,6 +692,8 @@ func _sync_thing(n: Node, m: Array) -> void:
 			built = _rack(n)
 		"box":
 			built = _box(n)
+		"rival_shelf":
+			built = _rival_shelf(n)
 		"counter":
 			built = _counter_model(n)
 		"car":
@@ -713,6 +715,8 @@ func _signature(n: Node, kind: String) -> String:
 			return "%s|%d|%s|%d" % [pos, n.rotation_step, n.product_id, n.stock]
 		"rack":
 			return "%s|%d|%s" % [pos, n.rotation_step, ",".join(n.boxes.map(func(b): return b.product_id))]
+		"rival_shelf":
+			return "%s|%d|%s|%d|%s" % [pos, n.rotation_step, n.product_id, n.stock, n.fp_texture().get_rid() if n.fp_texture() else 0]
 		"counter":
 			return "%s|%d|%s|%s" % [pos, n.get("rotation_step") if n.get("rotation_step") != null else 0, _counter_texture(n).get_rid(), n.get("jammed")]
 		"sprite":
@@ -971,18 +975,33 @@ func _box(n: Interactable) -> Node3D:
 	return _box_from(tex, n.position, n.rotation_step)
 
 
+## The front of a shelf of sprite `tex` with `stock` of `product_id` on
+## it, as in the normal view (for a box's front face).
+static func _stocked_front(tex: Texture2D, product_id: String, stock: int) -> Array:
+	var h := FpArt.box_height(tex)
+	var layers := [[FpArt.face(tex, true), Vector2i.ZERO]]
+	if stock > 0 and product_id != "":
+		var icon := Game.icon(product_id)
+		for i in mini(stock, Shelf.SLOTS.size()):
+			var slot: Vector2i = Shelf.SLOTS[i]
+			layers.append([icon, Vector2i(slot.x + 32, h - slot.y - icon.get_height() - 3)])
+	return layers
+
+
+## One of Bone Mart's shelves (or a branch store's), with its stock on it.
+func _rival_shelf(sh: RivalShelf) -> Node3D:
+	var tex: Texture2D = sh.fp_texture() if sh.fp_texture() else RivalShelf.TEXTURE
+	var layers := _stocked_front(tex, sh.product_id, sh.stock)
+	var front := FpArt.composite("rshelf:%s:%s:%d" % [tex.get_rid(), sh.product_id, sh.stock], Vector2i(32, FpArt.box_height(tex)), layers)
+	return _box_from(tex, sh.position, sh.rotation_step, front)
+
+
 ## A shelf (or cooler) with what's on it: the products stand on its front,
 ## as in the normal view, and its label floats over it.
 func _shelf(sh: Shelf) -> Node3D:
 	var tex: Texture2D = Game.FURNITURE[sh.furniture_id].texture
-	var front_face := FpArt.face(tex, true)
 	var h := FpArt.box_height(tex)
-	var layers := [[front_face, Vector2i.ZERO]]
-	if sh.stock > 0 and sh.product_id != "":
-		var icon := Game.icon(sh.product_id)
-		for i in mini(sh.stock, Shelf.SLOTS.size()):
-			var slot: Vector2i = Shelf.SLOTS[i]
-			layers.append([icon, Vector2i(slot.x + 32, h - slot.y - icon.get_height() - 3)])
+	var layers := _stocked_front(tex, sh.product_id, sh.stock)
 	if sh is Fridge:
 		layers.append([FpArt.face(Fridge.GLASS, true), Vector2i.ZERO])
 	var front := FpArt.composite("shelf:%s:%s:%d" % [sh.furniture_id, sh.product_id, sh.stock], Vector2i(32, h), layers)

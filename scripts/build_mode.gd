@@ -35,6 +35,7 @@ const LINE_COLOR := Color(1.0, 0.85, 0.3)
 var active := false
 var tool := Tool.NONE
 var place_id := ""  # furniture to buy with the PLACE tool
+var painting := false  # the Paint menu (floor and wall colors) is open
 var moving: Interactable = null  # picked up with the MOVE tool
 var selected: Interactable = null  # highlighted, waiting for a second tap
 var cursor := Store.NO_CELL
@@ -83,6 +84,7 @@ func exit() -> void:
 	_end_drag()
 	active = false
 	tool = Tool.NONE
+	painting = false
 	get_tree().paused = false
 	Game.player.camera.offset = Vector2.ZERO
 	queue_redraw()
@@ -94,6 +96,7 @@ func select_tool(t: Tool) -> void:
 	_clear_selection()
 	tool = t
 	place_id = ""
+	painting = false
 	if t == Tool.EXPAND:
 		_look_at_lot()
 	_refresh()
@@ -106,6 +109,15 @@ func select_place(furniture_id: String) -> void:
 	_clear_selection()
 	tool = Tool.PLACE
 	place_id = furniture_id
+	painting = false
+	_refresh()
+
+
+## Opens or closes the Paint menu (floor and wall colors).
+func set_painting(on: bool) -> void:
+	if on:
+		select_tool(Tool.NONE)
+	painting = on
 	_refresh()
 
 
@@ -199,16 +211,18 @@ func _pad_button(b: JoyButton) -> bool:
 	return true
 
 
-## What the d-pad goes through: the furniture, then the tools.
+## What the d-pad goes through: the furniture, then the tools and Paint.
 func _pad_tools() -> Array:
 	var list: Array = Game.FURNITURE.keys().filter(func(id): return Game.level >= Game.furniture_level(id))
-	list.append_array(["move", "rotate", "sell"])
+	list.append_array(["move", "rotate", "sell", "paint"])
 	if store.town and not Brand.EXPANSIONS.is_empty():
 		list.append("expand")
 	return list
 
 
 func _pad_current() -> String:
+	if painting:
+		return "paint"
 	match tool:
 		Tool.PLACE:
 			return place_id
@@ -237,6 +251,8 @@ func _pad_cycle(step: int) -> void:
 			select_tool(Tool.SELL)
 		"expand":
 			select_tool(Tool.EXPAND)
+		"paint":
+			set_painting(true)  # (the build bar puts the d-pad on its colors)
 		var id:
 			select_place(id)
 	_pad_cell = Store.NO_CELL  # preview at the middle of the screen again
@@ -258,7 +274,9 @@ func _end_drag() -> void:
 
 ## Esc / right-click: cancel what you're doing, or leave build mode.
 func _back() -> void:
-	if moving or selected or tool != Tool.NONE:
+	if painting:
+		set_painting(false)
+	elif moving or selected or tool != Tool.NONE:
 		select_tool(Tool.NONE)
 	else:
 		exit()
@@ -607,9 +625,11 @@ func _refresh() -> void:
 	var click := "press A" if pad else ("tap again" if Game.touch_ui else "click")
 	var turn_how := "RB turns it" if pad else ("Rotate turns it" if Game.touch_ui else "R turns it")
 	match tool:
+		Tool.NONE when painting:
+			status = "Paint: pick a floor or a wall color%s." % (" (d-pad, then A). B: back" if pad else "")
 		Tool.NONE:
 			if pad:
-				status = "D-pad left/right: pick something to buy, or Move / Rotate / Sell. Left stick: look around. B: done."
+				status = "D-pad left/right: pick something to buy, or Move / Rotate / Sell / Paint. Left stick: look around. B: done."
 			else:
 				status = "Buy furniture, or pick Move / Rotate / Sell. Drag to look around."
 		Tool.PLACE:

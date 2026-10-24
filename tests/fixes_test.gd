@@ -16,6 +16,8 @@ extends Node
 # 10. stockers share storage racks (no box back on the delivery zone while a
 #     rack has room)
 #     (and firing one mid-pickup doesn't lose the box)
+# 11. (0.15.1) a box behind a cooler or shelf shows through it, and a tap on
+#     the box's tile gets the box, not the cooler in front of it
 #   godot --headless --path . --fixed-fps 60 res://tests/fixes_test.tscn
 
 var fails := 0
@@ -52,6 +54,7 @@ func _ready() -> void:
 	await _messages(hud)
 	await _markup(hud)
 	await _racks(store)
+	await _hidden_box(store, p)
 	print("RESULT: %d failure%s" % [fails, "" if fails == 1 else "s"])
 	get_tree().quit(1 if fails > 0 else 0)
 
@@ -499,6 +502,46 @@ func _racks(store: Store) -> void:
 	Game.fire(picker.id)
 	await _frames(3)
 	check(_count(store, S0) == before and before >= 7, "fire a stocker as they pick up a box, and no stock goes with them (%d before, %d after)" % [before, _count(store, S0)])
+
+
+# ---------------------------------------------------------------- 11
+
+func _hidden_box(store: Store, p: Player) -> void:
+	for b: StockBox in store.boxes.values():
+		store.remove_box(b)
+	var front := Vector2i(4, 2)  # right in front of the delivery zone's back corner
+	var back := Vector2i(3, 1)
+	check(back in store.delivery_cells, "(%s is in the delivery zone)" % back)
+	check(not store.objects.has(front) and not store.boxes.has(front), "(nothing at %s yet)" % front)
+	var fridge: Shelf = store.add_furniture("fridge", front)
+	store.layout_changed()
+	store.drop_box(back, TestIds.starter(0), 5)
+	var box: StockBox = store.boxes[back]
+	p.position = Iso.cell_to_world(Vector2i(8, 8))  # (out in the open, nowhere near)
+	p.path.clear()
+	p.tap_target = null
+	await _frames(3)
+	var at := box.position + Vector2(0, -8)
+	check(fridge.get_pick_rect().has_point(at - fridge.position), "(the cooler covers the box)")
+	check(fridge.modulate.a < 1.0, "the cooler fades a little so you can see the box behind it (alpha %.2f)" % fridge.modulate.a)
+	check(store.interactable_at_point(at) == box, "tapping the box gets the box, not the cooler in front of it")
+	check(store.interactable_at_point(fridge.position + Vector2(0, -4)) == fridge, "tapping the cooler itself still gets the cooler")
+	p._on_tap(at)
+	check(p.tap_target == box, "you walk over to pick it up")
+	for i in 900:
+		if p.is_carrying():
+			break
+		await get_tree().process_frame
+	check(p.is_carrying() and not store.boxes.has(back), "and pick it up")
+	p.path.clear()
+	p.tap_target = null
+	p.carry_product = ""
+	p.carry_count = 0
+	for b: StockBox in store.boxes.values():
+		store.remove_box(b)
+	store.remove_furniture(fridge)
+	store.layout_changed()
+	await _frames(2)
 
 
 # ---------------------------------------------------------------- helpers

@@ -163,9 +163,44 @@ func _ready() -> void:
 	await _frames(3)
 	await _button(JOY_BUTTON_A)
 	check(sign.cell == sign_spot and b.moving == null, "and A puts it down somewhere else (%s)" % sign_spot)
+	# Paint with a controller: the d-pad goes to Paint, then to the colors.
+	var bar: Node = hud.build_bar
+	for i in 20:
+		if b.painting:
+			break
+		await _button(JOY_BUTTON_DPAD_RIGHT)
+	await _frames(2)
+	check(b.painting and bar.paint_box.visible and _focus() in bar.floor_buttons, "d-pad to Paint: the colors open with a floor picked: " + _focus_name())
+	var style := Game.floor_style
+	await _button(JOY_BUTTON_A)
+	check(Game.floor_style != style, "A paints the floor")
+	await _button(JOY_BUTTON_B)
+	check(not b.painting and not bar.paint_box.visible and b.active, "B closes Paint (still building)")
 	await _button(JOY_BUTTON_B)
 	await _button(JOY_BUTTON_B)
 	check(not b.active and not get_tree().paused, "B (twice) leaves build mode")
+
+	# ---- the right stick zooms the normal view
+	var cam: Camera2D = Game.player.camera
+	var zoom := cam.zoom.x
+	var stick := InputEventJoypadMotion.new()
+	stick.device = 0
+	stick.axis = JOY_AXIS_RIGHT_Y
+	stick.axis_value = -1.0
+	Input.parse_input_event(stick)
+	await _frames(30)
+	stick.axis_value = 0.0
+	Input.parse_input_event(stick)
+	await _frames(2)
+	check(cam.zoom.x > zoom + 0.1, "right stick up zooms in (%.2f -> %.2f)" % [zoom, cam.zoom.x])
+	zoom = cam.zoom.x
+	stick.axis_value = 1.0
+	Input.parse_input_event(stick)
+	await _frames(12)
+	stick.axis_value = 0.0
+	Input.parse_input_event(stick)
+	await _frames(2)
+	check(cam.zoom.x < zoom - 0.1, "and down zooms out (%.2f)" % cam.zoom.x)
 
 	# ---- every button on the PC, with the d-pad, A and the shoulder buttons
 	Game.money = 5000.0

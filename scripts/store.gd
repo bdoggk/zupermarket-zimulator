@@ -1118,12 +1118,17 @@ func interactables_near(cell: Vector2i) -> Array[Interactable]:
 
 ## The object drawn at a tapped/clicked world position (frontmost wins;
 ## spills on the floor only count if nothing else is there, unless
-## `prefer_spills` is set, e.g. while holding the mop).
+## `prefer_spills` is set, e.g. while holding the mop). A box is short, so
+## a shelf or cooler in front of it can cover it: a tap on the box's own
+## tile still gets the box.
 func interactable_at_point(p: Vector2, prefer_spills := false) -> Interactable:
 	if prefer_spills:
 		for sp: Spill in spills.values():
 			if sp.get_pick_rect().has_point(p - sp.position):
 				return sp
+	var box: StockBox = boxes.get(Iso.world_to_cell(p))
+	if box and box.get_pick_rect().has_point(p - box.position):
+		return box
 	var best: Interactable = null
 	var all: Array = objects.values() + boxes.values()
 	if town:
@@ -1793,7 +1798,8 @@ func _on_store_opened() -> void:
 
 ## Fade shelves (and racks) out when someone walks behind them, Project
 ## Zomboid style: a lot for you, a little for shoppers, staff and spies, so
-## nobody seems to vanish into the shelves.
+## nobody seems to vanish into the shelves. Boxes count too (a delivery
+## behind a cooler would be lost otherwise).
 func _update_cutaways() -> void:
 	if player == null:
 		return
@@ -1807,6 +1813,8 @@ func _update_cutaways() -> void:
 	for m in movers:
 		if is_instance_valid(m):
 			people.append(m.position)
+	for b: StockBox in boxes.values():
+		people.append(b.position)
 	var hidden := {}  # shelves and racks someone is behind
 	for q in people:
 		var c := Iso.world_to_cell(q)

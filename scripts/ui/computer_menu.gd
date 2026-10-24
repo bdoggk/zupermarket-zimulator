@@ -445,7 +445,14 @@ func go_home() -> void:
 		b.focus_mode = Control.FOCUS_ALL
 	_refresh_note()
 	if visible and UI.wants_focus():
-		desktop_icons[tab].grab_focus.call_deferred()
+		_focus_icon.call_deferred()
+
+
+## Selects the current app's desktop icon, if the desktop is still showing
+## (an app may have opened in the meantime).
+func _focus_icon() -> void:
+	if visible and not window.visible and desktop_icons[tab].focus_mode != Control.FOCUS_NONE:
+		desktop_icons[tab].grab_focus()
 
 
 ## Opens app `t` in the window.

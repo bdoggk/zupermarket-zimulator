@@ -245,8 +245,8 @@ func _refresh_heights(force := false) -> void:
 			roof[_index(c)] = 1
 	people_nodes.clear()
 	for n in store.world.get_children():
-		if not n is Node2D or not (n as Node2D).visible:
-			continue
+		if not n is Node2D or not (n as Node2D).visible or n.is_queued_for_deletion():
+			continue  # (sold or gone: its shadow goes now, not when it's freed)
 		if is_person(n):
 			people_nodes.append(n)
 			continue
@@ -498,8 +498,11 @@ func _on_node_added(n: Node) -> void:
 		_hook.call_deferred(n)  # (once it has its texture)
 
 
-func _hook(n: Node) -> void:
-	if not active or not is_instance_valid(n) or not n.is_inside_tree() or not n is Node2D or n.has_meta("rt"):
+func _hook(what: Variant) -> void:
+	if not active or not is_instance_valid(what) or not what is Node2D:
+		return  # (gone already: it was put up and taken down in the same frame)
+	var n := what as Node2D
+	if not n.is_inside_tree() or n.has_meta("rt"):
 		return
 	if n is Light2D or n is Camera2D or n is CPUParticles2D or n is GPUParticles2D or n is CollisionShape2D or n is CollisionPolygon2D:
 		return
@@ -507,7 +510,7 @@ func _hook(n: Node) -> void:
 	if ci.material != null:
 		return  # (it has its own)
 	var mode := Mode.UPRIGHT
-	var host := n
+	var host: Node = n
 	if n.get_parent() != store.world and n.get_parent() != store.decals:
 		host = n.get_parent()  # (a person's sprite, say)
 	if store.decals.is_ancestor_of(n):

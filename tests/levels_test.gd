@@ -52,7 +52,7 @@ func _ready() -> void:
 	for lv in range(7, Game.LAST_UNLOCK_LEVEL + 1):
 		print("      Level %d: %s" % [lv, " | ".join(Game.unlocks_at(lv))])
 	var after := Game.unlocks_at(Game.LAST_UNLOCK_LEVEL + 1)
-	check(after.any(func(l): return l.begins_with("A level bonus")) and not after.any(func(l): return l.ends_with("more shoppers come by")), "after that, a level brings a cash bonus: %s" % after)
+	check(after.any(func(l): return l.begins_with("A level bonus")) and not after.any(func(l): return l.ends_with("more shoppers come by")), "after that, a level brings a cash bonus: %s" % [after])
 	check(Game.level_bonus(Game.LAST_UNLOCK_LEVEL) == 0.0 and Game.level_bonus(Game.LAST_UNLOCK_LEVEL + 2) > Game.level_bonus(Game.LAST_UNLOCK_LEVEL + 1), "no bonus before then, and it grows")
 
 	# Levelling up past it pays the bonus.

@@ -33,6 +33,7 @@ func _ready() -> void:
 	for i in Game.FLOOR_STYLES.size():
 		var style: Dictionary = Game.FLOOR_STYLES[i]
 		var b := UI.button(style.name, func(): Game.buy_floor_style(i), Vector2(0, 52))
+		b.focus_mode = Control.FOCUS_ALL  # (a controller picks colors with the d-pad)
 		b.icon = load("res://assets/sprites/floor_%s_a.png" % style.id)
 		floors.add_child(b)
 		floor_buttons.append(b)
@@ -42,6 +43,7 @@ func _ready() -> void:
 	for i in Game.WALL_COLORS.size():
 		var color: Dictionary = Game.WALL_COLORS[i]
 		var b := UI.button(color.name, func(): Game.buy_wall_color(i), Vector2(0, 52))
+		b.focus_mode = Control.FOCUS_ALL  # (a controller picks colors with the d-pad)
 		b.icon = load("res://assets/sprites/wall_%s_swatch.png" % color.id)
 		walls.add_child(b)
 		wall_buttons.append(b)
@@ -119,6 +121,14 @@ static func _cropped(tex: Texture2D) -> Texture2D:
 
 ## A button to buy a piece of furniture: its name on top, its picture,
 ## then the price.
+## Puts the controller on the first color you can pick (the Paint menu).
+func _focus_paint() -> void:
+	for b in floor_buttons + wall_buttons:
+		if not b.disabled and b.is_visible_in_tree():
+			b.grab_focus()
+			return
+
+
 func _furniture_button(id: String, title := "", on_press := Callable()) -> Button:
 	var f: Dictionary = Game.FURNITURE[id]
 	var b := _tool_button("", on_press if on_press.is_valid() else func(): _toggle_place(id))
@@ -162,7 +172,8 @@ func _furniture_button(id: String, title := "", on_press := Callable()) -> Butto
 
 func _toggle_decor() -> void:
 	decor_box.visible = not decor_box.visible
-	paint_box.visible = false
+	if build.painting:
+		build.set_painting(false)
 	_refresh()
 
 
@@ -180,9 +191,8 @@ func _toggle_place(id: String) -> void:
 
 
 func _toggle_paint() -> void:
-	paint_box.visible = not paint_box.visible
 	decor_box.visible = false
-	_refresh()
+	build.set_painting(not build.painting)
 
 
 func _toggle_tool(t: BuildMode.Tool) -> void:
@@ -195,6 +205,16 @@ func _refresh() -> void:
 		paint_box.visible = false
 		decor_box.visible = false
 		return
+	var opened := build.painting and not paint_box.visible
+	paint_box.visible = build.painting
+	if build.painting:
+		decor_box.visible = false
+	if opened and UI.has_pad() and not Game.touch_ui:  # the d-pad goes to the colors
+		_focus_paint.call_deferred()
+	elif not build.painting:
+		var f := get_viewport().gui_get_focus_owner()
+		if f and paint_box.is_ancestor_of(f):
+			f.release_focus()
 	# Locked furniture shows the store level it comes with.
 	for id: String in locks:
 		var lv := Game.furniture_level(id)
@@ -206,7 +226,6 @@ func _refresh() -> void:
 	var placing := build.place_id if build.tool == BuildMode.Tool.PLACE else ""
 	if placing != _placing and Game.FURNITURE.get(placing, {}).get("kind", "") == "decor":
 		decor_box.visible = true
-		paint_box.visible = false
 	_placing = placing
 	status_label.text = build.status
 	for key: String in tool_buttons:

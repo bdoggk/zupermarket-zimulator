@@ -9,12 +9,14 @@ const BuildBar := preload("res://scripts/ui/build_bar.gd")
 const RivalPanel := preload("res://scripts/ui/rival_panel.gd")
 const ShopPanel := preload("res://scripts/ui/shop_panel.gd")
 const RackPanel := preload("res://scripts/ui/rack_panel.gd")
+const STICK_ZOOM_EVERY := 0.18  # seconds between zoom steps while the right stick is held
 const Tutorial := preload("res://scripts/ui/tutorial.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const OptionsMenu := preload("res://scripts/ui/options_menu.gd")
 const LoanCutsceneScript := preload("res://scripts/ui/loan_cutscene.gd")
 const WarCutsceneScript := preload("res://scripts/ui/war_cutscene.gd")
 const MARGIN := 14.0
+const STATUS_GAP := 18  # between the things on the status bar
 const WANTED_SHOWN := 6  # the day's summary names this many of the things shoppers asked for
 const MAX_MESSAGES := 4
 const MESSAGE_SECONDS := 6.0  # a message stays up at least this long...
@@ -32,6 +34,7 @@ const MESSAGE_MIN_WIDTH := 420.0  # narrower than this between the panels, and m
 var is_touch := false
 var root: Control
 var status_panel: PanelContainer
+var status_flow: HFlowContainer  # money, level, clock... (onto a second line when there's no room)
 var money_label: Label
 var level_label: Label
 var xp_bar: Control  # progress to the next store level
@@ -61,6 +64,7 @@ var ammo_label: Label
 var first_person: FirstPerson  # the store in 3D (V)
 var view_button: Button
 var zoom_buttons: Array[Button] = []
+var _stick_zoom_t := 0.0  # until the right stick zooms another step
 var fps_label: Label  # Options > Show FPS
 var prep_panel: PanelContainer
 var tutorial: PanelContainer  # first-day tips
@@ -190,6 +194,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	UI.fit_layer(self, root)
+	_stick_zoom(delta)
 	money_label.text = "$%.2f" % Game.money
 	UI.set_color(money_label, UI.GOOD if Game.money >= 0.0 else UI.BAD)
 	level_label.text = "Lv %d" % Game.level
@@ -225,7 +230,9 @@ func _process(delta: float) -> void:
 	var building: bool = Game.build_mode.active
 	var paused := pause_menu.visible or options.visible
 	dimmer.visible = paused
-	message_box.visible = not paused and not summary_panel.visible and not message_log.visible  # (it would show through)
+	if building and levelup_panel.visible:
+		levelup_panel.visible = false  # (it would sit behind the build bar)
+	message_box.visible = not paused and not summary_panel.visible and not message_log.visible and not levelup_panel.visible  # (it would show through, or run over it)
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
 	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or rack_panel.visible or summary_panel.visible or message_log.visible
@@ -261,10 +268,10 @@ func _process(delta: float) -> void:
 	rival_panel.custom_minimum_size = Vector2(minf(860.0, s.x - 2 * MARGIN), minf(600.0, s.y - 2 * MARGIN))
 	shop_panel.custom_minimum_size = Vector2(minf(820.0, s.x - 2 * MARGIN), minf(560.0, s.y - 2 * MARGIN))
 	build_bar.custom_minimum_size.x = minf(1180.0, s.x - 2 * MARGIN)
-	_place(status_panel, Vector2(MARGIN, MARGIN))
+	_place(corner_box, Vector2(s.x - corner_box.size.x - MARGIN, MARGIN))
+	_place_status(corner_box.position.x - 8.0)
 	_place(prep_panel, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
 	_place(tutorial, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
-	_place(corner_box, Vector2(s.x - corner_box.size.x - MARGIN, MARGIN))
 	_place_messages(s)
 	_place(prompt_panel, Vector2((s.x - prompt_panel.size.x) / 2.0, s.y - prompt_panel.size.y - MARGIN))
 	_place(use_button, Vector2(s.x - use_button.size.x - MARGIN, s.y - use_button.size.y - MARGIN))
@@ -372,6 +379,20 @@ func _back(or_pause := true) -> void:
 		open_pause()
 
 
+## A controller's right stick zooms the normal view (up: in, down: out),
+## a step at a time while it's held. (In first person it looks around.)
+func _stick_zoom(delta: float) -> void:
+	var y := Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y)
+	var fp_on: bool = Game.fp != null and Game.fp.active
+	if absf(y) < 0.6 or fp_on or Game.menu_open or Game.cutscene or not is_instance_valid(Game.player):
+		_stick_zoom_t = 0.0
+		return
+	_stick_zoom_t -= delta
+	if _stick_zoom_t <= 0.0:
+		_stick_zoom_t = STICK_ZOOM_EVERY
+		Game.player.zoom_by(1.1 if y < 0.0 else 1.0 / 1.1)
+
+
 func open_pause() -> void:
 	computer.close()
 	rival_panel.close()
@@ -427,7 +448,7 @@ func _place_messages(s: Vector2) -> void:
 			left = maxf(left, panel.position.x + maxf(panel.size.x, panel.get_combined_minimum_size().x) + MARGIN)
 			below = maxf(below, panel.position.y + maxf(panel.size.y, panel.get_combined_minimum_size().y) + 8.0)
 	var right := corner_box.position.x - MARGIN
-	var top := 70.0
+	var top := maxf(70.0, status_panel.position.y + status_panel.size.y * status_panel.scale.y + 8.0)  # (under the status bar, two lines of it too)
 	if right - left < MESSAGE_MIN_WIDTH:
 		left = MARGIN
 		right = s.x - MARGIN
@@ -499,9 +520,11 @@ func _rebuild_effects() -> void:
 func _build_status() -> void:
 	status_panel = PanelContainer.new()
 	root.add_child(status_panel)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 18)
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override("h_separation", STATUS_GAP)
+	row.add_theme_constant_override("v_separation", 4)
 	status_panel.add_child(row)
+	status_flow = row
 	money_label = UI.label("", UI.GOOD)
 	row.add_child(money_label)
 	level_label = UI.label("", UI.INFO)
@@ -717,6 +740,25 @@ func _build_summary_panel() -> void:
 
 
 # ---------------------------------------------------------------- updates
+
+## The status bar in the top left, as wide as what's on it, but no further
+## than `right` (the buttons in the corner): past that, it goes onto a
+## second line (the blood count, a loan, the FPS...).
+func _place_status(right: float) -> void:
+	status_panel.reset_size()
+	var natural := 0.0
+	var n := 0
+	for c in status_flow.get_children():
+		if (c as Control).visible:
+			natural += (c as Control).get_combined_minimum_size().x
+			n += 1
+	natural += STATUS_GAP * maxi(0, n - 1)
+	var style := status_panel.get_theme_stylebox("panel")
+	natural += style.get_minimum_size().x if style else 0.0
+	var room := (right - MARGIN) / maxf(status_panel.scale.x, 0.01)
+	status_panel.size = Vector2(maxf(minf(natural, room), status_panel.get_combined_minimum_size().x), 0.0)
+	status_panel.position = Vector2(MARGIN, MARGIN)
+
 
 func _place(c: Control, pos: Vector2) -> void:
 	if c.visible:

@@ -73,6 +73,9 @@ static func square(tex: Texture2D, size := 32) -> Texture2D:
 	var key := "sq:%s:%d" % [tex.get_rid(), size]
 	if _cache.has(key):
 		return _cache[key]
+	if tex.resource_path.get_file() == "ground_road_line.png":
+		_cache[key] = _road_line(tex, size)
+		return _cache[key]
 	var src := _image(tex)
 	var cy := src.get_height() - TILE_H / 2  # the diamond's center, from the top
 	var out := Image.create(size, size, false, Image.FORMAT_RGBA8)
@@ -87,6 +90,29 @@ static func square(tex: Texture2D, size := 32) -> Texture2D:
 	var t := ImageTexture.create_from_image(out)
 	_cache[key] = t
 	return t
+
+
+## The road's center line: unskewed, the iso art's dash turns into a
+## jagged staircase, so it's the plain road with a straight dash painted on
+## (along x, like the road), in the dash's yellow.
+static func _road_line(tex: Texture2D, size: int) -> Texture2D:
+	var road: Texture2D = load(tex.resource_path.get_base_dir().path_join("ground_road_a.png"))
+	var out := square(road, size).get_image()
+	var src := _image(tex)
+	var yellow := Color(0.78, 0.66, 0.24)
+	var best := 0.0
+	for y in src.get_height():
+		for x in src.get_width():
+			var c := src.get_pixel(x, y)
+			if c.a > 0.5 and c.r + c.g - 2.0 * c.b > best:
+				best = c.r + c.g - 2.0 * c.b
+				yellow = c
+	var half := maxi(1, size / 32)
+	for u in range(size / 8, size - size / 8):
+		for v in range(size / 2 - half, size / 2 + half):
+			var k := 0.92 if (u * 7 + v * 3) % 5 == 0 else 1.0  # (worn)
+			out.set_pixel(u, v, Color(yellow.r * k, yellow.g * k, yellow.b * k))
+	return ImageTexture.create_from_image(out)
 
 
 ## The height of the box drawn in an object sprite (made by
