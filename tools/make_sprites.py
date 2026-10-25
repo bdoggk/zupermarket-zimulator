@@ -3846,9 +3846,159 @@ def fp_content():
     save(fp_ceiling(True), "fp_ceiling_b")
 
 
+
+# --------------------------------------------------------------------------
+# The PC's fun apps (0.17): Snake and ZomTok
+# --------------------------------------------------------------------------
+SNAKE_GREEN = (96, 178, 80)
+SNAKE_DARK = (54, 112, 48)
+ZT_PINK = (236, 72, 120)
+ZT_SCREEN = (34, 22, 48)
+
+
+def snake_app_icon():
+    """The Snake app: a green snake curling round to a brain."""
+    img = new(32, 32)
+    path = [(6, 27), (7, 27), (8, 27), (9, 27), (10, 27), (11, 27), (12, 27), (13, 27), (14, 27),
+            (15, 26), (16, 25), (16, 24), (15, 23), (14, 22), (13, 22), (12, 22), (11, 22), (10, 21),
+            (9, 20), (9, 19), (10, 18), (11, 17), (12, 17), (13, 17), (14, 17), (15, 17), (16, 17),
+            (17, 16), (18, 15), (18, 14), (17, 13), (16, 12)]
+    for i, (x, y) in enumerate(path):  # a thick body, darker underneath
+        rect(img, x, y - 1, x + 1, y + 1, SNAKE_GREEN)
+        dot(img, x, y + 1, SNAKE_DARK)
+        if i % 4 == 0:
+            dot(img, x, y - 1, (140, 210, 120))
+    rect(img, 13, 8, 18, 12, SNAKE_GREEN)  # the head, looking up at the brain
+    rect(img, 13, 12, 18, 12, SNAKE_DARK)
+    dot(img, 14, 9, (230, 40, 50))
+    dot(img, 17, 9, (230, 40, 50))
+    dot(img, 15, 7, (200, 40, 60))  # a forked tongue
+    dot(img, 16, 6, (200, 40, 60))
+    pink, pink_d = (236, 150, 160), (196, 104, 120)
+    for x, y in _ellipse_pixels(25, 7, 5, 4.2):  # the brain
+        dot(img, x, y, pink)
+    for x, y in [(22, 5), (23, 6), (24, 5), (26, 6), (27, 7), (25, 8), (23, 9), (26, 9), (25, 4)]:
+        dot(img, x, y, pink_d)
+    outline_outside(img)
+    return img
+
+
+def zomtok_app_icon():
+    """The ZomTok app: a phone with a zombie dancing on it and a heart."""
+    img = new(32, 32)
+    rect(img, 8, 2, 23, 30, (40, 40, 46))  # the phone
+    rect(img, 9, 3, 22, 29, (60, 60, 68))
+    rect(img, 10, 5, 21, 27, ZT_SCREEN)
+    for y in range(5, 28):  # a purple glow behind the dancer
+        for x in range(10, 22):
+            d = ((x - 15.5) / 6) ** 2 + ((y - 17) / 9) ** 2
+            if d < 1.0:
+                dot(img, x, y, (52 + int(40 * (1 - d)), 28 + int(14 * (1 - d)), 70 + int(40 * (1 - d))))
+    skin, shirt, pants = (130, 180, 110), (90, 70, 130), (50, 50, 70)
+    rect(img, 14, 10, 17, 13, skin)  # the dancer: head
+    dot(img, 15, 11, (220, 40, 40))
+    dot(img, 17, 11, (220, 40, 40))
+    rect(img, 14, 14, 17, 19, shirt)  # body
+    for i in range(4):  # arms up, one high and one out
+        dot(img, 13 - i // 2, 13 - i, skin)
+        dot(img, 18 + i, 14 - i // 3, skin)
+    rect(img, 14, 20, 15, 24, pants)  # legs, one kicked out
+    dot(img, 16, 20, pants)
+    dot(img, 17, 21, pants)
+    dot(img, 18, 22, pants)
+    rect(img, 13, 25, 15, 25, (30, 26, 24))
+    dot(img, 19, 22, (30, 26, 24))
+    for x, y in [(19, 6), (20, 6), (21, 7), (22, 6), (23, 6), (18, 7), (24, 7), (18, 8), (24, 8),
+                 (19, 9), (23, 9), (20, 10), (22, 10), (21, 11)]:  # a heart over the corner
+        dot(img, x, y, ZT_PINK)
+    rect(img, 19, 7, 23, 9, ZT_PINK)
+    rect(img, 20, 10, 22, 10, ZT_PINK)
+    dot(img, 19, 7, (255, 170, 196))
+    rect(img, 14, 28, 17, 28, (90, 90, 100))  # the home bar
+    outline_outside(img)
+    return img
+
+
+def zt_heart():
+    """ZomTok's like button (white: it's tinted red once you like it)."""
+    img = new(16, 16)
+    for x, y in _ellipse_pixels(5, 5.5, 3.6, 3.6):
+        dot(img, x, y, (255, 255, 255))
+    for x, y in _ellipse_pixels(11, 5.5, 3.6, 3.6):
+        dot(img, x, y, (255, 255, 255))
+    for i in range(7):
+        rect(img, 2 + i, 6 + i, 13 - i, 6 + i, (255, 255, 255))
+    dot(img, 4, 4, (255, 255, 255))
+    outline_outside(img)
+    return img
+
+
+def zt_comment():
+    """ZomTok's comments button: a speech bubble."""
+    img = new(16, 16)
+    for x, y in _ellipse_pixels(8, 7, 6.5, 5.2):
+        dot(img, x, y, (255, 255, 255))
+    for i in range(3):
+        rect(img, 4 + i, 11 + i, 6, 11 + i, (255, 255, 255))
+    for x in (5, 8, 11):
+        dot(img, x, 7, (60, 60, 70))
+    outline_outside(img)
+    return img
+
+
+def zt_share():
+    """ZomTok's share button: a curved arrow."""
+    img = new(16, 16)
+    w = (255, 255, 255)
+    for i in range(5):  # the arrow head, pointing right
+        rect(img, 9 + i, 2 + i, 9 + i, 12 - i, w)
+    rect(img, 6, 5, 9, 9, w)  # the shaft, curving down to the left
+    rect(img, 4, 6, 6, 10, w)
+    rect(img, 3, 8, 4, 13, w)
+    dot(img, 2, 12, w)
+    outline_outside(img)
+    return img
+
+
+def zt_note():
+    """A music note (the sound a video uses)."""
+    img = new(12, 12)
+    w = (255, 255, 255)
+    rect(img, 6, 1, 7, 9, w)
+    rect(img, 7, 1, 10, 2, w)
+    rect(img, 9, 3, 10, 3, w)
+    for x, y in _ellipse_pixels(4.5, 9.5, 2.6, 2):
+        dot(img, x, y, w)
+    outline_outside(img)
+    return img
+
+
+def pc_arrow():
+    """An arrow (pointing up) for the on-screen buttons in Snake."""
+    img = new(12, 12)
+    w = (255, 255, 255)
+    for i in range(5):
+        rect(img, 5 - i, 1 + i, 6 + i, 1 + i, w)
+    rect(img, 4, 6, 7, 10, w)
+    outline_outside(img)
+    return img
+
+
+def pc_apps_content():
+    """The store computer's Snake and ZomTok (0.17)."""
+    save(snake_app_icon(), "pc_app_snake")
+    save(zomtok_app_icon(), "pc_app_zomtok")
+    save(zt_heart(), "zt_heart")
+    save(zt_comment(), "zt_comment")
+    save(zt_share(), "zt_share")
+    save(zt_note(), "zt_note")
+    save(pc_arrow(), "pc_arrow")
+
+
 def new_content():
     """Everything above, saved: called from main()."""
     loan_content()
+    pc_apps_content()
     war_content()
     fp_content()
     save(mummy(), "shopper_mummy_0")

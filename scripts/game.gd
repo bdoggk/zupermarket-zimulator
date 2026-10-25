@@ -133,6 +133,7 @@ var upgrades := {}  # upgrade id -> true once bought
 var xp := 0.0
 var level := 1
 var floor_style := 0
+var snake_best := 0  # the store computer's Snake: the best score (kept with the store)
 var wall_color := 0
 var market := Market.new()
 var day := 1
@@ -203,6 +204,7 @@ func reset() -> void:
 	xp = 0.0
 	level = 1
 	floor_style = 0
+	snake_best = 0
 	wall_color = 0
 	market = Market.new()
 	market.setup(PRODUCTS.keys())
@@ -1351,7 +1353,7 @@ func to_dict() -> Dictionary:
 		"upgrades": upgrades.keys(), "auto_price": auto_price, "markup": price_markup,
 		"unstocked": unstocked.keys(),
 		"staff_rules": {"fill_empty": fill_empty_shelves, "labels_off": take_labels_off, "reorder_at": reorder_at},
-		"floor_style": floor_style, "wall_color": wall_color, "stats": stats,
+		"floor_style": floor_style, "wall_color": wall_color, "stats": stats, "snake_best": snake_best,
 		"play_time": play_time,
 		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
 		"rival": {"factor": rival_factor, "deal": rival_deal, "seen": rival_seen, "spies": rival_spies},
@@ -1383,6 +1385,7 @@ func from_dict(d: Dictionary) -> void:
 	take_labels_off = bool(rules.get("labels_off", true))
 	reorder_at = clampi(int(rules.get("reorder_at", 0)), 0, REORDER_POINTS.size() - 1)
 	floor_style = clampi(int(d.get("floor_style", 0)), 0, FLOOR_STYLES.size() - 1)
+	snake_best = maxi(0, int(d.get("snake_best", 0)))
 	wall_color = clampi(int(d.get("wall_color", 0)), 0, WALL_COLORS.size() - 1)
 	play_time = float(d.get("play_time", 0.0))
 	for id: String in d.get("prices", {}):

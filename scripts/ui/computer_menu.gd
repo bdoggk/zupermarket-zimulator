@@ -14,12 +14,17 @@ extends PanelContainer
 ##   Turf            the gang war (from store level 15, GangWar): buy land
 ##                   for branch stores, hire your gang, buy nunchucks or a Glock,
 ##                   and send your gang to raid Bone Mart
+##   Snake           Zombie Snake (PcSnake), for slow afternoons
+##   ZomTok          videos of the town's characters dancing (ZomTokApp)
+## Snake and ZomTok fill the window themselves (no list, news or footer),
+## and take the arrows, the d-pad and A while they're open.
 ## The window's X goes back to the desktop; "Close PC" (or Esc) closes it.
 
-enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES, LOANS, TURF }
+enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES, LOANS, TURF, SNAKE, ZOMTOK }
 
-const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades", "Loans", "Turf"]
-const APP_ICONS := ["stock", "products", "staff", "upgrades", "loans", "turf"]
+const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades", "Loans", "Turf", "Snake", "ZomTok"]
+const APP_ICONS := ["stock", "products", "staff", "upgrades", "loans", "turf", "snake", "zomtok"]
+const ICON_ONLY := [Tab.SNAKE, Tab.ZOMTOK]  # (just the icon on the taskbar, to save room)
 const TASKBAR_HEIGHT := 50.0
 const WALLPAPER := preload("res://assets/sprites/pc_wallpaper.png")
 const GIRL := preload("res://assets/sprites/pc_girl.png")
@@ -61,6 +66,9 @@ var pad_hint: Label  # "LB / RB: other apps", with a controller
 var icon_box: VFlowContainer  # the desktop's app icons (a second column if they don't fit)
 var note_box: PanelContainer  # the sticky note, right of the icons
 var loan_pick := 2  # Loans: which of Game.LOAN_AMOUNTS you're looking at
+var snake: PcSnake
+var zomtok: ZomTokApp
+var list_parts: Array[Control] = []  # the window's news, list and footer (hidden for Snake and ZomTok)
 
 
 func _ready() -> void:
@@ -292,7 +300,8 @@ func _build_window() -> void:
 	inside.add_child(content)
 	news_label = UI.label("", UI.WARN)
 	content.add_child(news_label)
-	content.add_child(HSeparator.new())
+	var sep_top := HSeparator.new()
+	content.add_child(sep_top)
 	scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -302,10 +311,18 @@ func _build_window() -> void:
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 12)
 	scroll.add_child(body)
-	content.add_child(HSeparator.new())
+	var sep_bottom := HSeparator.new()
+	content.add_child(sep_bottom)
 	var footer := HBoxContainer.new()
 	footer.add_theme_constant_override("separation", 12)
 	content.add_child(footer)
+	list_parts = [news_label, sep_top, scroll, sep_bottom, footer]
+	snake = PcSnake.new()
+	snake.visible = false
+	content.add_child(snake)
+	zomtok = ZomTokApp.new()
+	zomtok.visible = false
+	content.add_child(zomtok)
 	footer_label = UI.label("", UI.DIM)
 	footer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -374,7 +391,11 @@ func _build_taskbar() -> void:
 	var group := ButtonGroup.new()
 	group.allow_unpress = true
 	for i in TAB_NAMES.size():
-		var b := UI.button(TAB_NAMES[i], show_tab.bind(i), Vector2(0, 40))
+		var b := UI.button("" if i in ICON_ONLY else TAB_NAMES[i], show_tab.bind(i), Vector2(0, 40))
+		if i in ICON_ONLY:
+			b.tooltip_text = TAB_NAMES[i]
+			b.custom_minimum_size.x = 48
+			b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		b.icon = load("res://assets/sprites/pc_app_%s.png" % APP_ICONS[i])
 		b.expand_icon = true
 		b.add_theme_constant_override("icon_max_width", 24)
@@ -431,6 +452,9 @@ func close() -> void:
 ## Esc / back: from an app back to the desktop, then closes the computer.
 func back() -> void:
 	if window.visible:
+		var app := game_app()
+		if app is ZomTokApp and (app as ZomTokApp).back():
+			return  # (closed ZomTok's comments)
 		go_home()
 	else:
 		close()
@@ -439,6 +463,7 @@ func back() -> void:
 ## Closes the app window, back to the desktop.
 func go_home() -> void:
 	window.visible = false
+	zomtok.close_comments()
 	for b in tab_buttons:
 		b.set_pressed_no_signal(false)
 	for b in desktop_icons:
@@ -464,10 +489,39 @@ func show_tab(t: Tab) -> void:
 		b.focus_mode = Control.FOCUS_NONE
 	window_title.text = TAB_NAMES[t]
 	window_icon.texture = desktop_icons[t].icon
+	var app := app_for(t)
+	for c in list_parts:
+		c.visible = app == null
+	snake.visible = app == snake
+	zomtok.visible = app == zomtok
 	window.visible = true
 	_focus_ready()
+	if app:
+		_updaters.clear()
+		var f := get_viewport().gui_get_focus_owner()
+		if f and is_ancestor_of(f):
+			f.release_focus()  # (the game takes the d-pad: nothing else selected)
+		if app == zomtok:
+			zomtok._refresh()
+			zomtok._layout()
+		return
 	_rebuild()
 	scroll.scroll_vertical = 0
+
+
+## Snake or ZomTok, if that's the app that's open (they fill the window
+## themselves), or null.
+func game_app() -> Control:
+	return app_for(tab) if window.visible else null
+
+
+func app_for(t: int) -> Control:
+	match t:
+		Tab.SNAKE:
+			return snake
+		Tab.ZOMTOK:
+			return zomtok
+	return null
 
 
 func is_app_open() -> bool:
@@ -553,6 +607,8 @@ func _typing_price() -> bool:
 
 
 func _rebuild() -> void:
+	if game_app():
+		return  # (Snake and ZomTok aren't lists)
 	# With a controller, keep the selection where it was in the list.
 	var was := -1
 	var had := get_viewport().gui_get_focus_owner()
@@ -677,10 +733,10 @@ func _chain(row: Array) -> void:
 		c.focus_neighbor_right = c.get_path_to(row[mini(i + 1, row.size() - 1)])
 
 
-## Opens app `t` with its first button selected (LB / RB, Tab, 1-6).
+## Opens app `t` with its first button selected (LB / RB, Tab, 1-8).
 func _open_app(t: int) -> void:
 	show_tab(t as Tab)
-	if _keys():
+	if _keys() and game_app() == null:
 		_refocus.call_deferred(0)
 	get_viewport().set_input_as_handled()
 
@@ -758,11 +814,11 @@ func _input(event: InputEvent) -> void:
 					get_viewport().set_input_as_handled()
 					return
 	# LB / RB or Tab / Shift+Tab: the app to the left / right (from the
-	# desktop: the first / last). 1-6 open an app straight away.
+	# desktop: the first / last). 1-8 open an app straight away.
 	var step := 0
 	if event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER]:
 		step = -1 if event.button_index == JOY_BUTTON_LEFT_SHOULDER else 1
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_TAB:
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_TAB and not get_viewport().gui_get_focus_owner() is LineEdit:
 		step = -1 if event.shift_pressed else 1
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode >= KEY_1 and event.keycode < KEY_1 + TAB_NAMES.size():
 		if not get_viewport().gui_get_focus_owner() is LineEdit:  # (typing a price)
@@ -772,6 +828,8 @@ func _input(event: InputEvent) -> void:
 		var t: int = tab + step if window.visible else (0 if step > 0 else TAB_NAMES.size() - 1)
 		_open_app(wrapi(t, 0, TAB_NAMES.size()))
 		return
+	if game_app():
+		return  # (Snake and ZomTok take the d-pad and the arrows themselves)
 	var picking := UI.is_pad_input(event)
 	if event is InputEventKey and event.pressed and _keys():
 		for a in ["ui_up", "ui_down", "ui_left", "ui_right", "ui_accept"]:

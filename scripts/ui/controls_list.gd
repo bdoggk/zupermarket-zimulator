@@ -33,7 +33,10 @@ static func rows() -> Array:
 		["Pause menu", "Esc or P", "Start", "II button"],
 		["Recent messages", "M, or the Log button", "Back / View", "Log button"],
 		["Menus", "Arrow keys, Enter, Esc", "D-pad, A, B", "Tap; drag a list to scroll it"],
-		["Store computer: other apps", "Tab / Shift+Tab, or 1-6", "LB / RB", "Tap an app"],
+		["Store computer: other apps", "Tab / Shift+Tab, or 1-8", "LB / RB", "Tap an app"],
+		["Snake (store computer)", "Arrows or WASD; Enter starts", "D-pad or left stick; A starts", "Swipe or the arrows; tap to start"],
+		["ZomTok: next / last video", "Down / Up, or the mouse wheel", "D-pad down / up", "Swipe up / down"],
+		["ZomTok: like, comments", "Space or L (or double-click); C", "A; X", "Double-tap or the heart; the bubble"],
 	]
 
 

@@ -249,7 +249,7 @@ func _ready() -> void:
 	var taskbar: Array = [pc.home_button] + pc.tab_buttons + [pc.off_button]
 	check(taskbar.has(_focus()), "down again: the taskbar: " + _focus_name())
 	var visited := {}
-	for i in 8:
+	for i in taskbar.size():
 		visited[_focus()] = true
 		await _button(JOY_BUTTON_DPAD_LEFT)
 	check(_focus() == pc.home_button and taskbar.all(func(b): return visited.has(b) or b == pc.off_button), "left along the taskbar to Home, past every app")
@@ -278,7 +278,7 @@ func _ready() -> void:
 		if taskbar.has(_focus()):
 			break
 		await _button(JOY_BUTTON_DPAD_DOWN)
-	for i in 8:
+	for i in taskbar.size():
 		await _button(JOY_BUTTON_DPAD_RIGHT)
 	check(_focus() == pc.off_button, "right along the taskbar to Close PC")
 	await _button(JOY_BUTTON_A)

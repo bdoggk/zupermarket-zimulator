@@ -554,7 +554,10 @@ func _computer() -> void:
 	var pc: Node = hud.computer
 	for i in rng.randi_range(1, 5):
 		var r := rng.randf()
-		if r < 0.25:
+		var app: Control = pc.game_app()
+		if app and rng.randf() < 0.6:
+			_poke_app(app)
+		elif r < 0.25:
 			var t: int = rng.randi() % pc.TAB_NAMES.size()
 			_note("computer: app %d" % t)
 			if rng.randf() < 0.5:
@@ -603,6 +606,43 @@ func _computer() -> void:
 			hud._back()
 			await _frames(1)
 	_note("computer: closed (%s)" % ("still open!" if pc.visible else "ok"))
+
+
+## Snake or ZomTok is open: steer, start, swipe, like, comment...
+func _poke_app(app: Control) -> void:
+	if app is PcSnake:
+		var sn := app as PcSnake
+		var d: Vector2i = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT][rng.randi() % 4]
+		_note("snake: %s (%s, score %d)" % [d, PcSnake.State.keys()[sn.state], sn.score])
+		if rng.randf() < 0.3:
+			sn.start()
+		else:
+			sn.press(d)
+		return
+	var zt := app as ZomTokApp
+	var what: String = ["next", "previous", "like", "comments", "post", "follow", "share", "close", "chip"][rng.randi() % 9]
+	_note("zomtok: %s (video %d)" % [what, zt.index])
+	match what:
+		"next":
+			zt.next()
+		"previous":
+			zt.previous()
+		"like":
+			zt.toggle_like()
+		"comments":
+			zt.open_comments()
+		"post":
+			zt.post_comment(["", "  ", "nice", "BRAAAINS".repeat(30), "{product} #fyp"][rng.randi() % 5])
+		"follow":
+			zt.toggle_follow()
+		"share":
+			zt.share()
+		"close":
+			zt.back()
+		"chip":
+			zt.open_comments()
+			zt.chip_pick = rng.randi() % zt.chips.size()
+			zt.post_comment(ZomTokApp.QUICK[zt.chip_pick])
 
 
 ## Borrows from Count Vlad, pays some back, or (to see his visit in a

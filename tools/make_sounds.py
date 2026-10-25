@@ -20,6 +20,13 @@ you like: keep the same file names.
   war_reload.wav   a fresh magazine clicking in
   war_crack.wav    a skeleton falling apart into a heap of bones
   war_smash.wav    a shelf (or the register) getting smashed
+
+  zomtok_beat_0.wav  ZomTok's dance tracks: two bars that loop. 0 is a
+  zomtok_beat_1.wav  spooky shuffle (100 BPM), 1 a four-on-the-floor "brain
+  zomtok_beat_2.wav  drop" (120 BPM), 2 a bone xylophone banger (128 BPM)
+  zomtok_like.wav    a little pop when you like a video
+  snake_eat.wav      the snake chomping something
+  snake_over.wav     the snake crashing: wah wah wahhh
 """
 import wave
 from pathlib import Path
@@ -210,6 +217,138 @@ def smash():
     return lowpass(crash, 3500) * 0.9 + glass * 0.6 + thump
 
 
+# ---------------------------------------------------------------- the PC's apps (0.17)
+
+BEAT_BPM = [100, 120, 128]  # ZomTok's tracks (the game reads these too: ZomTok.BPM)
+
+
+def _place(buf, x, at):
+    """Adds `x` into the loop `buf` starting at sample `at`, wrapping round
+    the end (so the loop is seamless)."""
+    n = len(buf)
+    for i in range(0, len(x), n):
+        part = x[i:i + n]
+        start = (at + i) % n
+        end = start + len(part)
+        if end <= n:
+            buf[start:end] += part
+        else:
+            k = n - start
+            buf[start:] += part[:k]
+            buf[:end - n] += part[k:]
+
+
+def _kick(r):
+    tt = t(0.32)
+    return np.sin(2 * np.pi * (48 + 80 * np.exp(-tt * 30)) * tt) * np.exp(-tt * 9) * 1.3
+
+
+def _snare(r):
+    tt = t(0.2)
+    noise = r.uniform(-1, 1, len(tt))
+    band = lowpass(noise, 5000) - lowpass(noise, 700)
+    return (band * 1.2 + 0.5 * np.sin(2 * np.pi * 190 * tt)) * np.exp(-tt * 18)
+
+
+def _hat(r, open_=False):
+    tt = t(0.2 if open_ else 0.05)
+    noise = r.uniform(-1, 1, len(tt))
+    return (noise - lowpass(noise, 6000)) * np.exp(-tt * (14 if open_ else 70)) * 0.7
+
+
+def _bass(freq, seconds, square=True):
+    tt = t(seconds)
+    wave_ = np.sign(np.sin(2 * np.pi * freq * tt)) if square else 2 * ((freq * tt) % 1.0) - 1
+    return lowpass(wave_, 420) * envelope(len(tt), 0.005, seconds * 0.5) * 0.9
+
+
+def _bone(freq, seconds=0.35):
+    """A xylophone made of bones: a knock and a bright, quick ring."""
+    tt = t(seconds)
+    ring = np.sin(2 * np.pi * freq * tt) + 0.35 * np.sin(2 * np.pi * freq * 3.9 * tt) * np.exp(-tt * 30)
+    return ring * np.exp(-tt * 11)
+
+
+def _theremin(freqs, seconds):
+    """A wobbly, gliding ghost of a lead line through `freqs`."""
+    tt = t(seconds)
+    steps = np.repeat(freqs, int(np.ceil(len(tt) / len(freqs))))[:len(tt)]
+    glide = lowpass(steps.astype(float), 12)
+    vib = 1 + 0.012 * np.sin(2 * np.pi * 6 * tt)
+    phase = np.cumsum(glide * vib) / RATE
+    return np.sin(2 * np.pi * phase) * envelope(len(tt), 0.08, 0.3) * 0.5
+
+
+def zomtok_beat(which):
+    r = np.random.default_rng(300 + which)
+    bpm = BEAT_BPM[which]
+    beat = int(RATE * 60 / bpm)
+    buf = np.zeros(beat * 8)  # two bars
+    eighth = beat // 2
+    if which == 0:  # a spooky shuffle in E minor
+        for b in range(8):
+            if b % 2 == 0:
+                _place(buf, _kick(r), b * beat)
+            else:
+                _place(buf, _snare(r) * 0.8, b * beat)
+            _place(buf, _hat(r) * 0.6, b * beat + int(eighth * 1.33))  # (swung)
+        _place(buf, _kick(r) * 0.7, 5 * beat + int(eighth * 1.33))
+        for b, f in enumerate([82.41, 98.0, 110.0, 123.47, 82.41, 98.0, 110.0, 92.5]):
+            _place(buf, _bass(f, 60 / bpm * 0.9, square=False), b * beat)
+        for b in (0, 4):
+            tt = t(60 / bpm * 1.6)
+            chord = sum(organ_note(f, tt) for f in [164.81, 196.0, 246.94]) * envelope(len(tt), 0.02, 0.8) * 0.12
+            _place(buf, chord, b * beat)
+    elif which == 1:  # four on the floor, a square bass and a ghost on lead
+        for b in range(8):
+            _place(buf, _kick(r), b * beat)
+            if b % 2:
+                _place(buf, _snare(r), b * beat)
+            _place(buf, _hat(r, open_=True) * 0.5, b * beat + eighth)
+            _place(buf, _hat(r) * 0.35, b * beat)
+        for i, f in enumerate([55.0, 55.0, 110.0, 55.0, 65.41, 65.41, 130.81, 49.0] * 2):
+            _place(buf, _bass(f, 60 / bpm * 0.45), i * eighth)
+        _place(buf, _theremin([440.0, 523.25, 493.88, 392.0], 60 / bpm * 8), 0)
+    else:  # bones
+        for b in range(8):
+            _place(buf, _kick(r), b * beat)
+            if b % 2:
+                _place(buf, _snare(r) * 0.9, b * beat)
+                _place(buf, _snare(r) * 0.35, b * beat + eighth + eighth // 2)
+            _place(buf, _hat(r) * 0.4, b * beat + eighth)
+        tune = [392.0, 440.0, 523.25, 440.0, 587.33, 523.25, 440.0, 392.0, 329.63, 392.0, 440.0, 523.25, 659.25, 587.33, 523.25, 440.0]
+        for i, f in enumerate(tune):
+            _place(buf, _bone(f) * 0.55, i * eighth)
+        for b, f in enumerate([98.0, 98.0, 110.0, 130.81, 98.0, 98.0, 146.83, 130.81]):
+            tt = t(60 / bpm * 0.95)
+            _place(buf, np.sin(2 * np.pi * f / 2 * tt) * envelope(len(tt), 0.01, 0.2) * 0.9, b * beat)
+    return buf
+
+
+def zomtok_like():
+    tt = t(0.12)
+    pop = np.sin(2 * np.pi * (700 + 900 * tt / 0.12) * tt) * np.exp(-tt * 40)
+    return pop
+
+
+def snake_eat():
+    r = np.random.default_rng(310)
+    tt = t(0.13)
+    blip = np.sign(np.sin(2 * np.pi * (520 + 1400 * tt) * tt)) * np.exp(-tt * 25) * 0.5
+    crunch = lowpass(r.uniform(-1, 1, len(tt)), 2200) * np.exp(-tt * 45)
+    return blip + crunch
+
+
+def snake_over():
+    out = []
+    for f, sec in [(392.0, 0.22), (369.99, 0.22), (349.23, 0.22), (329.63, 0.7)]:  # wah wah wah wahhh
+        tt = t(sec)
+        wobble = 1 + (0.02 * np.sin(2 * np.pi * 7 * tt) if sec > 0.5 else 0)
+        saw = 2 * ((f / 2 * wobble * tt) % 1.0) - 1
+        out.append(lowpass(saw, 900) * envelope(len(tt), 0.02, sec * 0.4))
+    return np.concatenate(out)
+
+
 def main():
     save("vlad_sting", sting(), 0.85)
     save("vlad_bats", bats(), 0.7)
@@ -223,6 +362,15 @@ def main():
     save("war_reload", reload(), 0.6)
     save("war_crack", bone_crack(), 0.8)
     save("war_smash", smash(), 0.85)
+    pc_apps_sounds()
+
+
+def pc_apps_sounds():
+    for i in range(len(BEAT_BPM)):
+        save(f"zomtok_beat_{i}", zomtok_beat(i), 0.55)
+    save("zomtok_like", zomtok_like(), 0.5)
+    save("snake_eat", snake_eat(), 0.55)
+    save("snake_over", snake_over(), 0.6)
 
 
 if __name__ == "__main__":

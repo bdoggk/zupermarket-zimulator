@@ -38,6 +38,17 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.17.0
+
+Two new apps on the store computer:
+- **Snake.** Zombie Snake: eat what your store sells, grow, speed up, don't hit the
+  walls (or yourself). Keys, the d-pad, swipes or the on-screen arrows; your best score
+  is saved with the store.
+- **ZomTok.** Videos of the town's characters dancing to a beat: shoppers, your staff,
+  Mr. Bones, Count Vlad and Big Rotto's crew, in your store, at Bone Mart, in the street,
+  the graveyard or a crypt party. Swipe for the next one, like it (a double tap works),
+  read the comments and post your own. A new feed every day.
+
 ## What's new in 0.16.0
 
 - **Gang fight outlines.** While a gang fight is on, Bone Mart's skeletons have a red
@@ -1060,6 +1071,23 @@ up down the street, then charge in together, and you can join the fight.
 - **A Bone Mart Express** (2 skeletons): win, and it's yours.
 - Lose, and your gang is out cold until tomorrow.
 
+### Slacking off: Snake and ZomTok
+The store computer has two apps that aren't work (the store keeps running while you play):
+
+- **Snake** (Zombie Snake): steer a snake round the screen eating what your store sells.
+  Every bite makes it longer and a little faster; hit a wall or yourself and it's over.
+  Arrows or WASD (d-pad or stick, or swipe on a touch screen, or the arrow buttons).
+  Your best score is saved with the store. Leave the app and it pauses.
+- **ZomTok**: short videos of the town dancing, one at a time on a phone screen, each
+  with its own beat. Zombies, skeletons, witches, vampires and the rest (the kinds you've
+  met so far), your own staff (on the clock), Mr. Bones advertising Bone Mart, Count
+  Vlad, and Big Rotto's crew once the gang war's on, filmed in your store, at Bone Mart,
+  in the street, in the graveyard or at a crypt party. Swipe up (Down, the wheel, the
+  d-pad) for the next one. Like it with the heart, a double tap, Space or A; follow
+  whoever posted it; share it. The bubble (C, or X on a controller) opens the comments:
+  type your own or pick a quick reply (left / right and A on a controller), and the
+  poster may like it. A new day brings a new feed.
+
 ### Upgrades for bigger stores
 | Level | Upgrade | Cost | What it does |
 |---|---|---|---|
@@ -1089,7 +1117,9 @@ up down the street, then charge in together, and you can join the fight.
 | Pause menu | Esc or P | II button / back button |
 | Recent messages | M, or the Log button | Log button |
 | Close / cancel | Esc | Back button |
-| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-6 switch apps, Esc goes back | Tap |
+| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-8 switch apps, Esc goes back | Tap |
+| Snake (store computer) | Arrows or WASD steer, Enter starts | Swipe on the board or tap the arrows; tap to start |
+| ZomTok (store computer) | Down / Up or the mouse wheel: next / last video; Space or L (or double-click): like; C: comments | Swipe up / down; double-tap or the heart; the bubble for comments |
 
 A gamepad works too: left stick to move, LT or L3 (sprint), A (use), X (scan), Y
 (build), R3 (first / third person; the right stick looks around in first person, and
@@ -1166,7 +1196,10 @@ scripts/
   computer.gd          Opens the store computer
   floor.gd             Draws the floor tiles and the tap marker
   hud.gd               Main UI (status bar, prompts, messages, summary)
-  ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades / Loans / Turf
+  ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades / Loans / Turf / Snake / ZomTok
+  ui/pc_snake.gd       The computer's Snake (Zombie Snake)
+  ui/zomtok_app.gd     ZomTok: the phone-shaped video player, likes and comments
+  zomtok_feed.gd       What's on ZomTok: who posts, the dances, captions and comments
   ui/rival_panel.gd    Bone Mart's price list
   ui/tutorial.gd       The first-day tips
   ui/build_bar.gd      The build mode toolbar, decorations row and paint menu
@@ -1189,7 +1222,7 @@ shaders/
 assets/sprites/        All the pixel art
 assets/sounds/         Sounds (.ogg / .wav). A shopper kind's "sound" in brand.gd is what it growls
 tools/make_sprites.py  The Python script that draws the placeholder art (for both games)
-tools/make_sounds.py   Makes the sound effects (Count Vlad's visit, the gang war's punches, shots...) from scratch
+tools/make_sounds.py   Makes the sound effects (Count Vlad's visit, the gang war's punches, shots, ZomTok's beats, Snake...) from scratch
 tests/                 Automated checks (not included in exports, safe to ignore)
 Update Mac App.command Rebuilds the Mac app and installs it (see "Mac app")
 ```
@@ -1298,6 +1331,8 @@ godot --headless --path . --fixed-fps 60 res://tests/levels_test.tscn # levels w
 godot --headless --path . -s res://tests/loan_test.gd                 # loans, the payments, Count Vlad's visit and starting over
 godot --headless --path . --fixed-fps 60 res://tests/fp_test.tscn     # first person: the 3D store and its models, sky, shadows, Sharp / Chunky, walking, looking, using, tapping
 godot --headless --path . --fixed-fps 60 res://tests/war_test.tscn    # the gang war: land, branches, raids both ways, fighting, the cutscene
+godot --headless --path . --fixed-fps 60 res://tests/pc_apps_test.tscn # the computer's Snake and ZomTok
+godot --headless --path . -s res://tests/roundtrip_test.gd            # save a store with everything in it, load it, save again: nothing lost
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/rt_test.tscn  # ray tracing: the setting, the height map, shadows read back from the lightmap, both views
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)
 ```
