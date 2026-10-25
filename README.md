@@ -38,6 +38,13 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.16.0
+
+- **Gang fight outlines.** While a gang fight is on, Bone Mart's skeletons have a red
+  outline and your zombie gang a green one, so you can tell who's who (and tell them from
+  the skeleton and zombie shoppers) at a glance. It works in first person too, stays
+  bright at night, and goes away when someone's knocked out or the fight's over.
+
 ## What's new in 0.15.1
 
 A bug-fix release:
@@ -1027,6 +1034,9 @@ in the middle of the screen.
 
 **Fighting.** Walk up to one of Bone Mart's skeletons and press **E** (A on a controller,
 click or tap them) to hit them. Knock one out and it falls apart into a heap of bones.
+While a fight is on, Bone Mart's skeletons have a **red outline** and your gang a **green
+one** (in first person too, and bright enough to see at night), so you can tell them from
+shoppers. Anyone knocked out loses theirs.
 
 | Weapon | Cost | Skeletons (4 health) go down in |
 |---|---|---|

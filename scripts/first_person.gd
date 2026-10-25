@@ -666,6 +666,24 @@ func _sync_person(n: Node, m: Array) -> void:
 	if _rt:
 		s.modulate *= light_at((n as Node2D).position)
 	s.position = to_3d((n as Node2D).global_position - store.global_position)
+	# The gang war's outlines (red round Bone Mart's, green round yours): a
+	# billboard of the outline in the same spot (a pixel bigger each side, so
+	# the same middle; it only fills what's see-through in theirs), not
+	# darkened at night.
+	var ol: Texture2D = n.fp_outline() if n is Gangster else null
+	var o: Sprite3D = s.get_node_or_null("Outline")
+	if ol and o == null:
+		o = _billboard()
+		o.name = "Outline"
+		o.scale = Vector3.ONE  # (it has its parent's)
+		s.add_child(o)
+	if o:
+		o.visible = ol != null
+		if ol:
+			o.texture = ol
+			o.offset = s.offset
+			o.flip_h = s.flip_h
+			o.modulate = Color(1, 1, 1, (n as CanvasItem).modulate.a)
 
 
 ## Things that stand still (furniture, walls, scenery): rebuilt only when

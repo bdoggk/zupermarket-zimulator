@@ -139,6 +139,7 @@ func _ready() -> void:
 	check(turf.fighting() and turf.enemies().size() == war.raid_size(), "a raid: %d skeletons set off from Bone Mart" % turf.enemies().size())
 	check(turf.members.values().all(func(m): return m.job == Gangster.Job.RESPOND), "your gang runs to meet them")
 	check(hud.fight_panel.visible and hud.fight_label.text.begins_with("RAID!"), "RAID! on the screen: " + hud.fight_label.text)
+	_outlines(turf)
 	var shot := false
 	for i in 1800:
 		if not turf.fighting():
@@ -151,6 +152,8 @@ func _ready() -> void:
 		await get_tree().process_frame
 	check(shot, "you shot at them")
 	check(not turf.fighting() and int(Game.stats.raids_won) == 1, "fought them off (fights won: %d)" % int(Game.stats.raids_won))
+	await _frames(2)
+	check(turf.gangsters.all(func(g): return not is_instance_valid(g) or not g.outline.visible), "once the fight's over, nobody has an outline")
 	await _wait(3.0)
 	check(turf.members.values().all(func(m): return is_instance_valid(m) and (m.job == Gangster.Job.GUARD or m.is_out() or m.job == Gangster.Job.HOME)), "your gang goes back out front")
 
@@ -277,6 +280,8 @@ func _ready() -> void:
 
 	# ---- first person: the gangsters are there, the weapon's in your hand
 	war.weapons["nunchucks"] = true
+	Game.open_store()  # (a raid's called off while you're closed)
+	await _frames(2)
 	turf.start_defense(GangWar.MAIN)
 	await _frames(3)
 	var fp: FirstPerson = Game.fp
@@ -287,6 +292,13 @@ func _ready() -> void:
 		if is_instance_valid(m[0]) and m[0] is Gangster and m[1] == "person" and is_instance_valid(m[2]):
 			thugs += 1
 	check(thugs >= turf.enemies().size(), "first person: the gangsters are there (%d)" % thugs)
+	var lined := 0
+	for m: Array in fp._mirrors.values():
+		if is_instance_valid(m[0]) and m[0] is Gangster and m[1] == "person" and is_instance_valid(m[2]):
+			var o: Sprite3D = (m[2] as Node).get_node_or_null("Outline")
+			if o and o.visible and o.texture == m[0].fp_outline() and o.offset == m[2].offset:
+				lined += 1
+	check(turf.fighting() and lined >= turf.enemies().size() and lined > 0, "and in a fight they have their outlines (%d)" % lined)
 	p.fight_t = 2.0
 	check(p.weapon_shown() == "nunchucks", "and the nunchucks are in your hand")
 	fp.set_active(false)
@@ -296,6 +308,62 @@ func _ready() -> void:
 	Engine.time_scale = 1.0
 	print("RESULT: %d failure%s" % [fails, "" if fails == 1 else "s"])
 	get_tree().quit(1 if fails > 0 else 0)
+
+
+## In a fight: red round Bone Mart's skeletons, green round your gang, a
+## pixel out from the sprite all round; none on someone knocked out.
+func _outlines(turf: Turf) -> void:
+	var bone: Gangster = turf.enemies()[0]
+	var ours: Array = turf.members.values().filter(func(m): return is_instance_valid(m) and not m.is_out())
+	check(bone.outline.visible and bone.outlined(), "in a fight, Bone Mart's skeletons have an outline...")
+	check(_near(_line_color(bone), Gangster.OUTLINE_COLORS.bone) and Gangster.OUTLINE_COLORS.bone.r > 0.9 and Gangster.OUTLINE_COLORS.bone.g < 0.3, "...a red one (%s)" % _line_color(bone))
+	check(not ours.is_empty() and ours.all(func(m): return m.outline.visible), "and your gang has one too (%d of them)..." % ours.size())
+	if not ours.is_empty():
+		check(_near(_line_color(ours[0]), Gangster.OUTLINE_COLORS.zombie) and Gangster.OUTLINE_COLORS.zombie.g > 0.9 and Gangster.OUTLINE_COLORS.zombie.r < 0.4, "...a green one (%s)" % _line_color(ours[0]))
+	# It hugs the sprite: a pixel bigger each side, lined up, never over the sprite itself.
+	var art := bone.sprite.texture.get_image()
+	art.convert(Image.FORMAT_RGBA8)
+	var line := bone.outline.texture.get_image()
+	line.convert(Image.FORMAT_RGBA8)
+	var over := 0
+	var hugging := 0
+	var edge := 0
+	for y in art.get_height():
+		for x in art.get_width():
+			if art.get_pixel(x, y).a < 0.5:
+				continue
+			if line.get_pixel(x + 1, y + 1).a > 0.0:
+				over += 1
+			for d: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+				var q := Vector2i(x, y) + d
+				var off_art := q.x < 0 or q.y < 0 or q.x >= art.get_width() or q.y >= art.get_height()
+				if off_art or art.get_pixel(q.x, q.y).a < 0.5:
+					edge += 1
+					if line.get_pixel(q.x + 1, q.y + 1).a > 0.0:
+						hugging += 1
+	check(line.get_size() == art.get_size() + Vector2i(2, 2) and bone.outline.offset == bone.sprite.offset - Vector2.ONE,
+		"the outline is a pixel bigger each side and lines up with the sprite")
+	check(over == 0 and hugging == edge and edge > 0, "it goes all round the sprite (%d of %d edge pixels) and never over it (%d)" % [hugging, edge, over])
+	bone.outline.visible = true
+	bone.down = true
+	bone._process(0.0)
+	check(not bone.outline.visible, "a skeleton that's knocked out loses its outline")
+	bone.down = false
+	bone._process(0.0)
+	check(bone.outline.visible, "(and gets it back)")
+
+
+func _near(a: Color, b: Color) -> bool:
+	return absf(a.r - b.r) < 0.01 and absf(a.g - b.g) < 0.01 and absf(a.b - b.b) < 0.01 and absf(a.a - b.a) < 0.01
+
+
+func _line_color(g: Gangster) -> Color:
+	var img := g.outline.texture.get_image()
+	for y in img.get_height():
+		for x in img.get_width():
+			if img.get_pixel(x, y).a > 0.5:
+				return img.get_pixel(x, y)
+	return Color.BLACK
 
 
 func _dump(turf: Turf) -> void:

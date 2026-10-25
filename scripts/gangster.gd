@@ -30,6 +30,12 @@ const REPATH := 0.35
 const DOWN_SECONDS := 6.0  # lies there this long, then fades away
 const FADE_SPEED := 2.5
 const UNSTICK_AFTER := 2.0
+## The line round each side while a gang fight is on: red round Bone Mart's
+## skeletons, green round your zombies (so you can tell them from shoppers).
+const OUTLINE_COLORS := {"bone": Color(1.0, 0.16, 0.12), "zombie": Color(0.3, 1.0, 0.25)}
+
+static var _outlines := {}  # "texture rid:color" -> its outline (see outline_of)
+static var _glow: CanvasItemMaterial = null  # (unshaded: the outline stays bright at night)
 
 var store: Store
 var turf: Node  # Turf
@@ -52,6 +58,7 @@ var down := false
 var retired := false  # fired from your gang: walking off, out of the war
 var holding := false  # waiting for the rest of the gang (on a raid): only fights back
 var sprite: Sprite2D
+var outline: Sprite2D  # behind `sprite`, shown while a fight's on (outlined())
 var path: Array[Vector2i] = []
 var goal := Store.NO_CELL
 var timer := 0.0  # smashing or robbing
@@ -91,6 +98,55 @@ func setup(s: Store, t: Node, which: String, name_text: String, look: Texture2D,
 	sprite.centered = false
 	sprite.offset = Vector2(-floorf(look.get_width() / 2.0), -(look.get_height() - 2))
 	add_child(sprite)
+	outline = Sprite2D.new()
+	outline.texture = outline_of(look, OUTLINE_COLORS[side])
+	outline.centered = false
+	outline.offset = sprite.offset - Vector2.ONE  # (a pixel bigger each side)
+	outline.show_behind_parent = true
+	if _glow == null:
+		_glow = CanvasItemMaterial.new()
+		_glow.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
+	outline.material = _glow  # (so the ray tracer leaves it alone, too)
+	outline.visible = false
+	sprite.add_child(outline)  # (it bobs, lunges and turns with the sprite)
+
+
+## `tex` with a one-pixel `color` line round everything solid in it, a pixel
+## bigger on each side (so it lines up one pixel up and left of `tex`).
+static func outline_of(tex: Texture2D, color: Color) -> Texture2D:
+	var key := "%s:%s" % [tex.get_rid(), color.to_html()]
+	if _outlines.has(key):
+		return _outlines[key]
+	var img := tex.get_image()
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	var w := img.get_width()
+	var h := img.get_height()
+	var solid := func(x: int, y: int) -> bool:
+		return x >= 0 and y >= 0 and x < w and y < h and img.get_pixel(x, y).a >= 0.5
+	var out := Image.create(w + 2, h + 2, false, Image.FORMAT_RGBA8)
+	for y in h + 2:
+		for x in w + 2:
+			var sx := x - 1
+			var sy := y - 1
+			if solid.call(sx, sy):
+				continue
+			if solid.call(sx - 1, sy) or solid.call(sx + 1, sy) or solid.call(sx, sy - 1) or solid.call(sx, sy + 1):
+				out.set_pixel(x, y, color)
+	var made := ImageTexture.create_from_image(out)
+	_outlines[key] = made
+	return made
+
+
+## Its side's outline is showing: a gang fight is on, and it's still in it.
+func outlined() -> bool:
+	return not down and not _fading and not retired and turf != null and turf.fighting()
+
+
+## First person: the outline to draw round it, or null.
+func fp_outline() -> Texture2D:
+	return outline.texture if outline and outline.visible else null
 
 
 func current_cell() -> Vector2i:
@@ -258,6 +314,8 @@ func _process(delta: float) -> void:
 	elif not _fading:
 		_think(delta)
 	_animate(delta)
+	outline.visible = outlined()
+	outline.flip_h = sprite.flip_h
 	var b := 1.3 if highlighted else 1.0
 	modulate = Color(b, b, b, _alpha)
 	if _hit_flash > 0.0:
