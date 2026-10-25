@@ -1,0 +1,62 @@
+# Publishes the files on this branch as a GitHub release whenever the
+# branch is updated (or when run by hand from the Actions tab).
+name: Publish downloads
+
+on:
+  push:
+    branches: [downloads]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip the Windows build
+        run: |
+          unzip -o ZupermarketZimulator-windows.zip
+          mv ZupermarketZimulator.exe ZupermarketZimulator-windows.exe
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          TAG="v$VERSION"
+          FILES="ZupermarketZimulator-android.apk ZupermarketZimulator-windows.exe"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" $FILES --clobber
+            gh release edit "$TAG" --notes-file RELEASE_NOTES.md --latest
+          else
+            gh release create "$TAG" $FILES --target main --latest \
+              --title "Zupermarket Zimulator v$VERSION" --notes-file RELEASE_NOTES.md
+          fi
+
+  # The Microsoft Store package, once store/identity.ini has the game's
+  # identity from Partner Center (Product identity). Until then it's skipped.
+  store:
+    needs: publish
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the Microsoft Store package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ((Get-Content store/identity.ini -Raw) -notmatch '(?m)^Name=\S') {
+            Write-Output "::notice title=Store package::Skipped: store/identity.ini isn't filled in yet"
+            exit 0
+          }
+          Expand-Archive ZupermarketZimulator-windows.zip -DestinationPath win
+          $version = (Get-Content VERSION -Raw).Trim()
+          ./store/make_msix.ps1 -Exe win/ZupermarketZimulator.exe -Version $version -Out ZupermarketZimulator-store.msix
+          gh release upload "v$version" ZupermarketZimulator-store.msix --clobber
+          Write-Output "::notice title=Store package::Added ZupermarketZimulator-store.msix to v$version"
