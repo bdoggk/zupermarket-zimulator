@@ -1258,3 +1258,4 @@ func _animate(delta: float) -> void:
 		sprite.position.y = -roundf(absf(sin(_walk_anim)) * 2.0)
 	else:
 		sprite.position.y = 0.0
+	CharArt.walk(sprite, Game.STAFF[role].texture, _walk_anim, not path.is_empty())

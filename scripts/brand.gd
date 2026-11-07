@@ -249,6 +249,9 @@ const SHOPPERS := {
 			preload("res://assets/sprites/customer_0.png"), preload("res://assets/sprites/customer_1.png"),
 			preload("res://assets/sprites/customer_2.png"), preload("res://assets/sprites/customer_3.png"),
 			preload("res://assets/sprites/customer_4.png"), preload("res://assets/sprites/customer_5.png"),
+			preload("res://assets/sprites/customer_6.png"), preload("res://assets/sprites/customer_7.png"),
+			preload("res://assets/sprites/customer_8.png"), preload("res://assets/sprites/customer_9.png"),
+			preload("res://assets/sprites/customer_10.png"), preload("res://assets/sprites/customer_11.png"),
 		],
 	},
 	"crawler": {
@@ -585,6 +588,19 @@ const FURNITURE := {
 		"texture": preload("res://assets/sprites/decor_sarcophagus.png")},
 	"moonlamp": {"name": "Moon Lamp", "cost": 160.0, "kind": "decor", "level": 11, "pulls": "werewolf",
 		"light": Color(1.0, 0.95, 0.75), "glow": Vector2(0, -44), "steady": true, "texture": preload("res://assets/sprites/decor_moon_lamp.png")},
+	# Trophy decorations: you earn the right to build one with a trophy
+	# ("trophy": its id in TROPHIES). "traffic": that many more shoppers
+	# (the first one counts); "stars": shoppers rate you that much higher.
+	"trophy_case": {"name": "Trophy Case", "cost": 100.0, "kind": "decor", "trophy": "goals_25", "traffic": 0.05,
+		"texture": preload("res://assets/sprites/decor_trophy_case.png")},
+	"statue": {"name": "Zombie Statue", "cost": 200.0, "kind": "decor", "trophy": "thousand", "traffic": 0.05,
+		"texture": preload("res://assets/sprites/decor_zombie_statue.png")},
+	"fountain": {"name": "Blood Fountain", "cost": 300.0, "kind": "decor", "trophy": "rev_10k", "traffic": 0.08,
+		"light": Color(1.0, 0.35, 0.3), "glow": Vector2(0, -12), "texture": preload("res://assets/sprites/decor_blood_fountain.png")},
+	"golden_grave": {"name": "Golden Gravestone", "cost": 300.0, "kind": "decor", "trophy": "perfect_7", "traffic": 0.1,
+		"texture": preload("res://assets/sprites/decor_golden_grave.png")},
+	"plaque": {"name": "Five-Star Plaque", "cost": 250.0, "kind": "decor", "trophy": "stars_5", "stars": 0.25,
+		"texture": preload("res://assets/sprites/decor_plaque.png")},
 }
 
 ## Paint jobs in build mode. Each id matches sprites in assets/sprites:
@@ -798,6 +814,100 @@ const SAY := {
 	"brew_bought": "%s: %s",
 	"brew_done": "Your %s wore off.",
 }
+
+## Daily goals (Goals, scripts/goals.gd): what each kind of goal says. %d
+## is how many, %s a product or a kind of shopper.
+const GOALS := {
+	"serve": "Serve %d shoppers",
+	"revenue": "Take in $%d in sales",
+	"sell": "Sell %d %s",
+	"kind": "Serve %d %s",
+	"happy": "Make %d shoppers happy",
+	"mop": "Mop up %d puddles yourself",
+	"ring": "Ring up %d shoppers yourself",
+	"spy": "Throw out one of Bone Mart's spies",
+	"upsell": "Sell %d things above the market price",
+	"license": "License a new product",
+	"decorate": "Put up a new decoration",
+	"hire": "Hire someone",
+	"knockouts": "Knock out %d of Bone Mart's skeletons",
+	"raid": "Win a fight against Bone Mart's gang",
+	"snake": "Score %d at Snake (on the computer)",
+	"zomtok": "Like %d ZomTok videos",
+	"no_walkouts": "Close with nobody walking out",
+	"clean": "Close with no blood on the floor",
+	"profit": "Close with a $%d profit",
+	"rating": "Close at %s stars or better",
+}
+
+## What shoppers write about you (StoreRating), by what made their visit
+## good or bad. {product} is what they couldn't get, {rival} Bone Mart.
+const REVIEWS := {
+	"walkout": ["Stood in line forever, then gave up. Never again.", "I'd have paid if anyone had rung me up. Rotten service.", "Left my basket and walked out. My brain's not getting any fresher."],
+	"wait": ["Good stuff, but the line took forever.", "Waited so long I lost a finger. Hire a cashier!", "The queue moves slower than a crawler."],
+	"missing": ["No {product}?! What kind of store is this?", "Came for {product}, left with nothing.", "Out of {product} AGAIN. Grrr."],
+	"pricey": ["{product} for THAT much? {rival}'s cheaper.", "Highway robbery. And I'm a zombie.", "Prices make my eyes fall out (literally)."],
+	"blood": ["Floor's covered in blood. And not the good kind.", "Slipped in a puddle and lost an arm. Mop up!", "Somebody mop that floor."],
+	"raid": ["Skeletons smashed the place up while I shopped!", "A gang fight in the cereal aisle?! I'm out."],
+	"nothing": ["Couldn't find a single thing I wanted.", "Shelves were empty. Went to {rival} instead."],
+	"ok": ["It's fine. A store with stuff in it.", "Got my stuff. Meh.", "Not bad, not great. Like my left leg."],
+	"good": ["Nice store, quick checkout.", "Found what I wanted. Will shamble back.", "Pretty good! Better than {rival}."],
+	"great": ["Best store in Deadville! Everything was in stock.", "Fresh, fast and friendly. Five stars from this corpse.", "In and out in no time. Love this place!", "BRAAAINS, fair prices, clean floor. Perfection."],
+}
+
+## Things shoppers say while they shop, now and then (by kind; "any" is
+## for everyone).
+const CHATTER := {
+	"any": ["Braaains...", "Is this aisle haunted?", "Where's the guts aisle?", "*shuffles*", "Fresh today?"],
+	"zombie": ["Uuuurgh.", "Grrr... snacks.", "My arm fell off again."],
+	"skeleton": ["*rattle rattle*", "I've got a bone to pick.", "Calcium, where are you?"],
+	"witch": ["Double, double...", "Eye of newt, eye of newt...", "Cackle!"],
+	"vampire": ["I vant... to shop.", "Too bright in here.", "Blood bags? Anyone?"],
+	"mummy": ["*unravels slightly*", "3000 years and still shopping."],
+	"ghost": ["Boooo... (sale?)", "*floats past the shelf*"],
+	"werewolf": ["AWOOO!", "*sniff sniff* Meat."],
+	"brute": ["HUNGRY.", "*GROWL*"],
+	"rich": ["Do you have anything... fresher?", "Put it on my tab."],
+}
+
+## Trophies (Trophies, scripts/trophies.gd): long-term goals. "stat" is
+## what's counted (Trophies.value), "target" how much of it; "cash" the
+## reward. Some let you build a trophy decoration (FURNITURE "trophy").
+const TROPHIES := [
+	{"id": "first_sale", "name": "Open for Business", "text": "Serve your first shopper", "stat": "customers", "target": 1, "cash": 10.0},
+	{"id": "hundred", "name": "Regulars", "text": "Serve 100 shoppers", "stat": "customers", "target": 100, "cash": 100.0},
+	{"id": "thousand", "name": "The Horde", "text": "Serve 1,000 shoppers", "stat": "customers", "target": 1000, "cash": 750.0},
+	{"id": "ten_thousand", "name": "Undead Empire", "text": "Serve 10,000 shoppers", "stat": "customers", "target": 10000, "cash": 3000.0},
+	{"id": "rev_1k", "name": "Pocket Change", "text": "Take in $1,000 in sales", "stat": "revenue", "target": 1000, "cash": 50.0},
+	{"id": "rev_10k", "name": "Blood Money", "text": "Take in $10,000 in sales", "stat": "revenue", "target": 10000, "cash": 500.0},
+	{"id": "rev_100k", "name": "Mogul of the Macabre", "text": "Take in $100,000 in sales", "stat": "revenue", "target": 100000, "cash": 5000.0},
+	{"id": "level_5", "name": "Moving Up", "text": "Reach store level 5", "stat": "level", "target": 5, "cash": 150.0},
+	{"id": "level_10", "name": "Big Box Store", "text": "Reach store level 10", "stat": "level", "target": 10, "cash": 750.0},
+	{"id": "level_15", "name": "Turf War", "text": "Reach store level 15", "stat": "level", "target": 15, "cash": 1500.0},
+	{"id": "level_20", "name": "Legend of Deadville", "text": "Reach store level 20", "stat": "level", "target": 20, "cash": 4000.0},
+	{"id": "catalog", "name": "Full Catalog", "text": "License every product", "stat": "licensed", "target": 28, "cash": 1000.0},
+	{"id": "survivor", "name": "Survivor", "text": "Make it to day 30", "stat": "day", "target": 30, "cash": 500.0},
+	{"id": "goals_25", "name": "Goal Getter", "text": "Complete 25 daily goals", "stat": "goals", "target": 25, "cash": 400.0},
+	{"id": "perfect_7", "name": "Perfect Week", "text": "7 perfect days in a row (every goal done)", "stat": "streak", "target": 7, "cash": 1000.0},
+	{"id": "stars_4", "name": "Four Stars", "text": "Reach a 4-star rating", "stat": "stars", "target": 4, "cash": 250.0},
+	{"id": "stars_5", "name": "Five Stars", "text": "Reach a 5-star rating", "stat": "stars", "target": 5, "cash": 1000.0},
+	{"id": "happy_500", "name": "Crowd Pleaser", "text": "Make 500 shoppers happy", "stat": "happy", "target": 500, "cash": 500.0},
+	{"id": "spotless", "name": "Spotless", "text": "Close with no blood on the floor, after serving 30 shoppers", "stat": "clean_closes", "target": 1, "cash": 200.0},
+	{"id": "mop_100", "name": "Mop Master", "text": "Mop up 100 puddles yourself", "stat": "you_cleaned", "target": 100, "cash": 200.0},
+	{"id": "spies_10", "name": "Spy Catcher", "text": "Throw out 10 of Bone Mart's spies", "stat": "spies", "target": 10, "cash": 300.0},
+	{"id": "registers_4", "name": "Full House", "text": "Have 4 registers", "stat": "registers", "target": 4, "cash": 300.0},
+	{"id": "staff_8", "name": "Dream Team", "text": "Have 8 staff at once", "stat": "staff", "target": 8, "cash": 400.0},
+	{"id": "staff_max", "name": "Employee of the Month", "text": "Get one of your staff to level 5", "stat": "staff_level", "target": 5, "cash": 300.0},
+	{"id": "lots_3", "name": "Bigger Is Better", "text": "Buy all three lots next door", "stat": "lots", "target": 3, "cash": 500.0},
+	{"id": "hearse", "name": "Speed Demon", "text": "Get the Hearse Express", "stat": "hearse", "target": 1, "cash": 200.0},
+	{"id": "debt_free", "name": "Debt Free", "text": "Pay off a loan from Count Vlad", "stat": "loans_repaid", "target": 1, "cash": 250.0},
+	{"id": "night_owl", "name": "Night Shift", "text": "Serve 15 vampires in one day", "stat": "vampires_today", "target": 15, "cash": 300.0},
+	{"id": "knockouts_50", "name": "Bone Breaker", "text": "Knock out 50 of Bone Mart's skeletons", "stat": "knockouts", "target": 50, "cash": 750.0},
+	{"id": "raids_5", "name": "Raider", "text": "Win 5 fights against Bone Mart's gang", "stat": "raids", "target": 5, "cash": 1500.0},
+	{"id": "kingpin", "name": "Kingpin", "text": "Own all four plots east of Bone Mart", "stat": "plots", "target": 4, "cash": 5000.0},
+	{"id": "snake_30", "name": "Snake Charmer", "text": "Score 30 at Snake", "stat": "snake", "target": 30, "cash": 100.0},
+	{"id": "zomtok_50", "name": "Doomscroller", "text": "Like 50 ZomTok videos", "stat": "zomtok", "target": 50, "cash": 50.0},
+]
 
 ## Lighting. day/night: how dark it is away from the ceiling lights.
 ## plain_night: the night tint on Low graphics. menu: the main menu's tint.

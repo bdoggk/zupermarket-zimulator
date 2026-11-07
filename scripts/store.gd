@@ -1033,7 +1033,8 @@ func traffic_multiplier() -> float:
 	for id in ["billboard", "neon"]:
 		if Game.has_upgrade(id):
 			ads *= Game.BILLBOARD_TRAFFIC
-	return appeal * mess_multiplier() * (1.0 + LEVEL_TRAFFIC * (mini(Game.level, Game.TRAFFIC_LEVELS) - 1)) * (1.0 + variety_bonus()) * charm * ads
+	var stars := Game.rating.traffic_factor() * (1.0 + Game.trophy_decor_bonus("traffic"))  # (0.18)
+	return appeal * mess_multiplier() * (1.0 + LEVEL_TRAFFIC * (mini(Game.level, Game.TRAFFIC_LEVELS) - 1)) * (1.0 + variety_bonus()) * charm * ads * stars
 
 
 ## How many shoppers the blood still lets in (1 = all of them).

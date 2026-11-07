@@ -501,6 +501,8 @@ func on_knocked_out(g: Gangster, _by: Node2D) -> void:
 		Game.war.knocked_out(g.member_id)
 	elif g.side == Gangster.BONE and not fight.is_empty():
 		fight.downed = int(fight.downed) + 1
+	if g.side == Gangster.BONE:
+		Game.count("knockouts")
 
 
 ## You hit one of Bone Mart's: the rest of them come for you.

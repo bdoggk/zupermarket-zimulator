@@ -17,6 +17,14 @@ extends Node2D
 ## in the basket they carry (the top few items stick out of it), and after
 ## paying they leave with a bag. Point at one (or stand next to one) and the
 ## HUD shows their basket and list (see describe()).
+##
+## How did it go? (0.18) Every visit gets a score from 1 to 5 stars when
+## they leave (rate_visit: found everything? waited long? fair prices? a
+## clean floor?), which goes into the store's rating (Game.rating). A
+## bubble over their head shows how they feel along the way: ? (can't find
+## it), $ (too pricey), zzz (this line...), a heart on the way out if they
+## loved it, an angry scribble if they didn't. And now and then they say
+## something (Brand.CHATTER).
 
 enum State { ENTERING, ARRIVING, SHOPPING, PICKING, WAIT_FOR_LINE, TO_LINE, IN_LINE, LEAVING, WALKING_AWAY, EXITING }
 
@@ -61,6 +69,25 @@ var _last_pos := Vector2.INF
 var _wanted := ""  # product shown in the thought bubble
 var _bagged := false  # paid: walking out with a shopping bag
 var _walk_anim := 0.0
+var _look: Texture2D  # their sprite standing still (CharArt.walk makes the walking frames from it)
+var _wants := 0  # different things on their list when they walked in (that you sell)
+var _missed := 0  # things on it they couldn't find (sold out, none on the shelves)
+var _missed_id := ""  # the first of those
+var _pricey := 0  # things they put back for being too pricey
+var _pricey_id := ""
+var _unsold := 0  # things they wanted that you don't sell yet
+var _waited := 0.0  # the most of their patience they've used up in line (0 to 1)
+var _rated := false
+var _emote := ""  # the bubble over their head (CharArt.EMOTES), and how long it stays
+var _emote_t := 0.0
+var _emote_age := 0.0  # how long it's been up (it pops up a touch bigger, then settles)
+var _bored := false  # (zzz once per visit)
+var _chat_t := 0.0  # until they might say something
+static var _last_chat := -1000.0  # when anyone last said something (seconds)
+const CHAT_MIN := 20.0
+const CHAT_MAX := 55.0
+const CHAT_GAP := 6.0  # no two shoppers chat closer together than this
+const CHAT_CHANCE := 0.35
 var voice: AudioStreamPlayer2D  # kinds with a "sound" (see growl)
 var _growl_timer := 0.0
 static var items_taken := 0  # by every shopper since the game started (tests use it)
@@ -80,6 +107,7 @@ func setup(s: Store, start: Vector2i, list: Array[Dictionary], shopper_kind := {
 	max_patience = PATIENCE * float(kind.get("patience", 1.0))
 	patience = max_patience
 	tolerance = float(kind.get("tolerance", 1.0))
+	_wants = list.filter(func(w): return Game.is_licensed(w.id)).size()
 	if start != s.door_cell:
 		state = State.ARRIVING
 
@@ -94,6 +122,8 @@ func _exit_tree() -> void:
 func _ready() -> void:
 	var looks: Array = kind.get("looks", LOOKS)
 	sprite.texture = looks.pick_random()
+	_look = sprite.texture
+	_chat_t = randf_range(CHAT_MIN * 0.5, CHAT_MAX)
 	sprite.offset = Vector2(-floorf(sprite.texture.get_width() / 2.0), -(sprite.texture.get_height() - 2))
 	sprite.show_behind_parent = true  # so the basket (drawn in _draw) is in their hand, in front
 	_top = sprite.offset.y
@@ -163,7 +193,36 @@ func _process(delta: float) -> void:
 			growl()
 	_watch_for_stuck(delta)
 	_animate(delta)
+	if _emote_t > 0.0:
+		_emote_t -= delta
+		_emote_age += delta
+		if _emote_t <= 0.0:
+			_emote = ""
+	if state in [State.SHOPPING, State.PICKING, State.WAIT_FOR_LINE]:
+		_chat(delta)
 	queue_redraw()
+
+
+## Shows a bubble over their head for `seconds` (CharArt.EMOTES).
+func emote(id: String, seconds := 2.2) -> void:
+	_emote = id
+	_emote_t = seconds
+	_emote_age = 0.0
+
+
+## Now and then they say something (Brand.CHATTER), never too often.
+func _chat(delta: float) -> void:
+	_chat_t -= delta
+	if _chat_t > 0.0:
+		return
+	_chat_t = randf_range(CHAT_MIN, CHAT_MAX)
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _last_chat < CHAT_GAP or randf() > CHAT_CHANCE:
+		return
+	_last_chat = now
+	var kind_id: Variant = Brand.SHOPPERS.find_key(kind)
+	var lines: Array = (Brand.CHATTER.get(kind_id, []) as Array) + (Brand.CHATTER.any as Array)
+	Game.show_popup(position + Vector2(0, _top - 12.0), lines.pick_random(), Color(0.85, 0.92, 1.0))
 
 
 ## A safety net: if they've stopped somewhere they shouldn't have (walking
@@ -223,6 +282,14 @@ func _draw() -> void:
 		draw_rect(Rect2(-8, y, 16, 14), Color(0.15, 0.15, 0.18), false, 1.0)
 		draw_rect(Rect2(-1, y + 14, 2, 2), Color(0.95, 0.94, 0.9))
 		draw_texture(Game.icon(_wanted), Vector2(-4, y + 2))
+	if _emote != "" and not (_wanted != "" and (state == State.SHOPPING or state == State.PICKING)):
+		var tex: Texture2D = CharArt.EMOTES.get(_emote)
+		if tex:
+			var a := clampf(_emote_t * 3.0, 0.0, 1.0)
+			var pop := 1.0 + maxf(0.0, 0.3 - _emote_age) * 1.5  # (pops up a touch bigger, then settles)
+			draw_set_transform(Vector2(2, _top - 9.0 + sprite.position.y), 0.0, Vector2(pop, pop))
+			draw_texture(tex, Vector2(-tex.get_width() / 2.0, -tex.get_height()), Color(1, 1, 1, a))
+			draw_set_transform(Vector2.ZERO)
 	if state == State.TO_LINE or state == State.IN_LINE or state == State.WAIT_FOR_LINE:
 		var f := clampf(patience / max_patience, 0.0, 1.0)
 		var y := _top - 8.0
@@ -330,9 +397,11 @@ func _next_item() -> void:
 			if Game.is_licensed(want.id):
 				_think(Brand.SAY.no_product % Game.product_name(want.id).to_lower())
 				Game.record_missed()
+				_note_missed(want.id)
 			else:  # you don't sell it (yet)
 				_think(Brand.SAY.get("not_sold", "No %s here?!") % Game.product_name(want.id).to_lower())
 				Game.record_wanted(want.id, kind)
+				_unsold += 1
 			shopping_list.pop_front()
 			continue
 		var stand := store.shelf_stand_cell(shelf, current_cell(), 1.5)
@@ -345,6 +414,7 @@ func _next_item() -> void:
 		return
 	_wanted = ""
 	if basket.is_empty():
+		rate_visit()  # (empty-handed)
 		_leave()
 	else:
 		_try_join_line()
@@ -378,12 +448,24 @@ func _pick_from_shelf() -> void:
 		else:
 			_think(Brand.SAY.too_pricey)
 			Game.record_missed()
+			_pricey += 1
+			if _pricey_id == "":
+				_pricey_id = want.id
+			emote("money")
 	elif _find_shelf(want.id):
 		shopping_list.push_front(want)  # someone beat us to it, try another shelf
 	else:
 		_think(Brand.SAY.sold_out)
 		Game.record_missed()
+		_note_missed(want.id)
 	_next_item()
+
+
+func _note_missed(id: String) -> void:
+	_missed += 1
+	if _missed_id == "":
+		_missed_id = id
+	emote("question")
 
 
 # ---------------------------------------------------------------- checkout
@@ -472,6 +554,7 @@ func on_checked_out() -> void:
 	if is_instance_valid(register):
 		register.leave_line(self)
 	_bagged = not basket.is_empty()
+	rate_visit()
 	basket.clear()
 	_leave()
 
@@ -480,11 +563,16 @@ func _tick_patience(delta: float) -> void:
 	if (is_instance_valid(register) and register.is_serving(self)) or Game.cutscene:
 		return
 	patience -= delta * (Game.WINE_PATIENCE if Game.has_effect("wine") else 1.0)
+	_waited = maxf(_waited, 1.0 - patience / max_patience)
+	if _waited > 0.6 and not _bored:
+		_bored = true
+		emote("zzz", 2.5)
 	if patience <= 0.0:
 		_think(Brand.SAY.walkout)
 		Settings.vibrate(0.5, 0.15)
 		growl(true)
 		Game.record_walkout()
+		rate_visit("walkout")
 		if is_instance_valid(register):
 			register.leave_line(self)
 		basket.clear()
@@ -500,6 +588,7 @@ func scare() -> void:
 		return
 	_think(Brand.WAR.get("scared", "AAAH!"))
 	Game.record_walkout()
+	rate_visit("raid")
 	if is_instance_valid(register):
 		register.leave_line(self)
 	basket.clear()
@@ -518,6 +607,47 @@ func growl(always := false) -> bool:
 	_last_growl = now
 	voice.play()
 	return true
+
+
+## How the visit went, 1 to 5 stars, into the store's rating (once per
+## shopper). `how` is "walkout" or "raid" when they storm out (or run).
+func rate_visit(how := "") -> float:
+	if _rated:
+		return -1.0
+	_rated = true
+	var score := 5.0
+	var reason := ""
+	if how != "":
+		score = 1.0 if how == "walkout" else 1.5
+		reason = how
+	else:
+		var hits := {}  # reason -> stars it cost
+		hits.missing = 2.2 * float(_missed) / float(maxi(1, _wants))
+		hits.pricey = 0.7 * mini(_pricey, 2)
+		hits.wait = clampf((_waited - 0.45) * 4.0, 0.0, 2.2)
+		var mess := 0 if Game.has_effect("crucifix") else maxi(0, store.settled_spills() - Store.FREE_SPILLS)
+		hits.blood = minf(1.5, 0.3 * mess)
+		hits.missing += 0.25 * mini(_unsold, 2)
+		for r: String in hits:
+			score -= float(hits[r])
+		score += Game.trophy_decor_bonus("stars")  # (the Five-Star Plaque)
+		if basket.is_empty():
+			score = minf(score, 2.0)
+		var worst := ""
+		for r: String in hits:
+			if float(hits[r]) >= 0.5 and (worst == "" or float(hits[r]) > float(hits[worst])):
+				worst = r
+		if basket.is_empty() and worst in ["", "missing"]:
+			worst = "nothing" if _missed + _unsold >= _wants else worst
+		reason = worst if worst != "" else ("great" if score >= 4.6 else "good" if score >= 3.6 else "ok")
+	score = clampf(score, 1.0, 5.0)
+	var product := _missed_id if reason in ["missing", "nothing"] else _pricey_id if reason == "pricey" else ""
+	Game.rating.record(score, reason, kind, product)
+	if score >= StoreRating.HAPPY:
+		emote("heart", 2.5)
+	elif score <= StoreRating.UNHAPPY:
+		emote("angry", 2.5)
+	return score
 
 
 func _leave() -> void:
@@ -633,11 +763,14 @@ func _on_arrived() -> void:
 
 
 func _animate(delta: float) -> void:
-	if not path.is_empty() and state in [State.ARRIVING, State.SHOPPING, State.TO_LINE, State.LEAVING, State.WALKING_AWAY]:
+	var walking := not path.is_empty() and state in [State.ARRIVING, State.SHOPPING, State.TO_LINE, State.LEAVING, State.WALKING_AWAY, State.WAIT_FOR_LINE]
+	if walking:
 		_walk_anim += delta * 14.0
 		sprite.position.y = -roundf(absf(sin(_walk_anim)) * 1.5)
 	else:
 		sprite.position.y = 0.0
+	if _look:
+		CharArt.walk(sprite, _look, _walk_anim, walking)
 
 
 ## Leaves a blood spill now and then (zombie game).

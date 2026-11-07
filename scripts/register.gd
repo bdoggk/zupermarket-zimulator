@@ -165,7 +165,7 @@ func checkout() -> void:
 	if c == null:
 		return
 	var total := c.checkout_total()
-	Game.record_sale(total, c.item_count())
+	Game.record_checkout(c, player_is_scanning())
 	Game.show_popup(position + Vector2(0, -50), "+$%.2f" % total, Color(0.6, 1.0, 0.6))
 	c.on_checked_out()
 

@@ -34,6 +34,8 @@ signal effects_changed  # a brew started or wore off
 signal loan_changed  # borrowed, paid (or a payment was taken)
 signal loan_defaulted  # the loan's last night came and it isn't paid: the lender comes for your head
 signal tutorial_changed
+signal goal_done(goal: Dictionary)  # one of today's goals is done (its reward's paid)
+signal trophy_earned(trophy: Dictionary)
 
 const OPEN_MINUTE := 8 * 60
 const CLOSE_MINUTE := 20 * 60
@@ -161,6 +163,14 @@ var staff: Array[Dictionary] = []  # everyone you've hired: [{id, role, name, xp
 var _next_staff_id := 1
 var expansions := 0  # lots next door you've bought (Brand.EXPANSIONS)
 var war := GangWar.new()  # the gang war against Bone Mart (from store level 15)
+var goals := Goals.new()  # today's goals (0.18)
+var rating := StoreRating.new()  # the store's star rating and reviews
+var trophies := Trophies.new()
+## Totals for the whole game (trophies): the days that are over; today's
+## Game.stats go on top (Trophies.value). customers, revenue, happy,
+## you_cleaned, knockouts, zt_likes, spies, raids, clean_closes, loans_repaid.
+var career := {}
+var _goal_tick := 0.0
 var rival_factor := {}  # product id -> the rival's price today / market price
 var rival_deal := ""  # the rival's deal of the day
 var rival_seen := {}  # product id -> [price, day] when you last checked the rival
@@ -182,6 +192,7 @@ var build_mode: Node2D
 
 
 func _ready() -> void:
+	_connect_goals()
 	reset()
 	message.connect(_log_message)
 
@@ -226,6 +237,11 @@ func reset() -> void:
 	_next_staff_id = 1
 	expansions = 0
 	war = GangWar.new()
+	goals = Goals.new()
+	rating = StoreRating.new()
+	trophies = Trophies.new()
+	career = {}
+	_connect_goals()
 	rival_seen = {}
 	rival_spies = []
 	tutorial = {}
@@ -255,6 +271,11 @@ func _process(delta: float) -> void:
 		return
 	play_time += delta
 	_tick_effects(delta)
+	_goal_tick -= delta
+	if _goal_tick <= 0.0:
+		_goal_tick = 0.5
+		goals.check()
+		trophies.check()
 	if not is_open:
 		return
 	minute += delta / SECONDS_PER_GAME_MINUTE
@@ -477,6 +498,30 @@ func decorations_for(k: Dictionary) -> int:
 ## Store level you need to build furniture `id` (1 = from the start).
 func furniture_level(id: String) -> int:
 	return int(FURNITURE[id].get("level", 1))
+
+
+## Why you can't build furniture `id` yet ("" if you can): the store level
+## it comes with, or the trophy that earns it.
+func furniture_problem(id: String) -> String:
+	if level < furniture_level(id):
+		return "The %s comes with store level %d." % [FURNITURE[id].name, furniture_level(id)]
+	if not trophies.decor_unlocked(id):
+		return "Earn the %s trophy to build a %s." % [Trophies.find(FURNITURE[id].trophy).get("name", "?"), FURNITURE[id].name]
+	return ""
+
+
+## The trophy decorations' bonus (Brand.FURNITURE "traffic" or "stars"):
+## each kind counts once, however many of it you build.
+func trophy_decor_bonus(key: String) -> float:
+	if not in_game():
+		return 0.0
+	var seen := {}
+	var total := 0.0
+	for obj in store.objects.values():
+		if obj is Decoration and not seen.has(obj.furniture_id):
+			seen[obj.furniture_id] = true
+			total += float(FURNITURE.get(obj.furniture_id, {}).get(key, 0.0))
+	return total
 
 
 ## How many of this kind of shopper's favorite products (Brand.SHOPPERS
@@ -773,6 +818,7 @@ func buy_license(id: String) -> bool:
 		return false
 	licensed[id] = true
 	prices[id] = market_price(id)
+	count("licenses")
 	var bonus := roundf(PRODUCTS[id].license * LICENSE_XP)
 	var text := "You can now sell %s! Order it in the Stock tab." % product_name(id)
 	if is_cold(id):
@@ -984,6 +1030,7 @@ func hire(role: String) -> Dictionary:
 	var entry := {"id": _next_staff_id, "role": role, "name": _pick_staff_name(), "xp": 0.0, "level": 1}
 	_next_staff_id += 1
 	staff.append(entry)
+	count("hired")
 	message.emit("Hired %s the %s! Wages are $%d a day." % [entry.name, STAFF[role].name.to_lower(), int(STAFF[role].wage)])
 	staff_changed.emit()
 	return entry
@@ -1092,6 +1139,58 @@ func record_sale(total: float, items: int) -> void:
 	stats.items_sold += items
 	stats.customers += 1
 	add_xp(total)
+
+
+## Shopper `c` paid at a register (`by_you`: you rang them up). Counts what
+## they bought for today's goals and trophies.
+func record_checkout(c: Customer, by_you: bool) -> void:
+	var sold: Dictionary = stats.get("sold", {})
+	var over := 0
+	for item: Dictionary in c.basket:
+		sold[item.id] = int(sold.get(item.id, 0)) + 1
+		if PRODUCTS.has(item.id) and float(item.price) > market_price(item.id) + 0.005:
+			over += 1
+	stats.sold = sold
+	stats.over_market = int(stats.get("over_market", 0)) + over
+	var kind_id: Variant = Brand.SHOPPERS.find_key(c.kind)
+	if kind_id != null:
+		var kinds: Dictionary = stats.get("served_kinds", {})
+		kinds[kind_id] = int(kinds.get(kind_id, 0)) + 1
+		stats.served_kinds = kinds
+	if by_you:
+		stats.you_rang = int(stats.get("you_rang", 0)) + 1
+	record_sale(c.checkout_total(), c.item_count())
+
+
+## Today's profit so far (what the day's summary will say, before wages).
+func profit_today() -> float:
+	return float(stats.revenue) + float(stats.branches) + float(stats.looted) - float(stats.spent) - float(stats.invested) - float(stats.wages) - float(stats.robbed)
+
+
+## Something today counts toward a goal or a trophy (Game.stats key).
+func count(key: String, by := 1) -> void:
+	stats[key] = int(stats.get(key, 0)) + by
+
+
+func _connect_goals() -> void:
+	if not goals.done.is_connected(_on_goal_done):
+		goals.done.connect(_on_goal_done)
+	if not trophies.earned.is_connected(_on_trophy_earned):
+		trophies.earned.connect(_on_trophy_earned)
+
+
+func _on_goal_done(g: Dictionary) -> void:
+	message.emit("Goal done: %s! +$%d, +%d XP" % [Goals.text(g), int(g.cash), int(g.xp)])
+	goal_done.emit(g)
+
+
+func _on_trophy_earned(t: Dictionary) -> void:
+	var text := "Trophy: %s! %s. +$%s" % [t.name, t.text, cash(float(t.cash))]
+	for id: String in FURNITURE:
+		if FURNITURE[id].get("trophy", "") == t.id:
+			text += ". You can build a %s now (Build > Decor)" % FURNITURE[id].name
+	_log_message(text + ".")  # (in the log; on screen, the HUD's TrophyToast says it)
+	trophy_earned.emit(t)
 
 
 func record_missed() -> void:
@@ -1306,6 +1405,7 @@ func pay_loan(amount: float, announce := true) -> float:
 	stats.loan_paid = float(stats.get("loan_paid", 0.0)) + pay
 	if loan_left() <= 0.0:
 		loan = {}
+		career.loans_repaid = float(career.get("loans_repaid", 0.0)) + 1.0
 		if announce:
 			message.emit(Brand.LOAN.paid_off)
 	loan_changed.emit()
@@ -1358,6 +1458,7 @@ func to_dict() -> Dictionary:
 		"staff": staff, "next_staff_id": _next_staff_id, "expansions": expansions,
 		"rival": {"factor": rival_factor, "deal": rival_deal, "seen": rival_seen, "spies": rival_spies},
 		"war": war.to_dict(),
+		"goals": goals.to_dict(), "rating": rating.to_dict(), "trophies": trophies.to_dict(), "career": career,
 		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden, "effects": effects, "loan": loan,
 		"market": {"factor": market.factor, "previous": market.previous, "demand": market.demand, "news": market.news},
 	}
@@ -1432,6 +1533,14 @@ func from_dict(d: Dictionary) -> void:
 			"paid": float(ln.get("paid", 0.0)), "day": int(ln.get("day", day)), "due": int(ln.get("due", day + LOAN_DAYS))}
 	var r: Dictionary = d.get("rival", {})
 	war.from_dict(d.get("war", {}), level)
+	goals.from_dict(d.get("goals", {}))
+	rating.from_dict(d.get("rating", {}))
+	trophies.from_dict(d.get("trophies", {}))
+	var cr: Variant = d.get("career", {})
+	if cr is Dictionary:
+		for key: String in cr:
+			career[key] = maxf(0.0, float(cr[key]))  # (all counts and money: numbers)
+	goals.roll()  # (a save from before goals, or from yesterday)
 	if bool(r.get("owned", false)):  # from when you could buy Bone Mart: Mr. Bones buys it back
 		money += float(Brand.RIVAL.old_buyout)
 		war.bought_back = true
@@ -1534,11 +1643,27 @@ func end_day() -> void:
 	if not _loan_night():
 		loan_defaulted.emit()  # the lender comes for your head (no summary tonight)
 		return
-	var summary := stats.duplicate()
+	var how := goals.close()
+	var summary := stats.duplicate(true)
 	summary.day = day
-	summary.profit = stats.revenue + stats.branches + stats.looted - stats.spent - stats.invested - stats.wages - stats.robbed
+	summary.profit = profit_today()
+	summary.goals = how
+	summary.rating = rating.stars()
+	goals.remember(int(stats.customers), float(stats.revenue), float(summary.profit))
+	_end_of_day_career()
+	trophies.check()
 	_reset_stats()  # anything bought overnight counts toward tomorrow
 	day_ended.emit(summary)
+
+
+## The day's numbers go into the whole game's totals (Game.career).
+func _end_of_day_career() -> void:
+	for key in ["customers", "revenue", "happy", "you_cleaned", "knockouts", "zt_likes"]:
+		career[key] = float(career.get(key, 0.0)) + float(stats.get(key, 0.0))
+	career.spies = float(career.get("spies", 0.0)) + float(stats.get("spies_caught", 0))
+	career.raids = float(career.get("raids", 0.0)) + float(stats.get("raids_won", 0))
+	if in_game() and store.spills.is_empty() and int(stats.customers) >= 30:
+		career.clean_closes = float(career.get("clean_closes", 0.0)) + 1.0
 
 
 ## A save made after the day ended was loaded: it's still that night.
@@ -1565,6 +1690,7 @@ func start_next_day() -> void:
 	day_over = false
 	roll_rival_prices()
 	roll_rival_spies()
+	goals.roll()
 	day_started.emit(day)
 	message.emit(Brand.SAY.morning % day)
 	_loan_morning()
@@ -1598,4 +1724,8 @@ func clock_text() -> String:
 func _reset_stats() -> void:
 	stats = {"revenue": 0.0, "spent": 0.0, "invested": 0.0, "wages": 0.0, "customers": 0, "items_sold": 0, "missed": 0, "walkouts": 0, "cleaned": 0, "lost": 0, "wanted": {}, "wanted_by": {}, "xp_lost": 0.0, "brews": 0,
 		"spies_caught": 0, "spies_escaped": 0, "spy_reports": 0, "borrowed": 0.0, "loan_paid": 0.0,
-		"branches": 0.0, "robbed": 0.0, "looted": 0.0, "raids_won": 0, "raids_lost": 0}
+		"branches": 0.0, "robbed": 0.0, "looted": 0.0, "raids_won": 0, "raids_lost": 0,
+		# goals, the rating and trophies (0.18):
+		"sold": {}, "served_kinds": {}, "over_market": 0, "you_rang": 0, "you_cleaned": 0, "knockouts": 0,
+		"licenses": 0, "decor_bought": 0, "hired": 0, "zt_likes": 0, "snake": 0, "goals_done": 0, "goal_cash": 0.0,
+		"ratings": 0, "stars_sum": 0.0, "happy": 0, "unhappy": 0, "why": {}}

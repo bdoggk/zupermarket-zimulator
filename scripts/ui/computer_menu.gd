@@ -14,16 +14,19 @@ extends PanelContainer
 ##   Turf            the gang war (from store level 15, GangWar): buy land
 ##                   for branch stores, hire your gang, buy nunchucks or a Glock,
 ##                   and send your gang to raid Bone Mart
+##   Goals           today's goals, the store's star rating (with what
+##                   shoppers wrote) and trophies (0.18)
 ##   Snake           Zombie Snake (PcSnake), for slow afternoons
 ##   ZomTok          videos of the town's characters dancing (ZomTokApp)
 ## Snake and ZomTok fill the window themselves (no list, news or footer),
 ## and take the arrows, the d-pad and A while they're open.
 ## The window's X goes back to the desktop; "Close PC" (or Esc) closes it.
 
-enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES, LOANS, TURF, SNAKE, ZOMTOK }
+enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES, LOANS, TURF, GOALS, SNAKE, ZOMTOK }
 
-const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades", "Loans", "Turf", "Snake", "ZomTok"]
-const APP_ICONS := ["stock", "products", "staff", "upgrades", "loans", "turf", "snake", "zomtok"]
+const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades", "Loans", "Turf", "Goals", "Snake", "ZomTok"]
+const APP_ICONS := ["stock", "products", "staff", "upgrades", "loans", "turf", "goals", "snake", "zomtok"]
+const GOALS_PAGES := ["Today", "Rating", "Trophies"]
 const ICON_ONLY := [Tab.SNAKE, Tab.ZOMTOK]  # (just the icon on the taskbar, to save room)
 const TASKBAR_HEIGHT := 50.0
 const WALLPAPER := preload("res://assets/sprites/pc_wallpaper.png")
@@ -66,6 +69,7 @@ var pad_hint: Label  # "LB / RB: other apps", with a controller
 var icon_box: VFlowContainer  # the desktop's app icons (a second column if they don't fit)
 var note_box: PanelContainer  # the sticky note, right of the icons
 var loan_pick := 2  # Loans: which of Game.LOAN_AMOUNTS you're looking at
+var goals_page := 0  # Goals: GOALS_PAGES
 var snake: PcSnake
 var zomtok: ZomTokApp
 var list_parts: Array[Control] = []  # the window's news, list and footer (hidden for Snake and ZomTok)
@@ -639,6 +643,8 @@ func _rebuild() -> void:
 			_build_loans()
 		Tab.TURF:
 			_build_turf()
+		Tab.GOALS:
+			_build_goals()
 
 
 func _grid(columns: int) -> GridContainer:
@@ -1300,6 +1306,183 @@ func _build_loan_owed() -> void:
 
 ## The gang war (GangWar): the land east of Bone Mart, your gang, your
 ## weapons, and raiding Bone Mart. Big Rotto runs the show.
+# ---------------------------------------------------------------- goals app (0.18)
+
+static var _star_strips := {}  # whole stars -> a strip of 5 (Goals > Rating's reviews)
+
+
+func _build_goals() -> void:
+	footer_label.text = "Goals pay the moment they're done; all three make a Perfect Day. More stars bring more shoppers. Trophies pay once, and some unlock decorations."
+	var pages := HBoxContainer.new()
+	pages.add_theme_constant_override("separation", 8)
+	body.add_child(pages)
+	for i in GOALS_PAGES.size():
+		var b := _row_button(GOALS_PAGES[i], func():
+			goals_page = i
+			_rebuild(), Vector2(120, 46))
+		b.toggle_mode = true
+		b.button_pressed = goals_page == i
+		pages.add_child(b)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pages.add_child(spacer)
+	var stars := StarBar.new(22)
+	pages.add_child(stars)
+	body.add_child(HSeparator.new())
+	# (The page's rows go in a box of their own, so with a controller the
+	# page buttons come first: _body_buttons goes a level at a time.)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", int(body.get_theme_constant("separation")))
+	body.add_child(box)
+	match goals_page:
+		0:
+			_build_goals_today(box)
+		1:
+			_build_goals_rating(box)
+		2:
+			_build_goals_trophies(box)
+	_show_top.call_deferred()
+
+
+## A row you can select with a controller (so the list scrolls), that
+## does nothing when pressed: just words, with a picture.
+func _info_row(text: String, icon: Texture2D = null, color := Color.WHITE) -> Button:
+	var b := _row_button(text, func(): pass, Vector2(0, 40))
+	b.icon = icon
+	b.flat = true
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	b.add_theme_color_override("font_color", color)
+	b.add_theme_color_override("font_focus_color", color)
+	b.add_theme_color_override("font_hover_color", color)
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if icon:  # (bigger: the pictures are pixel art, a few pixels across)
+		b.expand_icon = true
+		b.add_theme_constant_override("icon_max_width", 28 if icon.get_width() < icon.get_height() * 2 else 100)
+	return b
+
+
+func _build_goals_today(box: VBoxContainer) -> void:
+	var g := Game.goals
+	var head := UI.label("TODAY'S GOALS (day %d)" % Game.day, UI.GOOD)
+	head.add_theme_font_size_override("font_size", 22)
+	box.add_child(head)
+	if g.list.is_empty() or g.day != Game.day:
+		var why := UI.label("Goals start on day %d. Today, the tips in the top left show you the ropes." % Goals.FROM_DAY, UI.DIM)
+		why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(why)
+	for goal in g.list:
+		var how := Goals.progress_text(goal)
+		var text := "%s%s   ($%d, %d XP)" % [Goals.text(goal), "   " + how if how != "" else "", int(goal.cash), int(goal.xp)]
+		box.add_child(_info_row(text, GoalsPanel.TICK if goal.done else GoalsPanel.BOX, UI.GOOD if goal.done else Color.WHITE))
+	if not g.list.is_empty():
+		var all := g.done_count() == g.list.size()
+		var bonus := Goals.perfect_bonus(g.streak + (0 if all else 1))
+		var line := "Every goal done: a Perfect Day (+$%d tonight)!" % int(bonus) if all else "Do all %d for a Perfect Day: +$%d tonight." % [g.list.size(), int(bonus)]
+		box.add_child(UI.label(line, UI.WARN))
+	box.add_child(HSeparator.new())
+	box.add_child(_info_row("Perfect Days in a row: %d (best: %d). Each one in a row pays more, up to %.1f times as much." % [g.streak, g.best_streak, Goals.STREAK_MAX]))
+	box.add_child(_info_row("Goals done: %d. Perfect Days: %d." % [g.completed, g.perfect_days]))
+
+
+func _build_goals_rating(box: VBoxContainer) -> void:
+	var r := Game.rating
+	var head := UI.label("STORE RATING: %s" % StoreRating.words(r.shown()).to_upper(), UI.WARN)
+	head.add_theme_font_size_override("font_size", 22)
+	box.add_child(head)
+	var effect := roundi((r.traffic_factor() - 1.0) * 100.0)
+	var line := "From the last %d shoppers. %s" % [StoreRating.WINDOW,
+		"It brings %d%% more shoppers." % effect if effect > 0 else ("It keeps %d%% of shoppers away." % -effect if effect < 0 else "Get above 3 stars for more shoppers.")]
+	var sub := UI.label(line, UI.DIM)
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(sub)
+	var today := StoreRating.today()
+	if today >= 0.0:
+		box.add_child(_info_row("Today so far: %.1f stars. Happy: %d, unhappy: %d." % [today, int(Game.stats.get("happy", 0)), int(Game.stats.get("unhappy", 0))]))
+	for tip in _rating_tips():
+		box.add_child(_info_row("Tip: " + tip, null, UI.INFO))
+	box.add_child(HSeparator.new())
+	box.add_child(UI.label("WHAT SHOPPERS SAY", UI.GOOD))
+	if r.reviews.is_empty():
+		box.add_child(UI.label("No reviews yet. Open up and see what they think!", UI.DIM))
+	for rv: Dictionary in r.reviews.slice(0, 15):
+		var color := UI.GOOD if int(rv.stars) >= 4 else (UI.BAD if int(rv.stars) <= 2 else Color.WHITE)
+		box.add_child(_info_row("%s (day %d): \"%s\"" % [rv.user, int(rv.day), rv.text], _stars_strip(int(rv.stars)), color))
+
+
+## What to do about what shoppers grumbled about today (most common first).
+func _rating_tips() -> Array[String]:
+	var tips: Array[String] = []
+	var say := {
+		"wait": "Shoppers are waiting too long in line: hire a cashier, add a register or a self-checkout.",
+		"walkout": "Shoppers walked out of the line: ring them up faster (cashiers, registers, Conveyor Belts).",
+		"missing": "Shelves are running out: order more, hire stockers or a general manager.",
+		"nothing": "Some shoppers found nothing they wanted: stock more of everything you sell.",
+		"pricey": "Shoppers think you're pricey: lower your markup (Stock & Prices).",
+		"blood": "Blood on the floor: mop it up or hire a janitor.",
+	}
+	for pair in StoreRating.today_reasons():
+		if say.has(pair[0]) and tips.size() < 2:
+			tips.append(say[pair[0]])
+	return tips
+
+
+## A strip of five stars, `n` of them gold (for a review).
+func _stars_strip(n: int) -> Texture2D:
+	if _star_strips.has(n):
+		return _star_strips[n]
+	var full := StarBar.FULL.get_image()
+	var empty := StarBar.EMPTY.get_image()
+	for img in [full, empty]:
+		if img.is_compressed():
+			img.decompress()
+		img.convert(Image.FORMAT_RGBA8)
+	var w := full.get_width()
+	var strip := Image.create(w * 5 + 4, full.get_height(), false, Image.FORMAT_RGBA8)
+	for i in 5:
+		strip.blit_rect(full if i < n else empty, Rect2i(0, 0, w, full.get_height()), Vector2i(i * (w + 1), 0))
+	strip.resize(strip.get_width() * 2, strip.get_height() * 2, Image.INTERPOLATE_NEAREST)
+	var tex := ImageTexture.create_from_image(strip)
+	_star_strips[n] = tex
+	return tex
+
+
+func _build_goals_trophies(box: VBoxContainer) -> void:
+	var t := Game.trophies
+	var head := UI.label("TROPHIES: %d of %d" % [t.count(), Trophies.total()], Color(1.0, 0.86, 0.4))
+	head.add_theme_font_size_override("font_size", 22)
+	box.add_child(head)
+	var earned: Array[Dictionary] = []
+	var left: Array[Dictionary] = []
+	for tr: Dictionary in Brand.TROPHIES:
+		(earned if t.is_earned(tr.id) else left).append(tr)
+	left.sort_custom(func(a, b): return Trophies.fraction(a) > Trophies.fraction(b))  # (the closest first)
+	for tr: Dictionary in left + earned:
+		var got := t.is_earned(tr.id)
+		var decor := ""
+		for id: String in Game.FURNITURE:
+			if Game.FURNITURE[id].get("trophy", "") == tr.id:
+				decor = " + %s" % Game.FURNITURE[id].name
+		var how := "earned on day %d" % int(t.have[tr.id]) if got else _trophy_progress(tr)
+		var text := "%s: %s   (%s)   $%s%s" % [tr.name, tr.text, how, Game.cash(float(tr.cash)), decor]
+		box.add_child(_info_row(text, TrophyToast.CUP if got else LOCKED_CUP, Color(1.0, 0.86, 0.4) if got else Color.WHITE))
+
+
+const LOCKED_CUP := preload("res://assets/sprites/trophy_locked.png")
+
+
+func _trophy_progress(tr: Dictionary) -> String:
+	var v := Trophies.value(tr.stat)
+	var target := float(tr.target)
+	if tr.stat == "stars":
+		return "best %s" % ("%.1f" % v)
+	if target <= 1.0:
+		return "not yet"
+	if tr.stat == "revenue":
+		return "$%s of $%s" % [Game.cash(floorf(v)), Game.cash(target)]
+	return "%d of %d" % [mini(int(v), int(target)), int(target)]
+
+
 func _build_turf() -> void:
 	var war := Game.war
 	var w: Dictionary = Brand.WAR

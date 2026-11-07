@@ -27,6 +27,9 @@ you like: keep the same file names.
   zomtok_like.wav    a little pop when you like a video
   snake_eat.wav      the snake chomping something
   snake_over.wav     the snake crashing: wah wah wahhh
+
+  goal_done.wav      a daily goal done: a bright little three-note chime
+  trophy.wav         a trophy earned: a short fanfare
 """
 import wave
 from pathlib import Path
@@ -349,6 +352,33 @@ def snake_over():
     return np.concatenate(out)
 
 
+# ---------------------------------------------------------------- goals and trophies (0.18)
+
+def _bell(freq, seconds):
+    tt = t(seconds)
+    tone = np.sin(2 * np.pi * freq * tt) + 0.4 * np.sin(2 * np.pi * freq * 2.01 * tt) + 0.15 * np.sin(2 * np.pi * freq * 3.02 * tt)
+    return tone * np.exp(-tt * 6) * envelope(len(tt), 0.004, 0.05)
+
+
+def goal_done():
+    out = np.zeros(int(RATE * 0.9))
+    for i, f in enumerate([659.25, 830.61, 987.77]):  # E5 G#5 B5
+        b = _bell(f, 0.6)
+        at = int(RATE * 0.09 * i)
+        out[at:at + len(b)] += b[:len(out) - at]
+    return out
+
+
+def trophy_fanfare():
+    notes = [(523.25, 0.12), (523.25, 0.12), (523.25, 0.12), (659.25, 0.35), (587.33, 0.12), (659.25, 0.12), (783.99, 0.7)]
+    out = []
+    for f, sec in notes:
+        tt = t(sec)
+        brass = sum(np.sin(2 * np.pi * f * h * tt) / h for h in (1, 2, 3, 4)) * envelope(len(tt), 0.01, sec * 0.3)
+        out.append(lowpass(brass, 3500) * 0.8)
+    return np.concatenate(out)
+
+
 def main():
     save("vlad_sting", sting(), 0.85)
     save("vlad_bats", bats(), 0.7)
@@ -371,6 +401,12 @@ def pc_apps_sounds():
     save("zomtok_like", zomtok_like(), 0.5)
     save("snake_eat", snake_eat(), 0.55)
     save("snake_over", snake_over(), 0.6)
+    goals_sounds()
+
+
+def goals_sounds():
+    save("goal_done", goal_done(), 0.5)
+    save("trophy", trophy_fanfare(), 0.55)
 
 
 if __name__ == "__main__":

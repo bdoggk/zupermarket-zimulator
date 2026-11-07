@@ -16,6 +16,7 @@ var path: Array[Vector2i] = []
 var wait := 0.0
 var sprite: Sprite2D
 var _walk_anim := 0.0
+var look: Texture2D  # their sprite standing still (CharArt.walk)
 var _leaving := false
 var _t := randf() * 10.0
 
@@ -27,6 +28,7 @@ func setup(s: Store, tex: Texture2D, cell: Vector2i, stop_list: Array, cells_per
 	position = Iso.cell_to_world(cell)
 	sprite = Sprite2D.new()
 	sprite.texture = tex
+	look = tex
 	sprite.centered = false
 	sprite.offset = Vector2(-floorf(tex.get_width() / 2.0), -(tex.get_height() - 2))
 	add_child(sprite)
@@ -91,6 +93,8 @@ func _walk(delta: float) -> void:
 
 
 func _animate(delta: float) -> void:
+	if look:
+		CharArt.walk(sprite, look, _walk_anim, not path.is_empty())
 	if not path.is_empty():
 		_walk_anim += delta * 14.0
 		sprite.position.y = -roundf(absf(sin(_walk_anim)) * 1.5)

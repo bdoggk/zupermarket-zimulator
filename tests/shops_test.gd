@@ -201,13 +201,13 @@ func _ready() -> void:
 	var v := store.spawn_customer(Brand.SHOPPERS.vampire)
 	var w := store.spawn_customer(Brand.SHOPPERS.witch)
 	await _frames(3)
-	check(v.sprite.texture in Brand.SHOPPERS.vampire.looks and w.sprite.texture.get_height() > 36, "they look the part (a witch's hat sticks up)")
+	check(v._look in Brand.SHOPPERS.vampire.looks and w._look.get_height() > 36, "they look the part (a witch's hat sticks up)")
 	check(not v.leaky and not w.leaky, "and they don't drip blood")
 
 	# ---- witches and vampires in town
 	var locals := func(looks: Array) -> Array:
 		return store.world.get_children().filter(func(n): return n is Wanderer and is_instance_valid(n) \
-			and n.has_meta("local") and not n.is_leaving() and n.sprite.texture in looks)
+			and n.has_meta("local") and not n.is_leaving() and n.look in looks)
 	check(locals.call(Brand.SHOPPERS.witch.looks).size() >= Town.WITCHES, "witches stroll around town (%d)" % locals.call(Brand.SHOPPERS.witch.looks).size())
 	Game.minute = 11 * 60
 	await _frames(3)
@@ -215,7 +215,7 @@ func _ready() -> void:
 	Game.minute = 18 * 60
 	await _frames(3)
 	var bats: Array = town._vampires.duplicate()
-	check(bats.size() == Town.VAMPIRES and bats.all(func(b): return b.sprite.texture in Brand.SHOPPERS.vampire.looks), "at dusk, %d vampires come out" % bats.size())
+	check(bats.size() == Town.VAMPIRES and bats.all(func(b): return b.look in Brand.SHOPPERS.vampire.looks), "at dusk, %d vampires come out" % bats.size())
 	check(bats.all(func(b): return town.shop_floor.has(Iso.world_to_cell(b.position))), "(out of the curio shop)")
 	Game.minute = 8 * 60
 	await _frames(3)

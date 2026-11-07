@@ -255,7 +255,12 @@ func _ready() -> void:
 	var shopper := store.spawn_customer(Brand.SHOPPERS.zombie)
 	shopper.set_process(false)  # standing still (and not turning back: the store's closed)
 	shopper.set_physics_process(false)
-	p.position = Iso.cell_to_world(shopper.current_cell() + Vector2i(1, 0))
+	var beside := shopper.current_cell() + Vector2i(1, 0)
+	for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		if store.is_walkable(shopper.current_cell() + step):  # (not off the edge of town)
+			beside = shopper.current_cell() + step
+			break
+	p.position = Iso.cell_to_world(beside)
 	await _frames(40)
 	var card: Control = hud.shopper_card
 	var head := get_viewport().get_canvas_transform() * shopper.head_position()

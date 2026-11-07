@@ -87,6 +87,9 @@ var _messages: Array = []  # on screen, oldest first: [label, seconds left, seco
 var _message_queue: Array[String] = []  # waiting for room
 var _message_width := MESSAGE_WIDTH
 var effects_box: VBoxContainer  # brews working right now, under the corner buttons
+var star_bar: StarBar  # the store's rating, on the top bar (0.18)
+var goals_panel: GoalsPanel  # today's goals, top left
+var trophy_toast: TrophyToast  # "TROPHY: ..." across the top
 var _effect_rows := {}  # brew id -> its Label in effects_box
 var build_bar: PanelContainer
 var pause_menu: PanelContainer
@@ -161,7 +164,7 @@ func _ready() -> void:
 	options.closed.connect(_on_options_closed)
 	# Panels keep the mouse to themselves: scrolling or clicking on a menu
 	# mustn't zoom the view or walk you somewhere behind it.
-	for panel: Control in [status_panel, tutorial, computer, rival_panel, shop_panel, rack_panel, build_bar, summary_panel, pause_menu, options, day_over_bar, levelup_panel, message_log]:
+	for panel: Control in [status_panel, tutorial, goals_panel, computer, rival_panel, shop_panel, rack_panel, build_bar, summary_panel, pause_menu, options, day_over_bar, levelup_panel, message_log]:
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	Game.message.connect(show_message)
@@ -243,6 +246,8 @@ func _process(delta: float) -> void:
 	day_over_bar.visible = Game.day_over and not _summary.is_empty() and not summing_up and not paused and not building
 	tutorial.visible = tutorial.current != "" and not building and not paused and not menu_open and not Game.day_over
 	prep_panel.visible = not Game.opened and not Game.day_over and not building and not paused and not tutorial.visible
+	goals_panel.visible = GoalsPanel.has_goals() and not building and not paused and not menu_open and not summing_up
+	trophy_toast.held = paused or summing_up or levelup_panel.visible or (menu_open and not computer.visible)
 	# (Not under a window: the computer, a shop, a rack's list...)
 	prompt_panel.visible = not is_touch and not building and not summing_up and not menu_open and (_prompt[0] != "" or _prompt[2] != "")
 	use_button.visible = is_touch and not building and not summing_up and not menu_open and _prompt[0] != ""
@@ -272,6 +277,11 @@ func _process(delta: float) -> void:
 	_place_status(corner_box.position.x - 8.0)
 	_place(prep_panel, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
 	_place(tutorial, Vector2(MARGIN, status_panel.position.y + status_panel.size.y + 8))
+	var goals_y := status_panel.position.y + status_panel.size.y * status_panel.scale.y + 8
+	for above: Control in [prep_panel, tutorial]:
+		if above.visible:
+			goals_y = maxf(goals_y, above.position.y + above.size.y * above.scale.y + 8)
+	_place(goals_panel, Vector2(MARGIN, goals_y))
 	_place_messages(s)
 	_place(prompt_panel, Vector2((s.x - prompt_panel.size.x) / 2.0, s.y - prompt_panel.size.y - MARGIN))
 	_place(use_button, Vector2(s.x - use_button.size.x - MARGIN, s.y - use_button.size.y - MARGIN))
@@ -437,13 +447,13 @@ func _message_seconds(text: String) -> float:
 
 
 ## Messages go across the top, in the space between the panels on the left
-## (the status bar's hints) and the buttons on the right, so they never
+## (the first day's tips, today's goals) and the buttons on the right, so they never
 ## cover either. When that gap is too narrow (a small window, a big UI
 ## size), they go underneath both, across the whole width.
 func _place_messages(s: Vector2) -> void:
 	var left := MARGIN
 	var below := status_panel.position.y + status_panel.size.y + 8.0
-	for panel: Control in [prep_panel, tutorial]:
+	for panel: Control in [prep_panel, tutorial, goals_panel]:
 		if panel.visible:
 			left = maxf(left, panel.position.x + maxf(panel.size.x, panel.get_combined_minimum_size().x) + MARGIN)
 			below = maxf(below, panel.position.y + maxf(panel.size.y, panel.get_combined_minimum_size().y) + 8.0)
@@ -453,6 +463,11 @@ func _place_messages(s: Vector2) -> void:
 		left = MARGIN
 		right = s.x - MARGIN
 		top = maxf(below, corner_box.position.y + corner_box.size.y + 8.0)
+	if trophy_toast.visible:  # (a trophy goes at the top, the messages under it)
+		trophy_toast.reset_size()
+		var tw := trophy_toast.size.x
+		_place(trophy_toast, Vector2(clampf(left + (right - left - tw) / 2.0, MARGIN, maxf(MARGIN, s.x - tw - MARGIN)), top))
+		top += trophy_toast.size.y + 8.0
 	_message_width = minf(MESSAGE_WIDTH, right - left)
 	for m: Array in _messages:
 		(m[0] as Label).custom_minimum_size.x = _message_width
@@ -535,6 +550,8 @@ func _build_status() -> void:
 	xp_bar.mouse_filter = Control.MOUSE_FILTER_PASS
 	xp_bar.draw.connect(_draw_xp_bar)
 	row.add_child(xp_bar)
+	star_bar = StarBar.new(20 if is_touch else 16)
+	row.add_child(star_bar)
 	clock_label = UI.label()
 	row.add_child(clock_label)
 	scanner_icon = UI.icon(Game.UPGRADES.scanner.icon, Vector2(24, 24))
@@ -563,6 +580,10 @@ func _build_status() -> void:
 	prep_panel.add_child(hint)
 	tutorial = Tutorial.new()
 	root.add_child(tutorial)
+	goals_panel = GoalsPanel.new()
+	root.add_child(goals_panel)
+	trophy_toast = TrophyToast.new()
+	root.add_child(trophy_toast)
 	_build_levelup_panel()
 	_build_shopper_card()
 
@@ -991,6 +1012,8 @@ func _show_summary(s: Dictionary) -> void:
 		"Blood mopped up: %d" % s.cleaned if Brand.SPILLS else "--",
 	].filter(func(line: String): return line != "--"))
 	summary_notes.text = "\n".join([
+		_goals_line(s.get("goals", {})),
+		_rating_line(s),
 		_wanted_line(s.get("wanted", {})),
 		_spies_line(s),
 		_war_line(s),
@@ -1004,6 +1027,40 @@ func _show_summary(s: Dictionary) -> void:
 	summary_hint.text = "" if is_touch and Input.get_connected_joypads().is_empty() else "%s to go to Day %d" % [_key_hint("the button"), s.day + 1]
 	summary_hint.visible = summary_hint.text != ""
 	summary_panel.visible = true
+
+
+## "Goals: 2 of 3 done" or "PERFECT DAY! 4 in a row: +$180 bonus", or "--".
+static func _goals_line(g: Dictionary) -> String:
+	if g.is_empty():
+		return "--"
+	if g.perfect:
+		return "PERFECT DAY! Every goal done%s: +$%d bonus" % [(", %d in a row" % int(g.streak)) if int(g.streak) > 1 else "", int(g.bonus)]
+	var broke := int(g.get("broke", 0))
+	return "Goals: %d of %d done%s" % [int(g.done), int(g.of), " (that ends your %d-day Perfect Day streak)" % broke if broke > 1 else (" (that ends your Perfect Day streak)" if broke == 1 else "")]
+
+
+## "Today's shoppers rated you 4.2 stars (store: 3.8). Unhappy about: the
+## line (3), blood (1)", or "--".
+static func _rating_line(s: Dictionary) -> String:
+	var n := int(s.get("ratings", 0))
+	if n == 0:
+		return "--"
+	var avg := float(s.get("stars_sum", 0.0)) / n
+	var text := "Shoppers rated today %.1f stars (the store: %s). Happy: %d, unhappy: %d" % [avg, StoreRating.words(Game.rating.shown()), int(s.get("happy", 0)), int(s.get("unhappy", 0))]
+	var why: Dictionary = s.get("why", {})
+	var bad: Array[String] = []
+	for r in ["wait", "walkout", "missing", "nothing", "pricey", "blood", "raid"]:
+		if int(why.get(r, 0)) > 0:
+			bad.append("%s (%d)" % [REASON_WORDS[r], int(why[r])])
+	if not bad.is_empty():
+		text += ". Unhappy about: " + ", ".join(bad)
+	return text
+
+
+## What shoppers' reasons mean, in a few words (StoreRating, Brand.REVIEWS).
+const REASON_WORDS := {"wait": "waiting in line", "walkout": "walking out", "missing": "things out of stock",
+	"nothing": "finding nothing", "pricey": "prices", "blood": "blood on the floor", "raid": "the gang fight",
+	"great": "everything", "good": "a good visit", "ok": "an OK visit"}
 
 
 ## "Count Vlad's loan: $977.14 left, all due the night of day 10", or "--".

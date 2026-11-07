@@ -199,6 +199,10 @@ func _on_day_ended(summary: Dictionary) -> void:
 		summary.day, summary.revenue, summary.spent, summary.invested, summary.wages, summary.profit,
 		summary.customers, summary.items_sold, summary.missed, summary.walkouts, summary.cleaned,
 		Game.money, Game.level, int(Game.xp), furn, Game.staff.size(), ",".join(Game.unlocked_ids()), scans])
+	var g: Dictionary = summary.get("goals", {})
+	print("   rating: today %.1f (%d rated, why %s), the store %.1f | goals %s | trophies %d" % [
+		StoreRating.today() if int(summary.get("ratings", 0)) == 0 else float(summary.stars_sum) / int(summary.ratings), int(summary.get("ratings", 0)),
+		summary.get("why", {}), Game.rating.stars(), "%d/%d%s" % [int(g.done), int(g.of), " PERFECT" if g.perfect else ""] if not g.is_empty() else "-", Game.trophies.count()])
 	for l in log_lines:
 		print(l)
 	log_lines.clear()

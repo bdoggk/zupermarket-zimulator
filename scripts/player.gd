@@ -61,6 +61,7 @@ var action_duration := 0.0
 var action_label := ""
 
 var _walk_anim := 0.0
+var _look: Texture2D  # your sprite standing still (CharArt.walk)
 var facing := Vector2.ZERO  # the way you last walked (E prefers what's in front of you)
 var look_dir := Vector2.ZERO  # first person: where you're looking (you face that way, whichever way you walk)
 var _stuck_time := 0.0
@@ -86,6 +87,7 @@ var reach_t := 0.0  # you just used or grabbed something (counts down): first pe
 
 func _ready() -> void:
 	Game.player = self
+	_look = sprite.texture
 	mop_sprite = Sprite2D.new()
 	mop_sprite.texture = MOP_TEXTURE
 	mop_sprite.position = Vector2(6, -16)
@@ -465,6 +467,8 @@ func _animate(delta: float) -> void:
 			sprite.flip_h = velocity.x < 0.0
 	else:
 		sprite.position.y = 0.0
+	if _look:
+		CharArt.walk(sprite, _look, _walk_anim, moving)
 	sprite.position.x = (-2.0 if sprite.flip_h else 2.0) if _swing > 0.1 and Game.war.weapon() == "fists" else 0.0  # (a punch)
 	carry_sprite.position.y = -14.0 + sprite.position.y
 	mop_sprite.position = Vector2(-6.0 if sprite.flip_h else 6.0, -16.0 + sprite.position.y)

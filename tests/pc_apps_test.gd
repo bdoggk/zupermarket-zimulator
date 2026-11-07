@@ -9,7 +9,8 @@ extends Node
 #          the beat playing, likes (the heart, a double tap, A), comments
 #          (yours on top, quick replies, the poster likes yours), next and
 #          previous (keys, d-pad, wheel, swipe), B closing the comments first
-#  the PC  8 apps: LB / RB and 7 / 8 reach them, the taskbar fits
+#  the PC  9 apps (Goals, 0.18, before Snake): LB / RB and 7 / 8 / 9 reach
+#          them, the taskbar fits
 #   godot --headless --path . --fixed-fps 60 res://tests/pc_apps_test.tscn
 
 var fails := 0
@@ -37,8 +38,8 @@ func _ready() -> void:
 	hud.levelup_panel.visible = false
 	hud.open_computer()
 	await _frames(2)
-	check(pc.desktop_icons.size() == 8 and pc.desktop_icons[6].text == "Snake" and pc.desktop_icons[7].text == "ZomTok", "the PC has Snake and ZomTok on the desktop")
-	check(pc.tab_buttons[6].text == "" and pc.tab_buttons[6].tooltip_text == "Snake" and pc.tab_buttons[7].icon != null, "and on the taskbar (just their icons)")
+	check(pc.desktop_icons.size() == 9 and pc.desktop_icons[6].text == "Goals" and pc.desktop_icons[7].text == "Snake" and pc.desktop_icons[8].text == "ZomTok", "the PC has Snake and ZomTok on the desktop")
+	check(pc.tab_buttons[7].text == "" and pc.tab_buttons[7].tooltip_text == "Snake" and pc.tab_buttons[8].icon != null, "and on the taskbar (just their icons)")
 	await _snake()
 	await _zomtok()
 	await _pc()
@@ -324,7 +325,10 @@ func _pc() -> void:
 	await _frames(2)
 	_pad(JOY_BUTTON_RIGHT_SHOULDER)
 	await _frames(2)
-	check(pc.tab == pc.Tab.SNAKE and pc.snake.visible, "RB from Turf: Snake")
+	check(pc.tab == pc.Tab.GOALS and pc.scroll.visible and not pc.snake.visible, "RB from Turf: Goals")
+	_pad(JOY_BUTTON_RIGHT_SHOULDER)
+	await _frames(2)
+	check(pc.tab == pc.Tab.SNAKE and pc.snake.visible, "RB again: Snake")
 	_pad(JOY_BUTTON_RIGHT_SHOULDER)
 	await _frames(2)
 	check(pc.tab == pc.Tab.ZOMTOK and pc.zomtok.visible and not pc.snake.visible, "RB again: ZomTok")
@@ -333,10 +337,13 @@ func _pc() -> void:
 	check(pc.tab == pc.Tab.STOCK and pc.scroll.visible and not pc.zomtok.visible and pc.news_label.visible, "and round to Stock & Prices (the list's back)")
 	_key(KEY_7)
 	await _frames(2)
-	check(pc.tab == pc.Tab.SNAKE, "7 opens Snake")
+	check(pc.tab == pc.Tab.GOALS, "7 opens Goals")
 	_key(KEY_8)
 	await _frames(2)
-	check(pc.tab == pc.Tab.ZOMTOK, "8 opens ZomTok")
+	check(pc.tab == pc.Tab.SNAKE, "8 opens Snake")
+	_key(KEY_9)
+	await _frames(2)
+	check(pc.tab == pc.Tab.ZOMTOK, "9 opens ZomTok")
 	var room: float = pc.screen.size.x
 	check(pc.taskbar.get_combined_minimum_size().x <= room + 1.0, "the taskbar still fits (%d of %d)" % [pc.taskbar.get_combined_minimum_size().x, room])
 	pc.close()

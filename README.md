@@ -38,6 +38,28 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.18.0
+
+Something to aim for, every day and for the long run:
+- **Daily goals.** From day 2, three goals every morning, picked to suit your store
+  (serve 40 shoppers, sell 12 Canned Guts, serve 5 witches, mop up 4 puddles yourself,
+  throw out a spy, close with nobody walking out...). They pay cash and XP the moment
+  they're done, and the numbers grow with your store. Do all three for a **Perfect Day**
+  bonus that grows the longer your streak runs. They're in the top left (click to fold).
+- **A star rating.** Every shopper rates their visit: did they find everything, how long
+  was the line, were the prices fair, was there blood everywhere? The stars by your money
+  are the average of the last 40, and more stars bring more shoppers (fewer below 3).
+  Some shoppers write reviews, so you can see what to fix.
+- **33 trophies** for the long haul (serve 10,000 shoppers, a 5-star rating, a week of
+  Perfect Days, every product licensed, 50 skeletons knocked out...). Each pays cash, and
+  five unlock decorations you can't buy any other way: the Trophy Case, a Zombie Statue,
+  the Blood Fountain, a Golden Gravestone and the Five-Star Plaque.
+- **A Goals app** on the store computer: today's goals, the rating with reviews and tips,
+  and every trophy with how close you are.
+- **Livelier people.** Everyone walks with their legs now, shoppers show how they feel
+  (a heart, a question mark when something's sold out, $ when it's pricey, zzz in a long
+  line), chat as they shop, and there are six new zombie looks.
+
 ## What's new in 0.17.0
 
 Two new apps on the store computer:
@@ -1071,8 +1093,54 @@ up down the street, then charge in together, and you can join the fight.
 - **A Bone Mart Express** (2 skeletons): win, and it's yours.
 - Lose, and your gang is out cold until tomorrow.
 
+### Goals, the star rating and trophies
+**Daily goals.** From day 2 (day 1 has the tips), three goals come up every morning,
+picked to suit your store: serve so many shoppers, take so much money, sell so many of a
+product (often one that's in demand), serve so many of one kind of shopper, make so many
+shoppers happy, mop up yourself, ring people up yourself, sell above market price, throw
+out a spy, license a product, hire someone, knock out skeletons or win a raid in the gang
+war, even a Snake score. A few can only be checked at closing time: close with nobody
+walking out, with a clean floor, with a profit, or at a star rating. The numbers grow
+with your store level and with how yesterday went. Each goal pays cash and XP as soon as
+it's done. Do all three and it's a **Perfect Day**: a bonus at closing that's bigger for
+every Perfect Day in a row (up to 2.5 times as much); missing one starts the streak over.
+The list sits in the top left; click or tap its title to fold it to one line.
+
+**The star rating.** Every shopper scores their visit from 1 to 5 stars as they leave:
+- things they wanted that were out of stock (or not on your shelves at all) cost the most;
+  leaving with nothing is 2 stars at most,
+- a long wait in line costs up to 2 stars, walking out of the line is 1 star,
+- each price above what they'd pay costs some,
+- blood that's been on the floor a while costs some (the first couple of puddles don't),
+- running into a gang fight in the store is 1.5 stars.
+
+The stars at the top are the average of the last 40 shoppers (to the nearest half star;
+a new store starts at 3 and moves gradually). Each star above 3 brings 10% more shoppers,
+each one below 3 keeps 10% away. Shoppers who loved it or hated it write a review, and
+others sometimes do; the Goals app shows them, with a tip for whatever shoppers complained
+about most today, and the day's summary says how they rated you and why.
+
+**Trophies** are for the whole game: firsts (your first sale, 100 and 1,000 and 10,000
+shoppers, $1,000 to $100,000 taken), store levels 5 to 20, every product licensed, a
+month of days, 25 goals, a week of Perfect Days, 4 and 5 stars, 500 happy shoppers, a
+spotless close, mopping, spies, registers, staff, the lots next door, the hearse, paying
+off a loan, 15 vampires in a night, 50 skeletons knocked out, 5 raids won, owning the
+turf, a Snake score of 30 and 50 likes on ZomTok. Each pays cash once. Five of them
+unlock a decoration (Build > Decor) that shoppers come to see:
+
+| Decoration | Trophy | Cost | What it does |
+|---|---|---|---|
+| Trophy Case | Goal Getter (25 goals done) | $100 | 5% more shoppers |
+| Zombie Statue | The Horde (1,000 shoppers) | $200 | 5% more shoppers |
+| Blood Fountain | Blood Money ($10,000 taken) | $300 | 8% more shoppers, and it glows |
+| Golden Gravestone | Perfect Week (7 Perfect Days in a row) | $300 | 10% more shoppers |
+| Five-Star Plaque | Five Stars (a 5-star rating) | $250 | Every shopper's visit scores a quarter star more |
+
+Each kind counts once, however many you build.
+
 ### Slacking off: Snake and ZomTok
-The store computer has two apps that aren't work (the store keeps running while you play):
+The store computer has two apps that aren't work (the store keeps running while you play;
+its third new app, Goals, is above):
 
 - **Snake** (Zombie Snake): steer a snake round the screen eating what your store sells.
   Every bite makes it longer and a little faster; hit a wall or yourself and it's over.
@@ -1117,7 +1185,7 @@ The store computer has two apps that aren't work (the store keeps running while 
 | Pause menu | Esc or P | II button / back button |
 | Recent messages | M, or the Log button | Log button |
 | Close / cancel | Esc | Back button |
-| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-8 switch apps, Esc goes back | Tap |
+| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-9 switch apps, Esc goes back | Tap |
 | Snake (store computer) | Arrows or WASD steer, Enter starts | Swipe on the board or tap the arrows; tap to start |
 | ZomTok (store computer) | Down / Up or the mouse wheel: next / last video; Space or L (or double-click): like; C: comments | Swipe up / down; double-tap or the heart; the bubble for comments |
 
@@ -1160,6 +1228,10 @@ scripts/
   ray_tracer.gd        Ray tracing: the height map, the lights, the lightmap, and
                        putting it on the normal view and first person
   market.gd            Prices that drift over time + daily news events
+  goals.gd             Today's goals, the Perfect Day streak (Game.goals)
+  store_rating.gd      The store's star rating and shoppers' reviews (Game.rating)
+  trophies.gd          Trophies, counted from the whole game's totals (Game.trophies)
+  char_art.gd          Walking frames made from each character's picture, and emotes
   store.gd             Builds the store from the map, furniture placement rules,
                        registers and their lines, deliveries, decor, staff, spills,
                        customer spawning, the lots next door
@@ -1196,11 +1268,14 @@ scripts/
   computer.gd          Opens the store computer
   floor.gd             Draws the floor tiles and the tap marker
   hud.gd               Main UI (status bar, prompts, messages, summary)
-  ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades / Loans / Turf / Snake / ZomTok
+  ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades / Loans / Turf / Goals / Snake / ZomTok
   ui/pc_snake.gd       The computer's Snake (Zombie Snake)
   ui/zomtok_app.gd     ZomTok: the phone-shaped video player, likes and comments
   zomtok_feed.gd       What's on ZomTok: who posts, the dances, captions and comments
   ui/rival_panel.gd    Bone Mart's price list
+  ui/goals_panel.gd    Today's goals in the top left
+  ui/star_bar.gd       The rating as five stars
+  ui/trophy_toast.gd   "TROPHY!" across the top when you earn one
   ui/tutorial.gd       The first-day tips
   ui/build_bar.gd      The build mode toolbar, decorations row and paint menu
   ui/loan_cutscene.gd  Count Vlad's visit when a loan isn't paid back in time
@@ -1332,6 +1407,7 @@ godot --headless --path . -s res://tests/loan_test.gd                 # loans, t
 godot --headless --path . --fixed-fps 60 res://tests/fp_test.tscn     # first person: the 3D store and its models, sky, shadows, Sharp / Chunky, walking, looking, using, tapping
 godot --headless --path . --fixed-fps 60 res://tests/war_test.tscn    # the gang war: land, branches, raids both ways, fighting, the cutscene
 godot --headless --path . --fixed-fps 60 res://tests/pc_apps_test.tscn # the computer's Snake and ZomTok
+godot --headless --path . --fixed-fps 60 res://tests/goals_test.tscn   # goals, the star rating, trophies, walking frames, emotes, the Goals app
 godot --headless --path . -s res://tests/roundtrip_test.gd            # save a store with everything in it, load it, save again: nothing lost
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/rt_test.tscn  # ray tracing: the setting, the height map, shadows read back from the lightmap, both views
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)

@@ -326,6 +326,7 @@ func set_like(on: bool) -> void:
 		return
 	if on:
 		liked[_key()] = true
+		Game.count("zt_likes")
 		_play(LIKE_SOUND)
 		Settings.vibrate(0.2, 0.05)
 	else:

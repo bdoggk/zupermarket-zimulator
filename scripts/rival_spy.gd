@@ -271,6 +271,7 @@ func _face(target: Vector2) -> void:
 
 
 func _animate(delta: float) -> void:
+	CharArt.walk(sprite, Brand.RIVAL.textures.spy, _walk_anim, not path.is_empty())
 	if not path.is_empty():
 		_walk_anim += delta * (20.0 if state == State.CAUGHT else 12.0)
 		sprite.position.y = -roundf(absf(sin(_walk_anim)) * 1.5)

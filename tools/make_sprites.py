@@ -3995,10 +3995,358 @@ def pc_apps_content():
     save(pc_arrow(), "pc_arrow")
 
 
+# --------------------------------------------------------------------------
+# Goals, the store's rating and trophies (0.18)
+# --------------------------------------------------------------------------
+GOLD, GOLD_D, GOLD_L = (226, 182, 60), (168, 124, 34), (252, 228, 124)
+STONE, STONE_D, STONE_L = (132, 132, 140), (92, 92, 102), (176, 176, 184)
+
+
+def _in_poly(x, y, pts):
+    inside = False
+    j = len(pts) - 1
+    for i in range(len(pts)):
+        xi, yi = pts[i]
+        xj, yj = pts[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _star_points(cx, cy, r_out, r_in):
+    import math
+    pts = []
+    for k in range(10):
+        a = -math.pi / 2 + k * math.pi / 5
+        r = r_out if k % 2 == 0 else r_in
+        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return pts
+
+
+def _star(img, cx, cy, r_out, r_in, fill, empty=(64, 60, 72), cut=None):
+    """A five-pointed star; left of `cut` (x) in `fill`, the rest `empty`."""
+    pts = _star_points(cx, cy, r_out, r_in)
+    w, h = img.size
+    for y in range(h):
+        for x in range(w):
+            if _in_poly(x + 0.5, y + 0.5, pts):
+                c = fill if cut is None or x < cut else empty
+                if c == fill and x < cx - 1 and y < cy:
+                    c = shade(fill, 1.12)  # a highlight on the top left
+                dot(img, x, y, c)
+
+
+def star_icon(part):
+    """The store's rating: a full, half or empty star (11x11)."""
+    img = new(11, 11)
+    cut = {1.0: None, 0.5: 5.5, 0.0: -1}[part]
+    _star(img, 5.5, 6.0, 5.4, 2.3, GOLD if part > 0 else (64, 60, 72), cut=cut)
+    outline_outside(img)
+    return img
+
+
+def goal_box(done):
+    """A goal's checkbox: empty, or ticked green (12x12)."""
+    img = new(12, 12)
+    rect(img, 1, 1, 10, 10, (230, 226, 214) if not done else (90, 170, 80))
+    rect(img, 2, 2, 9, 9, (54, 52, 60) if not done else (110, 200, 96))
+    if done:
+        for x, y in [(3, 6), (4, 7), (5, 8), (6, 7), (7, 6), (8, 5), (9, 4), (4, 6), (5, 7), (6, 6), (7, 5), (8, 4)]:
+            dot(img, x, y, (250, 250, 240))
+    outline_outside(img)
+    return img
+
+
+def _bubble(fill=(250, 248, 240)):
+    img = new(13, 14)
+    for x, y in _ellipse_pixels(6.5, 6, 6, 5.6):
+        dot(img, x, y, fill)
+    dot(img, 3, 11, fill)  # the little tail
+    dot(img, 2, 12, fill)
+    return img
+
+
+def emote(kind):
+    """What a shopper feels, in a bubble over their head (13x14)."""
+    if kind == "angry":
+        img = _bubble((222, 60, 52))
+        for x, y in [(4, 3), (5, 4), (6, 5), (7, 6), (8, 7), (8, 3), (7, 4), (5, 6), (4, 7), (9, 4), (3, 6), (6, 8), (6, 2)]:
+            dot(img, x, y, (60, 14, 14))  # a scribble of fury
+    else:
+        img = _bubble()
+        if kind == "heart":
+            for x, y in _ellipse_pixels(5, 4.6, 1.8, 1.8):
+                dot(img, x, y, (220, 50, 70))
+            for x, y in _ellipse_pixels(8, 4.6, 1.8, 1.8):
+                dot(img, x, y, (220, 50, 70))
+            for i in range(4):
+                rect(img, 3 + i, 5 + i, 9 - i, 5 + i, (220, 50, 70))
+        elif kind == "question":
+            blue = (60, 90, 200)
+            rect(img, 5, 2, 8, 2, blue)
+            dot(img, 4, 3, blue)
+            dot(img, 9, 3, blue)
+            dot(img, 9, 4, blue)
+            dot(img, 8, 5, blue)
+            dot(img, 7, 6, blue)
+            dot(img, 6, 7, blue)
+            dot(img, 6, 9, blue)
+        elif kind == "money":
+            green = (40, 140, 60)
+            rect(img, 6, 1, 6, 10, green)
+            rect(img, 4, 3, 8, 3, green)
+            dot(img, 4, 4, green)
+            rect(img, 4, 5, 8, 5, green)
+            dot(img, 8, 6, green)
+            dot(img, 8, 7, green)
+            rect(img, 4, 8, 8, 8, green)
+            dot(img, 9, 3, (220, 50, 50))  # (a red slash: too much)
+            dot(img, 3, 8, (220, 50, 50))
+        elif kind == "zzz":
+            blue = (90, 110, 190)
+            rect(img, 3, 6, 6, 6, blue)
+            dot(img, 5, 7, blue)
+            dot(img, 4, 8, blue)
+            rect(img, 3, 9, 6, 9, blue)
+            rect(img, 7, 2, 9, 2, blue)
+            dot(img, 8, 3, blue)
+            rect(img, 7, 4, 9, 4, blue)
+        elif kind == "star":
+            _star(img, 6.5, 6.2, 4.6, 2.0, GOLD)
+    outline_outside(img)
+    return img
+
+
+def goals_app_icon():
+    """The Goals app: a clipboard of ticked goals and a gold star (32x32)."""
+    img = new(32, 32)
+    rect(img, 6, 4, 25, 29, (140, 98, 56))  # the board
+    rect(img, 23, 4, 25, 29, (112, 78, 44))
+    rect(img, 8, 7, 23, 27, (238, 234, 220))  # the paper
+    rect(img, 12, 2, 19, 6, (170, 172, 180))  # the clip
+    rect(img, 13, 3, 18, 3, (210, 212, 218))
+    for i, y in enumerate((10, 15, 20)):
+        rect(img, 10, y, 12, y + 2, (90, 170, 80) if i < 2 else (200, 196, 186))
+        if i < 2:
+            dot(img, 10, y + 1, (250, 250, 240))
+            dot(img, 11, y + 2, (250, 250, 240))
+            dot(img, 12, y, (250, 250, 240))
+        rect(img, 14, y + 1, 21, y + 1, (120, 116, 110))
+    _star(img, 24, 23, 6.5, 2.8, GOLD)
+    outline_outside(img)
+    return img
+
+
+def trophy_icon(gold=True):
+    """A trophy cup (16x16): gold once you've earned it, grey before."""
+    img = new(16, 16)
+    c, d, l = (GOLD, GOLD_D, GOLD_L) if gold else ((120, 118, 128), (88, 86, 96), (150, 148, 158))
+    rect(img, 4, 2, 11, 2, l)
+    for y in range(3, 9):  # the cup
+        w = 4 - max(0, y - 6)
+        rect(img, 8 - w, y, 7 + w, y, c)
+        dot(img, 7 + w, y, d)
+    dot(img, 5, 4, l)
+    dot(img, 5, 5, l)
+    for y in (3, 4, 5):  # the handles
+        dot(img, 2, y, c)
+        dot(img, 13, y, d)
+    dot(img, 3, 6, c)
+    dot(img, 12, 6, d)
+    rect(img, 7, 9, 8, 11, d)  # the stem
+    rect(img, 5, 12, 10, 13, c)  # the base
+    rect(img, 9, 12, 10, 13, d)
+    outline_outside(img)
+    return img
+
+
+def _decor_shadow(img, cy, rx=13.0):
+    px = img.load()
+    for y in range(cy - 3, cy + 4):
+        for x in range(int(32 - rx - 1), int(32 + rx + 2)):
+            if ((x - 32) / rx) ** 2 + ((y - cy) / 3.0) ** 2 <= 1:
+                px[x, y] = (0, 0, 0, 70)
+
+
+def trophy_case():
+    """A glass-fronted cabinet of gold cups (64x76)."""
+    img = new(64, 76)
+    cy = img.height - 16
+    _decor_shadow(img, cy, 14)
+    wood, wood_d, wood_l = (112, 72, 44), (80, 50, 30), (146, 98, 60)
+    top = cy - 46
+    rect(img, 19, top, 44, cy + 1, wood)
+    rect(img, 42, top, 44, cy + 1, wood_d)
+    rect(img, 19, top, 21, cy + 1, wood_l)
+    rect(img, 22, top + 3, 41, cy - 3, (60, 70, 84))  # behind the glass
+    for shelf_y in (top + 16, top + 30):
+        rect(img, 22, shelf_y, 41, shelf_y, wood_l)
+    for (x, y, big) in [(25, top + 5, True), (33, top + 8, False), (37, top + 6, True), (27, top + 21, False), (34, top + 19, True), (24, top + 35, True), (31, top + 36, False), (37, top + 34, False)]:
+        h = 9 if big else 6
+        rect(img, x, y, x + (4 if big else 3), y + h - 4, GOLD)
+        dot(img, x, y, GOLD_L)
+        rect(img, x + (1 if big else 1), y + h - 3, x + (3 if big else 2), y + h - 2, GOLD_D)
+        rect(img, x, y + h - 1, x + (4 if big else 3), y + h - 1, GOLD)
+    for i in range(5):  # a shine across the glass
+        dot(img, 23 + i, top + 12 - i, (200, 220, 240))
+        dot(img, 30 + i, top + 30 - i, (200, 220, 240))
+    rect(img, 18, top - 2, 45, top, wood_d)  # the top
+    outline_object(img, 0.6)
+    return img
+
+
+def zombie_statue():
+    """A stone zombie, arms out, on a plinth (64x76)."""
+    img = new(64, 76)
+    cy = img.height - 16
+    _decor_shadow(img, cy, 12)
+    rect(img, 22, cy - 8, 41, cy + 1, STONE)  # the plinth
+    rect(img, 38, cy - 8, 41, cy + 1, STONE_D)
+    rect(img, 22, cy - 8, 41, cy - 8, STONE_L)
+    rect(img, 26, cy - 4, 37, cy - 3, (196, 160, 70))  # a brass plate
+    body = zombie(STONE_L, STONE_D, STONE, STONE_D, seed=77, shoes=STONE_D)
+    px = body.load()
+    for y in range(body.height):  # all of it stone
+        for x in range(body.width):
+            r, g, b, a = px[x, y]
+            if a == 255 and (r, g, b) != OUTLINE[:3]:
+                v = (r + g + b) // 3
+                px[x, y] = (v + 16, v + 16, v + 24, 255)
+            elif a < 255:
+                px[x, y] = (0, 0, 0, 0)
+    img.alpha_composite(body.resize((24, 54), Image.NEAREST).crop((0, 0, 24, 50)), (20, cy - 56))
+    outline_object(img, 0.6)
+    return img
+
+
+def golden_gravestone():
+    """A gravestone of solid gold, for seven perfect days in a row (64x64)."""
+    img = new(64, 64)
+    cy = img.height - 14
+    _decor_shadow(img, cy, 12)
+    top = cy - 30
+    for y in range(top, cy + 1):
+        w = 9 if y > top + 7 else int(9 * (1 - ((top + 7 - y) / 8.5) ** 2) ** 0.5) + 1
+        for x in range(32 - w, 32 + w + 1):
+            dot(img, x, y, GOLD_L if x < 32 - w + 2 else (GOLD_D if x > 32 + w - 2 else GOLD))
+    rect(img, 30, top + 6, 33, top + 18, GOLD_D)  # a cross cut in it
+    rect(img, 27, top + 9, 36, top + 11, GOLD_D)
+    rect(img, 22, cy - 2, 42, cy + 1, (90, 120, 60))  # a tuft of grass
+    for x, y in [(19, top + 2), (45, top + 6), (40, top - 2)]:  # sparkles
+        dot(img, x, y, (255, 255, 230))
+        dot(img, x - 1, y, (255, 240, 170))
+        dot(img, x + 1, y, (255, 240, 170))
+        dot(img, x, y - 1, (255, 240, 170))
+        dot(img, x, y + 1, (255, 240, 170))
+    outline_object(img, 0.6)
+    return img
+
+
+def five_star_plaque():
+    """Five gold stars on a plaque on a stand (64x72)."""
+    img = new(64, 72)
+    cy = img.height - 16
+    _decor_shadow(img, cy, 10)
+    rect(img, 30, cy - 24, 33, cy, (70, 60, 56))  # the post
+    rect(img, 25, cy - 2, 38, cy + 1, (70, 60, 56))
+    rect(img, 10, cy - 48, 53, cy - 24, GOLD_D)  # the plaque
+    rect(img, 12, cy - 46, 51, cy - 26, (60, 30, 40))
+    for i in range(5):
+        _star(img, 16.5 + i * 7.6, cy - 39.0, 3.9, 1.7, GOLD_L)
+    rect(img, 16, cy - 31, 47, cy - 30, GOLD)  # a line of writing
+    outline_object(img, 0.6)
+    return img
+
+
+def blood_fountain():
+    """A little stone fountain of blood (64x64)."""
+    img = new(64, 64)
+    cy = img.height - 14
+    _decor_shadow(img, cy, 16)
+    for x, y in _ellipse_pixels(32, cy - 5, 15, 6):  # the basin
+        dot(img, x, y, STONE)
+    for x, y in _ellipse_pixels(32, cy - 6, 13, 4.5):
+        dot(img, x, y, (150, 20, 28))
+    for x, y in _ellipse_pixels(30, cy - 7, 6, 1.5):
+        dot(img, x, y, (196, 40, 48))
+    rect(img, 17, cy - 5, 47, cy - 1, STONE)  # its side
+    rect(img, 17, cy - 1, 47, cy, STONE_D)
+    rect(img, 30, cy - 22, 34, cy - 7, STONE_L)  # the spout
+    rect(img, 33, cy - 22, 34, cy - 7, STONE_D)
+    for x, y in _ellipse_pixels(32, cy - 23, 5, 2):
+        dot(img, x, y, STONE)
+    for y in range(cy - 30, cy - 23):  # blood spouting up and splashing down
+        dot(img, 32, y, (196, 30, 40))
+    for i in range(6):
+        dot(img, 27 - i // 2, cy - 27 + i, (196, 30, 40))
+        dot(img, 37 + i // 2, cy - 27 + i, (196, 30, 40))
+    outline_object(img, 0.6)
+    return img
+
+
+def more_zombie_looks():
+    """Six more everyday zombies, so a crowd isn't all the same six faces."""
+    def glasses(body):
+        rect(body, 5, 7, 10, 7, (40, 40, 44))
+        dot(body, 6, 7, (150, 200, 220))
+        dot(body, 9, 7, (150, 200, 220))
+
+    def tie(body):
+        rect(body, 7, 13, 8, 21, (60, 70, 140))
+
+    def mohawk(body):
+        rect(body, 7, 0, 8, 3, (90, 220, 90))
+        rect(body, 5, 2, 6, 3, (60, 120, 60))
+        rect(body, 9, 2, 10, 3, (60, 120, 60))
+
+    def beanie(body):
+        rect(body, 4, 1, 11, 3, (200, 120, 40))
+        rect(body, 4, 3, 11, 3, (160, 90, 30))
+        dot(body, 7, 0, (230, 210, 180))
+
+    def hoodie(body):
+        rect(body, 4, 12, 11, 13, (70, 76, 92))
+        rect(body, 6, 18, 9, 20, (58, 62, 76))  # the pocket
+
+    def pearls(body):
+        for x in range(5, 11):
+            dot(body, x, 13, (236, 232, 220))
+    return [
+        zombie((150, 168, 136), (60, 50, 40), (226, 226, 216), (56, 56, 64), seed=80, extra=lambda b: (glasses(b), tie(b))),
+        zombie((128, 156, 120), (30, 30, 30), (40, 40, 46), (40, 40, 46), seed=81, extra=mohawk, bald=True),
+        zombie((160, 160, 140), (200, 200, 200), (130, 80, 150), (80, 70, 90), seed=82, long_hair=True, extra=pearls),
+        zombie((136, 164, 126), (60, 40, 30), (88, 96, 112), (60, 64, 72), seed=83, extra=hoodie),
+        zombie((146, 160, 120), (80, 60, 40), (60, 120, 90), (110, 90, 60), seed=84, extra=beanie),
+        zombie((120, 140, 112), (150, 60, 40), (170, 140, 80), (70, 60, 50), seed=85, long_hair=True, extra=glasses),
+    ]
+
+
+def goals_content():
+    """Goals, the store's rating and trophies (0.18)."""
+    for part, name in [(1.0, "full"), (0.5, "half"), (0.0, "empty")]:
+        save(star_icon(part), f"star_{name}")
+    save(goal_box(False), "goal_box")
+    save(goal_box(True), "goal_done")
+    for kind in ["heart", "angry", "question", "money", "zzz", "star"]:
+        save(emote(kind), f"emote_{kind}")
+    save(goals_app_icon(), "pc_app_goals")
+    save(trophy_icon(True), "trophy")
+    save(trophy_icon(False), "trophy_locked")
+    save(trophy_case(), "decor_trophy_case")
+    save(zombie_statue(), "decor_zombie_statue")
+    save(golden_gravestone(), "decor_golden_grave")
+    save(five_star_plaque(), "decor_plaque")
+    save(blood_fountain(), "decor_blood_fountain")
+    for i, img in enumerate(more_zombie_looks()):
+        save(img, f"customer_{6 + i}")
+
+
 def new_content():
     """Everything above, saved: called from main()."""
     loan_content()
     pc_apps_content()
+    goals_content()
     war_content()
     fp_content()
     save(mummy(), "shopper_mummy_0")

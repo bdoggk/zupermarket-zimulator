@@ -59,6 +59,7 @@ var retired := false  # fired from your gang: walking off, out of the war
 var holding := false  # waiting for the rest of the gang (on a raid): only fights back
 var sprite: Sprite2D
 var outline: Sprite2D  # behind `sprite`, shown while a fight's on (outlined())
+var _look: Texture2D  # their sprite standing still (CharArt.walk)
 var path: Array[Vector2i] = []
 var goal := Store.NO_CELL
 var timer := 0.0  # smashing or robbing
@@ -95,6 +96,7 @@ func setup(s: Store, t: Node, which: String, name_text: String, look: Texture2D,
 	position = Iso.cell_to_world(at)
 	sprite = Sprite2D.new()
 	sprite.texture = look
+	_look = look
 	sprite.centered = false
 	sprite.offset = Vector2(-floorf(look.get_width() / 2.0), -(look.get_height() - 2))
 	add_child(sprite)
@@ -316,6 +318,8 @@ func _process(delta: float) -> void:
 	_animate(delta)
 	outline.visible = outlined()
 	outline.flip_h = sprite.flip_h
+	if outline.visible:
+		outline.texture = outline_of(sprite.texture, OUTLINE_COLORS[side])  # (it follows their legs)
 	var b := 1.3 if highlighted else 1.0
 	modulate = Color(b, b, b, _alpha)
 	if _hit_flash > 0.0:
@@ -471,6 +475,7 @@ func _animate(delta: float) -> void:
 		sprite.position = Vector2.ZERO
 		return
 	var off := Vector2.ZERO
+	CharArt.walk(sprite, _look, _walk_anim, not path.is_empty())
 	if not path.is_empty():
 		_walk_anim += delta * 15.0
 		off.y = -roundf(absf(sin(_walk_anim)) * 1.5)

@@ -192,6 +192,7 @@ func step() -> void:
 
 func _game_over() -> void:
 	state = State.OVER
+	Game.stats.snake = maxi(int(Game.stats.get("snake", 0)), score)  # (today's goals)
 	if score > best():
 		Game.snake_best = score
 		new_best = true

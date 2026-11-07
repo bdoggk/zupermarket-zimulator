@@ -165,7 +165,7 @@ func _furniture_button(id: String, title := "", on_press := Callable()) -> Butto
 	if title != "":
 		return b  # (the Decor button)
 	tool_buttons[id] = b
-	if Game.furniture_level(id) > 1:
+	if Game.furniture_level(id) > 1 or Game.FURNITURE[id].has("trophy"):
 		locks[id] = price
 	return b
 
@@ -215,12 +215,15 @@ func _refresh() -> void:
 		var f := get_viewport().gui_get_focus_owner()
 		if f and paint_box.is_ancestor_of(f):
 			f.release_focus()
-	# Locked furniture shows the store level it comes with.
+	# Locked furniture shows the store level it comes with (or that a
+	# trophy earns it).
 	for id: String in locks:
 		var lv := Game.furniture_level(id)
-		var locked := Game.level < lv
+		var why := Game.furniture_problem(id)
+		var locked := why != ""
 		tool_buttons[id].disabled = locked
-		(locks[id] as Label).text = "Lv %d" % lv if locked else "$%d" % int(Game.FURNITURE[id].cost)
+		tool_buttons[id].tooltip_text = why
+		(locks[id] as Label).text = ("Lv %d" % lv if Game.level < lv else "Trophy") if locked else "$%d" % int(Game.FURNITURE[id].cost)
 		UI.set_color(locks[id], UI.DIM if locked else UI.WARN)
 	# Picking a decoration (a controller's d-pad) shows its row.
 	var placing := build.place_id if build.tool == BuildMode.Tool.PLACE else ""

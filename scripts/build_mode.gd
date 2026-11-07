@@ -103,8 +103,9 @@ func select_tool(t: Tool) -> void:
 
 
 func select_place(furniture_id: String) -> void:
-	if Game.level < Game.furniture_level(furniture_id):
-		Game.message.emit("The %s comes with store level %d." % [Game.FURNITURE[furniture_id].name, Game.furniture_level(furniture_id)])
+	var why := Game.furniture_problem(furniture_id)
+	if why != "":
+		Game.message.emit(why)
 		return
 	_clear_selection()
 	tool = Tool.PLACE
@@ -213,7 +214,7 @@ func _pad_button(b: JoyButton) -> bool:
 
 ## What the d-pad goes through: the furniture, then the tools and Paint.
 func _pad_tools() -> Array:
-	var list: Array = Game.FURNITURE.keys().filter(func(id): return Game.level >= Game.furniture_level(id))
+	var list: Array = Game.FURNITURE.keys().filter(func(id): return Game.furniture_problem(id) == "")
 	list.append_array(["move", "rotate", "sell", "paint"])
 	if store.town and not Brand.EXPANSIONS.is_empty():
 		list.append("expand")
@@ -505,6 +506,8 @@ func _try_place(cell: Vector2i) -> void:
 		return
 	store.add_furniture(place_id, cell, place_rotation)
 	store.layout_changed()
+	if Game.FURNITURE[place_id].kind == "decor":
+		Game.count("decor_bought")
 	Settings.vibrate(0.3, 0.05)
 	Game.show_popup(Iso.cell_to_world(cell) + Vector2(0, -50), "-$%d" % int(cost), BAD_COLOR)
 	_set_cursor(cell)  # re-check the spot (now taken)

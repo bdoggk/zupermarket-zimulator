@@ -46,6 +46,7 @@ func get_action_label(_p: Player) -> String:
 
 func interact(_p: Player) -> void:
 	Game.record_spill_cleaned()
+	Game.count("you_cleaned")
 	Game.show_popup(position + Vector2(0, -20), "Clean!", Color(0.7, 0.9, 1.0))
 	Settings.vibrate(0.2, 0.04)
 	Game.store.remove_spill(self)
