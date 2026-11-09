@@ -20,7 +20,10 @@ your own sprites whenever you're ready.
 **Installing on Android / AYN Thor:** open the APK link in the device's browser and
 tap the download. Android will ask you to allow installs from that browser (**Settings →
 Install unknown apps**); allow it, go back and tap **Install**. New versions install
-over the old one and keep your saves.
+over the old one and keep your saves. From 0.20.1 on, the game **updates itself on
+Android too**: it downloads each new version by itself and opens Android's installer on
+the main menu, so you just tap **Update** (the first time, Android asks you to allow
+installs from the game).
 
 **Controls on a handheld:** left stick / d-pad to move, **LT** to sprint, **A** to use,
 **X** to scan a shelf, **Y** for build mode, **RB** to turn things in build mode,
@@ -37,6 +40,15 @@ itself** (see below), and the versions it downloads itself don't get the warning
 It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The two
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
+
+## What's new in 0.20.1
+
+- **Automatic updates on Android.** When a new version is out, the game downloads it
+  by itself (and checks it's all there), then opens Android's installer on the main
+  menu: tap **Update** and your saves stay. The first time, Android asks you to allow
+  installs from Zupermarket Zimulator (one switch, then back). If you cancel, the main
+  menu's **Install update** button opens it again; mid-game it waits for the main menu.
+  Install 0.20.1 by hand once; after that it keeps itself up to date.
 
 ## What's new in 0.20.0
 
@@ -678,7 +690,7 @@ It has Resume, Save Game, Options, Save & Main Menu, and Save & Quit (PC).
 | UI size | How big the menus, buttons and text are: 70% to 130%. The store itself stays the same size. On a small window it only goes as big as still fits |
 | First person | **Sharp**: the 3D view at full resolution (PC's default). **Chunky**: half resolution, with big pixels like the art (faster; phones' default) |
 | Graphics | **Low**: simple lighting (older phones, battery life). **Medium**: store lights with darker corners. **High**: adds a flickering light tube and floating dust. **Ray tracing**: High, plus every light casts real shadows (shelves, walls, people), in both views. The default on PC (phones start on Medium) |
-| Automatic updates | Windows: new versions download by themselves and start the next time you open the game. Android: the main menu says when a new version is out. On by default (Windows and Android only) |
+| Automatic updates | Windows: new versions download by themselves and start the next time you open the game. Android: new versions download by themselves and the main menu opens Android's installer (tap Update). On by default (Windows and Android only) |
 | Vibration | Phone vibration and controller rumble. It turns on when a phone or controller is available, and you feel it when you make a sale, stock a shelf, scan, mop, level up, or when a zombie storms out |
 
 **Controls** (the button at the bottom of Options) lists every key and button, for
@@ -1341,7 +1353,8 @@ scripts/
   saves.gd             Autoload "Saves": the 3 save slots, autosaving, continue
   settings.gd          Autoload "Settings": options, saved to settings.cfg, vibration
   updater.gd           Autoload "Updater": checks GitHub for a new version, downloads,
-                       checks and swaps in the new .exe on Windows
+                       checks and swaps in the new .exe on Windows; on Android
+                       downloads the APK and opens the installer with it
   store_lights.gd      Store lighting for each graphics level, day/night tint
   ray_tracer.gd        Ray tracing: the height map, the lights, the lightmap, and
                        putting it on the normal view and first person
@@ -1616,7 +1629,11 @@ package version 1.9.4.0. A game installed from the Store lives in
 `application/config/version` in Project Settings, so bump the version before
 exporting, and keep the file names: `ZupermarketZimulator-windows.exe` and
 `ZupermarketZimulator-android.apk`. GitHub lists each file's SHA-256, and the game
-refuses a download that doesn't match.
+refuses a download that doesn't match. On Android the APK goes into the game's own
+folder (`user://update`) and `OS.shell_open` hands it to the installer through the
+FileProvider that Godot's Android template already has; the Android preset adds the
+`REQUEST_INSTALL_PACKAGES` permission (Custom Permissions) so Android lets the game ask.
+Every APK must be signed with the same key, or Android refuses the update.
 
 **Android:**
 1. Install Android Studio (for the Android SDK) and OpenJDK 17.

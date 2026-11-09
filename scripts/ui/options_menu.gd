@@ -380,6 +380,8 @@ func _refresh() -> void:
 			update_note.text = "Off: get new versions from the download page yourself."
 		elif Updater.replaces_itself():
 			update_note.text = "New versions download by themselves and start the next time you open the game."
+		elif Updater.downloads_itself():
+			update_note.text = "New versions download by themselves, then the main menu opens Android's installer: tap Update."
 		else:
 			update_note.text = "The main menu tells you when a new version is out."
 	if visible:

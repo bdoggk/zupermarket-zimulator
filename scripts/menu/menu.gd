@@ -66,6 +66,7 @@ func _ready() -> void:
 	Updater.changed.connect(_refresh_update)
 	show_screen(Screen.MAIN)
 	Updater.check_again_if_failed()
+	Updater.offer_install.call_deferred()  # (Android: an update that downloaded during a game)
 
 
 func _process(_delta: float) -> void:

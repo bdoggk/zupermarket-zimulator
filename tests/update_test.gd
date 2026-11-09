@@ -2,8 +2,10 @@ extends Node
 # The updater (scripts/updater.gd), against a stand-in for GitHub
 # (tests/update_server.py on a local port): a newer version downloads,
 # gets checked and replaces the game file; a damaged, short or missing
-# download leaves the game alone; the same version, no internet and Android
-# do what they should; and the main menu, Options and the HUD show it.
+# download leaves the game alone; the same version and no internet do what
+# they should; Android downloads the APK into its own folder, checks it and
+# opens the installer (on the main menu, once; not mid-game); and the main
+# menu, Options and the HUD show it.
 #   godot --headless --path . res://tests/update_test.tscn
 
 const PORT := 47391
@@ -15,6 +17,9 @@ var exe := ""
 var server_pid := -1
 var new_bytes := PackedByteArray()
 var new_hash := ""
+var apk_bytes := PackedByteArray()
+var apk_hash := ""
+var opened: Array[String] = []  # what the updater asked Android to open
 
 
 func check(ok: bool, what: String) -> void:
@@ -70,15 +75,26 @@ func _setup() -> void:
 		new_bytes[i] = rng.randi() & 0xff
 	_write(dir.path_join("www/new.exe"), new_bytes)
 	new_hash = Updater.sha256_of(dir.path_join("www/new.exe"))
+	apk_bytes = new_bytes.slice(0, 1024 * 1024 + 7)  # the "new APK"
+	apk_bytes.reverse()
+	_write(dir.path_join("www/game.apk"), apk_bytes)
+	apk_hash = Updater.sha256_of(dir.path_join("www/game.apk"))
+	DirAccess.make_dir_recursive_absolute(dir.path_join("android"))
+	for f in DirAccess.get_files_at(dir.path_join("android")):
+		DirAccess.remove_absolute(dir.path_join("android").path_join(f))
+	Updater.open_file = func(path: String) -> Error:
+		opened.append(path)
+		return OK
 	server_pid = OS.create_process("python3", [ProjectSettings.globalize_path("res://tests/update_server.py"), str(PORT), dir.path_join("www")])
 	check(server_pid > 0, "the stand-in release server started")
 	OS.set_environment("ZZ_UPDATE_EXE", exe)
 	OS.set_environment("ZZ_UPDATE_PLATFORM", "windows")
+	OS.set_environment("ZZ_UPDATE_DIR", dir.path_join("android"))
 	Settings.auto_update = true
 
 
 func _restore_env() -> void:
-	for k in ["ZZ_UPDATE_EXE", "ZZ_UPDATE_PLATFORM", "ZZ_UPDATE_API"]:
+	for k in ["ZZ_UPDATE_EXE", "ZZ_UPDATE_PLATFORM", "ZZ_UPDATE_API", "ZZ_UPDATE_DIR"]:
 		OS.unset_environment(k)
 
 
@@ -94,8 +110,8 @@ func _release(file: String, tag: String, asset := {}) -> void:
 	var a := {"name": NEW_NAME, "size": new_bytes.size(), "digest": "sha256:" + new_hash,
 		"browser_download_url": "http://127.0.0.1:%d/redirect/new.exe" % PORT}
 	a.merge(asset, true)
-	var apk := {"name": "ZupermarketZimulator-android.apk", "size": 10,
-		"browser_download_url": "http://127.0.0.1:%d/files/game.apk" % PORT}
+	var apk := {"name": "ZupermarketZimulator-android.apk", "size": apk_bytes.size(), "digest": "sha256:" + apk_hash,
+		"browser_download_url": "http://127.0.0.1:%d/redirect/game.apk" % PORT}
 	var data := {"tag_name": tag, "body": "**Zupermarket Zimulator %s: robots in the store.**\n\nMore." % tag.trim_prefix("v"),
 		"assets": [apk, a]}
 	_write(dir.path_join("www/" + file), JSON.stringify(data).to_utf8_buffer())
@@ -208,12 +224,54 @@ func _no_update() -> void:
 func _android_and_elsewhere() -> void:
 	_reset_game()
 	OS.set_environment("ZZ_UPDATE_PLATFORM", "android")
+	var apk := dir.path_join("android/ZupermarketZimulator-99.0.0.apk")
 	_release("ok.json", "v99.0.0")
+	var seen: Array[int] = []
+	var track := func():
+		if seen.is_empty() or seen[-1] != Updater.state:
+			seen.append(Updater.state)
+	Updater.changed.connect(track)
+	opened.clear()
+	Updater._offered = ""
 	await _check()
-	check(Updater.state == Updater.State.AVAILABLE, "Android: a newer version is offered, not installed")
-	check(Updater.download_url.ends_with("/files/game.apk"), "with the APK's download link")
-	check(Updater.action_text() == "Download" and Updater.status_text().contains("saves stay"), "Download, and your saves stay")
-	check(FileAccess.get_file_as_string(exe) == "the old game", "nothing replaced on Android")
+	check(Updater.state == Updater.State.READY and seen.has(Updater.State.DOWNLOADING) and seen.has(Updater.State.VERIFYING),
+		"Android: a newer version downloads and gets checked by itself (state %s, %s)" % [Updater.State.keys()[Updater.state], Updater.error])
+	check(FileAccess.get_file_as_bytes(apk) == apk_bytes and not FileAccess.file_exists(apk + ".download"), "the APK is in the game's own update folder, whole")
+	check(opened == [apk], "on the main menu Android's installer opens with it (%s)" % [opened])
+	check(Updater.action_text() == "Install update" and Updater.status_text().contains("saves stay") and Updater.status_text().contains("allow installs"),
+		"Install update, your saves stay, and Android asks once to allow it")
+	check(FileAccess.get_file_as_string(exe) == "the old game", "nothing replaced (Android does the installing)")
+	Updater.do_action()
+	check(opened.size() == 2 and opened[1] == apk, "Install update opens the installer again (after a cancel)")
+	# Next start, before installing: no second download, and no installer popping up twice in a run.
+	seen.clear()
+	await _check()
+	check(Updater.state == Updater.State.READY and not seen.has(Updater.State.DOWNLOADING) and seen.has(Updater.State.VERIFYING),
+		"already downloaded: just checked again, not downloaded again")
+	check(opened.size() == 2, "and the installer doesn't open by itself twice in a run")
+	# A downloaded APK that's gone bad is fetched again.
+	var bad := apk_bytes.duplicate()
+	bad[100] = bad[100] ^ 0xff
+	_write(apk, bad)
+	seen.clear()
+	await _check()
+	check(Updater.state == Updater.State.READY and seen.has(Updater.State.DOWNLOADING) and FileAccess.get_file_as_bytes(apk) == apk_bytes,
+		"a damaged APK is downloaded again")
+	# Android can't open the installer: the browser instead.
+	Updater.open_file = func(_path: String) -> Error: return FAILED
+	Updater.do_action()
+	check(Updater.state == Updater.State.AVAILABLE and Updater.action_text() == "Download" and Updater.download_url.ends_with("/redirect/game.apk"),
+		"if the installer won't open, Download (in the browser) instead")
+	Updater.open_file = func(path: String) -> Error:
+		opened.append(path)
+		return OK
+	Updater.changed.disconnect(track)
+	# Once it's installed, the next start tidies up.
+	_write(dir.path_join("android/ZupermarketZimulator-0.0.1.apk"), PackedByteArray([1]))
+	_write(dir.path_join("android/ZupermarketZimulator-99.0.0.apk.download"), PackedByteArray([1]))
+	Updater.clean_up()
+	check(DirAccess.get_files_at(dir.path_join("android")) == PackedStringArray(["ZupermarketZimulator-99.0.0.apk"]),
+		"old APKs and half downloads are cleared away, a newer one waiting is kept (%s)" % [DirAccess.get_files_at(dir.path_join("android"))])
 	OS.set_environment("ZZ_UPDATE_PLATFORM", "windows")
 
 	OS.set_environment("ZZ_UPDATE_EXE", dir.path_join("nowhere/ZupermarketZimulator.exe"))
@@ -291,6 +349,16 @@ func _screens() -> void:
 	await _frames(1)
 	var said: bool = hud.message_box.get_children().any(func(l): return l is Label and l.text.contains("downloaded"))
 	check(said, "while playing, a message says the update is downloaded")
+	OS.set_environment("ZZ_UPDATE_PLATFORM", "android")
+	opened.clear()
+	Updater._offered = ""
+	Updater.offer_install()
+	check(opened.is_empty(), "Android: not in the middle of a game (installing closes it)")
+	Updater.changed.emit()
+	await _frames(1)
+	said = hud.message_box.get_children().any(func(l): return l is Label and l.text.contains("Save & Main Menu"))
+	check(said, "it says to go to the main menu to install it")
+	OS.set_environment("ZZ_UPDATE_PLATFORM", "windows")
 	main.queue_free()
 	await _frames(2)
 	Updater.state = Updater.State.OFF

@@ -452,7 +452,10 @@ func _on_options_closed() -> void:
 ## An update finished downloading while you play (see Updater).
 func _on_update_changed() -> void:
 	if Updater.state == Updater.State.READY:
-		show_message("Version %s is downloaded. It starts the next time you open the game." % Updater.latest)
+		if Updater.platform() == "android":
+			show_message("Version %s is downloaded. Pause and pick Save & Main Menu to install it." % Updater.latest)
+		else:
+			show_message("Version %s is downloaded. It starts the next time you open the game." % Updater.latest)
 
 
 ## Shows a message at the top of the screen, long enough to read it: up to

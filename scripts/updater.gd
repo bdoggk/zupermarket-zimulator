@@ -11,8 +11,16 @@ extends Node
 ##            main menu) is the new version, with the same saves. A file the
 ##            game downloads itself has no "came from the internet" mark, so
 ##            Windows doesn't show its security warning for it.
-##   Android  the main menu says a new version is out, and Download opens the
-##            APK in the browser (Android has to do the installing).
+##   Android  it downloads the new APK into the game's own folder (update/,
+##            in user://) and checks it the same way. Then, on the main menu,
+##            it opens Android's installer with it: tap Update and Android
+##            puts the new version over this one, saves and all. (The first
+##            time, Android asks you to allow installs from the game: the
+##            game has the REQUEST_INSTALL_PACKAGES permission for that.) Not
+##            in the middle of a game: there it waits for the main menu.
+##            Cancel, and the main menu's Install update button opens it
+##            again. If the installer can't be opened, Download opens the APK
+##            in the browser instead.
 ## Options > Automatic updates turns it off. It never runs in the Godot
 ## editor or in the Microsoft Store version (the Store does the updating
 ## there), and a failed check (no internet) stays quiet.
@@ -22,6 +30,7 @@ extends Node
 ##   ZZ_UPDATE_EXE       the file to replace instead of the running game
 ##   ZZ_UPDATE_PLATFORM  windows, android or linux (a Linux build of the game)
 ##   ZZ_UPDATE_CHECK=1   check even outside an exported game
+##   ZZ_UPDATE_DIR       where Android's download goes instead of user://update
 
 signal changed
 
@@ -35,6 +44,7 @@ const ASSETS := {
 	"linux": "ZupermarketZimulator-linux.x86_64",
 }
 const SELF_REPLACING := ["windows", "linux"]
+const APK := "ZupermarketZimulator-%s.apk"  # Android's download, in update_dir(): the version in its name
 const CHECK_DELAY := 2.0  # seconds after starting
 const CHECK_TIMEOUT := 20.0
 const RECHECK_SECONDS := 300.0  # after a failed check, the main menu tries again this often at most
@@ -59,6 +69,10 @@ var _hash := ""
 var _last_bytes := 0
 var _waiting_since := 0  # Time.get_ticks_msec() of the last news from the server (real time, whatever the game speed)
 var _last_check := -1.0e9
+var _verifying := ""  # the file being checked
+var _offered := ""  # the version Android's installer has been opened for by itself (once a run)
+## Opens a file with Android (the installer, for an APK). Tests swap it out.
+var open_file: Callable = func(path: String) -> Error: return OS.shell_open(path)
 
 
 func _ready() -> void:
@@ -119,6 +133,28 @@ func from_store() -> bool:
 ## This platform downloads and installs updates by itself.
 func replaces_itself() -> bool:
 	return platform() in SELF_REPLACING
+
+
+## This platform downloads updates by itself (Android: then opens the
+## installer with it).
+func downloads_itself() -> bool:
+	return replaces_itself() or platform() == "android"
+
+
+## Where Android keeps the downloaded APK: the game's own folder (only the
+## game can see it; the installer gets to read it through Godot's
+## FileProvider, which shares this folder).
+func update_dir() -> String:
+	var forced := OS.get_environment("ZZ_UPDATE_DIR")
+	return forced if forced != "" else OS.get_user_data_dir().path_join("update")
+
+
+## The file the download becomes: the new .exe in the game's place, or on
+## Android the APK for the installer.
+func target_path() -> String:
+	if platform() == "android":
+		return update_dir().path_join(APK % latest)
+	return exe_path()
 
 
 ## True if `a` is a newer version than `b` ("0.10" is newer than "0.9.9").
@@ -209,7 +245,7 @@ func _on_checked(result: int, code: int, _headers_in: PackedStringArray, body: P
 	_asset = find_asset(data.get("assets"), ASSETS[platform()])
 	download_url = str(_asset.get("browser_download_url", RELEASES_PAGE))
 	print("Updater: version %s is out" % latest)
-	if replaces_itself() and not _asset.is_empty() and can_replace():
+	if downloads_itself() and not _asset.is_empty() and can_replace():
 		download()
 	else:
 		_set_state(State.AVAILABLE)
@@ -217,8 +253,11 @@ func _on_checked(result: int, code: int, _headers_in: PackedStringArray, body: P
 
 # ---------------------------------------------------------------- downloading
 
-## The game's folder can be written to (not, say, Program Files).
+## The game's folder can be written to (not, say, Program Files). On
+## Android, the update folder.
 func can_replace() -> bool:
+	if platform() == "android":
+		return DirAccess.make_dir_recursive_absolute(update_dir()) == OK
 	var exe := exe_path()
 	if not FileAccess.file_exists(exe):
 		return false
@@ -235,10 +274,13 @@ func download() -> void:
 	if _asset.is_empty() or state in [State.DOWNLOADING, State.VERIFYING]:
 		return
 	error = ""
-	var part := exe_path() + PART
+	total = int(_asset.get("size", 0))
+	if platform() == "android" and total > 0 and file_size(target_path()) == total:  # (downloaded already: the install was cancelled)
+		_verify(target_path())
+		return
+	var part := target_path() + PART
 	DirAccess.remove_absolute(part)
 	downloaded = 0
-	total = int(_asset.get("size", 0))
 	_last_bytes = 0
 	_waiting_since = Time.get_ticks_msec()
 	_http = _new_request()
@@ -270,7 +312,7 @@ func _process(_delta: float) -> void:
 		elif waited >= STALL_SECONDS:
 			_http.cancel_request()
 			_drop_request()
-			DirAccess.remove_absolute(exe_path() + PART)
+			DirAccess.remove_absolute(target_path() + PART)
 			_fail("the download stopped")
 	elif state == State.VERIFYING and _hash_task >= 0 and WorkerThreadPool.is_task_completed(_hash_task):
 		WorkerThreadPool.wait_for_task_completion(_hash_task)
@@ -282,7 +324,7 @@ func _on_downloaded(result: int, code: int, _headers_in: PackedStringArray, _bod
 	if state != State.DOWNLOADING:
 		return
 	_drop_request()
-	var part := exe_path() + PART
+	var part := target_path() + PART
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		DirAccess.remove_absolute(part)
 		_fail("the download didn't finish (%s)" % (("HTTP %d" % code) if result == HTTPRequest.RESULT_SUCCESS else "error %d" % result))
@@ -292,19 +334,32 @@ func _on_downloaded(result: int, code: int, _headers_in: PackedStringArray, _bod
 		DirAccess.remove_absolute(part)
 		_fail("the download was cut short")
 		return
+	_verify(part)
+
+
+## Checks `path` against the SHA-256 GitHub lists for it (on a thread).
+func _verify(path: String) -> void:
 	_set_state(State.VERIFYING)
+	_verifying = path
 	_hash = ""
-	_hash_task = WorkerThreadPool.add_task(func(): _hash = sha256_of(part), false, "Checking the update")
+	_hash_task = WorkerThreadPool.add_task(func(): _hash = sha256_of(path), false, "Checking the update")
 
 
 func _after_hash() -> void:
-	var part := exe_path() + PART
+	var path := _verifying
 	var want := str(_asset.get("digest", "")).trim_prefix("sha256:").to_lower()
 	if want != "" and _hash != want:
-		DirAccess.remove_absolute(part)
+		DirAccess.remove_absolute(path)
+		if path == target_path():  # (an old download that's gone bad: get it again)
+			_set_state(State.IDLE)
+			download()
+			return
 		_fail("the download was damaged")
 		return
-	_install(part)
+	if path == target_path():
+		_ready_to_install()
+		return
+	_install(path)
 
 
 static func sha256_of(path: String) -> String:
@@ -326,8 +381,17 @@ static func file_size(path: String) -> int:
 # ---------------------------------------------------------------- installing
 
 ## Swaps the new file in: this .exe becomes <name>.old (a running program can
-## be renamed, just not overwritten) and the download takes its name.
+## be renamed, just not overwritten) and the download takes its name. On
+## Android the download just becomes the APK, ready for the installer.
 func _install(part: String) -> void:
+	if platform() == "android":
+		DirAccess.remove_absolute(target_path())
+		if DirAccess.rename_absolute(part, target_path()) != OK:
+			DirAccess.remove_absolute(part)
+			_fail("couldn't save the download")
+			return
+		_ready_to_install()
+		return
 	var exe := exe_path()
 	var old := exe + OLD
 	if FileAccess.file_exists(old) and DirAccess.remove_absolute(old) != OK:
@@ -360,16 +424,59 @@ func _rename(from: String, to: String) -> Error:
 
 
 ## Starts the new version and closes this one (from the main menu, so
-## there's nothing unsaved).
+## there's nothing unsaved). On Android: the installer.
 func restart() -> void:
 	if state != State.READY:
+		return
+	if platform() == "android":
+		install_apk()
 		return
 	OS.create_process(exe_path(), OS.get_cmdline_args())
 	get_tree().quit()
 
 
-## Deletes what an earlier update left behind (the old .exe, a half download).
+## Android: the APK's downloaded and checked. On the main menu the installer
+## opens straight away; in a game it waits for the main menu (offer_install).
+func _ready_to_install() -> void:
+	print("Updater: version %s is downloaded" % latest)
+	_set_state(State.READY)
+	offer_install()
+
+
+## Android: opens the installer by itself, once a run for each version, and
+## only on the main menu (installing closes the game).
+func offer_install() -> void:
+	if platform() != "android" or state != State.READY or _offered == latest or Game.in_game():
+		return
+	_offered = latest
+	install_apk()
+
+
+## Android: hands the downloaded APK to Android's installer.
+func install_apk() -> void:
+	if state != State.READY:
+		return
+	var path := target_path()
+	if not FileAccess.file_exists(path):
+		_set_state(State.IDLE)
+		check()
+		return
+	print("Updater: opening the installer for %s" % path)
+	if open_file.call(path) != OK:  # (then it's the browser: Download)
+		error = "Android couldn't open its installer"
+		print("Updater: %s" % error)
+		_set_state(State.AVAILABLE)
+
+
+## Deletes what an earlier update left behind (the old .exe, a half download;
+## on Android, APKs of versions you have now).
 func clean_up() -> void:
+	if platform() == "android":
+		for f in DirAccess.get_files_at(update_dir()):
+			var v := f.trim_prefix("ZupermarketZimulator-").trim_suffix(".apk")
+			if f.ends_with(PART) or not f.ends_with(".apk") or not is_newer(v, version()):
+				DirAccess.remove_absolute(update_dir().path_join(f))
+		return
 	var exe := exe_path()
 	if exe == "":
 		return
@@ -404,6 +511,8 @@ func status_text() -> String:
 		State.VERIFYING:
 			return "Checking version %s..." % latest
 		State.READY:
+			if platform() == "android":
+				return "Version %s is downloaded. Tap Install update, then Update: your saves stay. (The first time, Android asks you to allow installs from the game.)" % latest
 			return "Version %s is installed. It starts the next time you open the game." % latest
 		State.AVAILABLE:
 			if platform() == "android":
@@ -418,11 +527,11 @@ func status_text() -> String:
 func action_text() -> String:
 	match state:
 		State.READY:
-			return "Restart now"
+			return "Install update" if platform() == "android" else "Restart now"
 		State.AVAILABLE:
 			return "Download"
 		State.FAILED:
-			return "Try again" if replaces_itself() and can_replace() else "Download"
+			return "Try again" if downloads_itself() and can_replace() else "Download"
 	return ""
 
 
@@ -433,7 +542,7 @@ func do_action() -> void:
 		State.AVAILABLE:
 			open_download_page()
 		State.FAILED:
-			if replaces_itself() and not _asset.is_empty() and can_replace():
+			if downloads_itself() and not _asset.is_empty() and can_replace():
 				download()
 			else:
 				open_download_page()
