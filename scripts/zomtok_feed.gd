@@ -81,6 +81,9 @@ static func video(day: int, i: int) -> Dictionary:
 	var v := {"day": day, "index": i}
 	var hot := _hot_product()
 	var who := _creator(rng, i)
+	var post: Dictionary = Game.calendar.post
+	if i == 0 and int(post.get("day", 0)) == day:  # the celebrity's post about your store tops the feed (0.19)
+		who = celebrity_post(int(post.get("stars", 3)))
 	v.merge(who)
 	v.dance = DANCES[rng.randi() % DANCES.size()]
 	if not v.has("backdrop"):
@@ -97,6 +100,8 @@ static func video(day: int, i: int) -> Dictionary:
 	v.caption = _fill(v.caption, hot, v.backdrop).replace("{tags}", tag_text).strip_edges()
 	v.sound = "%s - %s" % [SOUND_NAMES[v.beat], "original sound" if rng.randf() < 0.4 else "ZomTok Hits"]
 	var reach := 10.0 ** rng.randf_range(2.2, 5.6)  # from a couple of hundred likes to a few hundred thousand
+	if v.get("celebrity", false):
+		reach = 10.0 ** rng.randf_range(6.0, 6.5)  # (millions)
 	v.likes = int(reach)
 	v.shares = int(reach * rng.randf_range(0.01, 0.06))
 	var pool: Array = COMMENTS.duplicate()
@@ -116,6 +121,25 @@ static func video(day: int, i: int) -> Dictionary:
 	v.comment_count = comments.size() + int(reach * rng.randf_range(0.005, 0.03))
 	v.erase("extra_comments")
 	return v
+
+
+## Mortimer Glam's post about your store (Calendar.post), after their visit.
+static func celebrity_post(stars: int) -> Dictionary:
+	var kind: Dictionary = Brand.EVENT_SHOPPERS.celebrity
+	var store := "Zupermarket"
+	var caption := ""
+	var comments: Array = []
+	if stars >= 4:
+		caption = "Just shopped at %s and WOW. Everything I wanted, no line. %d stars {tags}" % [store, stars]
+		comments = ["omw to %s rn" % store, "Mortimer never lies", "the brains there ARE fresh", "adding it to my haunt list", "5 stars from Mortimer?? iconic"]
+	elif stars <= 2:
+		caption = "%s? More like Zuper-NOT. %d star%s, never again {tags}" % [store, stars, "" if stars == 1 else "s"]
+		comments = ["yikes", "%s >>>" % Brand.RIVAL.name, "the line there is CRIMINAL", "they were out of everything when I went too", "ratio"]
+	else:
+		caption = "%s was... fine. %d stars {tags}" % [store, stars]
+		comments = ["fine is fine", "I like it there tbh", "Mortimer is hard to please"]
+	return {"handle": "@" + str(kind.handle), "looks": [kind.looks[0]], "group": "celeb", "backdrop": "store",
+		"caption": caption, "extra_comments": comments, "celebrity": true}
 
 
 ## Who posted video `i`, and who's dancing in it.

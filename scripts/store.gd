@@ -93,6 +93,7 @@ var customers: Array[Customer] = []
 ## Things you can walk up to and use that walk around themselves (the
 ## rival's spies, see RivalSpy). Their `cell` is wherever they are now.
 var movers: Array[Interactable] = []
+var events: DayEvents  # today's event: the bus, the inspector, a power cut... (0.19)
 var pending_deliveries: Array[Dictionary] = []
 var spawn_timer := FIRST_CUSTOMER_DELAY
 var reachable := {}  # every cell you can walk to from the door
@@ -133,6 +134,10 @@ func _ready() -> void:
 	_sync_staff()
 	ray_tracer = RayTracer.new(self)
 	add_child(ray_tracer)
+	events = DayEvents.new()
+	add_child(events)
+	add_child(WeatherFx.new())
+	Game.day_started.connect(func(_d): events.morning())
 	Game.store_expanded.connect(expand)
 	Game.box_ordered.connect(_on_box_ordered)
 	Game.store_opened.connect(_on_store_opened)
@@ -1034,7 +1039,8 @@ func traffic_multiplier() -> float:
 		if Game.has_upgrade(id):
 			ads *= Game.BILLBOARD_TRAFFIC
 	var stars := Game.rating.traffic_factor() * (1.0 + Game.trophy_decor_bonus("traffic"))  # (0.18)
-	return appeal * mess_multiplier() * (1.0 + LEVEL_TRAFFIC * (mini(Game.level, Game.TRAFFIC_LEVELS) - 1)) * (1.0 + variety_bonus()) * charm * ads * stars
+	var week := Game.calendar.traffic_factor()  # the day of the week, the weather, a celebrity, the inspector (0.19)
+	return appeal * mess_multiplier() * (1.0 + LEVEL_TRAFFIC * (mini(Game.level, Game.TRAFFIC_LEVELS) - 1)) * (1.0 + variety_bonus()) * charm * ads * stars * week
 
 
 ## How many shoppers the blood still lets in (1 = all of them).
@@ -1710,14 +1716,15 @@ func _new_shopper() -> void:
 		spawn_customer(kind, list)
 
 
-## Sends in a shopper. Without a kind, a regular one with a random list.
-func spawn_customer(kind := {}, list: Array[Dictionary] = []) -> Customer:
+## Sends in a shopper. Without a kind, a regular one with a random list;
+## `at`: where they turn up (else the edge of town).
+func spawn_customer(kind := {}, list: Array[Dictionary] = [], at := NO_CELL) -> Customer:
 	if kind.is_empty():
 		kind = Brand.SHOPPERS.values()[0]
 	if list.is_empty():
 		list = _make_shopping_list(kind)
 	var c: Customer = CUSTOMER_SCENE.instantiate()
-	c.setup(self, _arrival_cell(kind), list, kind)
+	c.setup(self, at if at != NO_CELL else _arrival_cell(kind), list, kind)
 	world.add_child(c)
 	customers.append(c)
 	return c
@@ -1777,7 +1784,8 @@ func _weighted_pick(ids: Array, likes: Array = []) -> String:
 	var weights: Array[float] = []
 	var total := 0.0
 	for id in ids:
-		weights.append(Game.market.demand[id] * (Game.FAVORITE_WANT if likes.has(id) else 1.0))
+		var heat := Game.calendar.weather_effect("cold") if Game.is_cold(id) else 1.0  # (a heat wave, 0.19)
+		weights.append(Game.market.demand[id] * (Game.FAVORITE_WANT if likes.has(id) else 1.0) * heat)
 		total += weights[-1]
 	var roll := randf() * total
 	for i in ids.size():

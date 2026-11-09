@@ -16,18 +16,19 @@ extends PanelContainer
 ##                   and send your gang to raid Bone Mart
 ##   Goals           today's goals, the store's star rating (with what
 ##                   shoppers wrote) and trophies (0.18)
+##   Calendar        the week ahead: the weather and what's coming (0.19)
 ##   Snake           Zombie Snake (PcSnake), for slow afternoons
 ##   ZomTok          videos of the town's characters dancing (ZomTokApp)
 ## Snake and ZomTok fill the window themselves (no list, news or footer),
 ## and take the arrows, the d-pad and A while they're open.
 ## The window's X goes back to the desktop; "Close PC" (or Esc) closes it.
 
-enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES, LOANS, TURF, GOALS, SNAKE, ZOMTOK }
+enum Tab { STOCK, PRODUCTS, STAFF, UPGRADES, LOANS, TURF, GOALS, CALENDAR, SNAKE, ZOMTOK }
 
-const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades", "Loans", "Turf", "Goals", "Snake", "ZomTok"]
-const APP_ICONS := ["stock", "products", "staff", "upgrades", "loans", "turf", "goals", "snake", "zomtok"]
+const TAB_NAMES := ["Stock & Prices", "Products", "Staff", "Upgrades", "Loans", "Turf", "Goals", "Calendar", "Snake", "ZomTok"]
+const APP_ICONS := ["stock", "products", "staff", "upgrades", "loans", "turf", "goals", "calendar", "snake", "zomtok"]
 const GOALS_PAGES := ["Today", "Rating", "Trophies"]
-const ICON_ONLY := [Tab.SNAKE, Tab.ZOMTOK]  # (just the icon on the taskbar, to save room)
+const ICON_ONLY := [Tab.CALENDAR, Tab.SNAKE, Tab.ZOMTOK]  # (just the icon on the taskbar, to save room)
 const TASKBAR_HEIGHT := 50.0
 const WALLPAPER := preload("res://assets/sprites/pc_wallpaper.png")
 const GIRL := preload("res://assets/sprites/pc_girl.png")
@@ -533,8 +534,12 @@ func is_app_open() -> bool:
 
 
 func _refresh_note() -> void:
-	var lines: Array[String] = ["DAY %d" % Game.day, ""]
+	var lines: Array[String] = [Calendar.day_name(Game.day).to_upper(), ""]
 	lines.append(Game.market.news if Game.market.news != "" else "No big news today.")
+	var today := Game.calendar.morning_text()  # the weather and today's event (0.19)
+	if today != "":
+		lines.append("")
+		lines.append(today)
 	var wanted: Dictionary = Game.stats.get("wanted", {})
 	if not wanted.is_empty():
 		var top := wanted.keys()
@@ -645,6 +650,8 @@ func _rebuild() -> void:
 			_build_turf()
 		Tab.GOALS:
 			_build_goals()
+		Tab.CALENDAR:
+			_build_calendar()
 
 
 func _grid(columns: int) -> GridContainer:
@@ -826,9 +833,9 @@ func _input(event: InputEvent) -> void:
 		step = -1 if event.button_index == JOY_BUTTON_LEFT_SHOULDER else 1
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_TAB and not get_viewport().gui_get_focus_owner() is LineEdit:
 		step = -1 if event.shift_pressed else 1
-	elif event is InputEventKey and event.pressed and not event.echo and event.keycode >= KEY_1 and event.keycode < KEY_1 + TAB_NAMES.size():
+	elif event is InputEventKey and event.pressed and not event.echo and _number_key_app(event.keycode) >= 0:
 		if not get_viewport().gui_get_focus_owner() is LineEdit:  # (typing a price)
-			_open_app(event.keycode - KEY_1)
+			_open_app(_number_key_app(event.keycode))
 			return
 	if step != 0:
 		var t: int = tab + step if window.visible else (0 if step > 0 else TAB_NAMES.size() - 1)
@@ -1306,6 +1313,54 @@ func _build_loan_owed() -> void:
 
 ## The gang war (GangWar): the land east of Bone Mart, your gang, your
 ## weapons, and raiding Bone Mart. Big Rotto runs the show.
+## The app number key `code` opens (1 to 9, then 0 for the tenth), or -1.
+func _number_key_app(code: Key) -> int:
+	var i := -1
+	if code >= KEY_1 and code <= KEY_9:
+		i = code - KEY_1
+	elif code == KEY_0:
+		i = 9
+	return i if i < TAB_NAMES.size() else -1
+
+
+# ---------------------------------------------------------------- calendar app (0.19)
+
+func _build_calendar() -> void:
+	var cal := Game.calendar
+	footer_label.text = "The weather's known a week ahead, events %d days ahead (a ? is still to be decided). The weekend brings the most shoppers, Moanday the fewest." % Calendar.FIRM
+	var head := UI.label("THIS WEEK: %s" % Calendar.day_name(Game.day).to_upper(), UI.GOOD)
+	head.add_theme_font_size_override("font_size", 22)
+	body.add_child(head)
+	if cal.outcome != "" and cal.started == Game.day:
+		body.add_child(_info_row("Today so far: " + cal.outcome, null, UI.WARN))
+	for d in range(Game.day, Game.day + Calendar.AHEAD):
+		var w := cal.weather(d)
+		var wi: Dictionary = Brand.CALENDAR.weather[w]
+		var traffic := roundi((Calendar.weekday_traffic(d) * float(Calendar.WEATHER[w].traffic) * float(cal.buzz.get(d, 1.0)) - 1.0) * 100.0)
+		var parts: Array[String] = ["%s %d%s" % [Calendar.weekday(d), d, " (today)" if d == Game.day else (" (tomorrow)" if d == Game.day + 1 else "")]]
+		parts.append(str(wi.name))
+		var e := cal.event(d)
+		if not Calendar.is_firm(d):
+			parts.append("?")
+		elif e != "":
+			var ev: Dictionary = Brand.CALENDAR.events[e]
+			parts.append(str(ev.name) + ("" if e == "moon" else " around %s" % Game.clock_text_at(cal.event_minute(d))))
+		if traffic != 0:
+			parts.append("%+d%% shoppers" % traffic)
+		var color := UI.GOOD if d == Game.day else Color.WHITE
+		body.add_child(_info_row("   ".join(parts), wi.icon, color))
+	body.add_child(HSeparator.new())
+	body.add_child(UI.label("WHAT THEY DO", UI.WARN))
+	for e: String in Brand.CALENDAR.events:
+		var ev: Dictionary = Brand.CALENDAR.events[e]
+		body.add_child(_info_row("%s: %s" % [ev.name, ev.does], ev.icon, UI.INFO))
+	for w: String in Brand.CALENDAR.weather:
+		if w != "clear":
+			var wi: Dictionary = Brand.CALENDAR.weather[w]
+			body.add_child(_info_row("%s: %s" % [wi.name, wi.does], wi.icon, UI.INFO))
+	_show_top.call_deferred()
+
+
 # ---------------------------------------------------------------- goals app (0.18)
 
 static var _star_strips := {}  # whole stars -> a strip of 5 (Goals > Rating's reviews)

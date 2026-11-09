@@ -44,6 +44,7 @@ var baseline := -1
 var ordered := 0
 var _taken_seen := 0  # Customer.items_taken last time
 var _smashed_seen := 0  # Turf.items_smashed last time
+var _stolen_seen := 0  # GhostThief.stolen last time
 var war_cuts := 0  # the gang war's cutscene played
 var _last_nonbasket := -1
 
@@ -343,9 +344,11 @@ func _act() -> void:
 		"mop": 5.0, "computer": 3.0, "build": 1.5, "shop": 1.5, "rival": 0.5, "pause": 0.5,
 		"saveload": 0.5 if saveload else 0.0, "spawn": 2.0, "zoom": 1.0, "staff": 2.0, "teleport": 3.0,
 		"settings": 0.4, "wait": 6.0, "click": 4.0, "key": 4.0, "wheel": 0.5, "spy": 1.0,
-		"finger": 6.0 if touch else 0.0, "loan": 0.8, "view": 0.6, "war": 1.5,
+		"finger": 6.0 if touch else 0.0, "loan": 0.8, "view": 0.6, "war": 1.5, "event": 1.0,
 	})
 	match what:
+		"event":
+			_event()
 		"war":
 			await _war()
 		"view":
@@ -890,6 +893,36 @@ func _shop() -> void:
 
 
 ## The rival sends a spy over (if it's open), or you go throw one out.
+## Today's weather changes, or an event starts right now (0.19), or you go
+## and deal with one (fix the fuse box, catch a ghost).
+func _event() -> void:
+	var cal := Game.calendar
+	var r := rng.randf()
+	if r < 0.25:
+		var w: String = Calendar.WEATHER.keys()[rng.randi() % Calendar.WEATHER.size()]
+		_note("event: the weather turns %s" % w)
+		cal.day_info(Game.day).weather = w
+	elif r < 0.45 and (cal.power_out or store.movers.any(func(m): return m is GhostThief and is_instance_valid(m))):
+		var target: Node2D = null
+		if cal.power_out:
+			for o in store.objects.values():
+				if o is Computer:
+					target = o
+		else:
+			var ghosts := store.movers.filter(func(m): return m is GhostThief and is_instance_valid(m))
+			target = ghosts[rng.randi() % ghosts.size()]
+		var c := store.stand_cell_for(Iso.world_to_cell(target.position), p.current_cell())
+		_note("event: go deal with the %s (next to it %s)" % ["fuse box" if cal.power_out else "ghost", c])
+		if c != Store.NO_CELL:
+			p.cancel_action()
+			p.path.clear()
+			p.position = Iso.cell_to_world(c)
+	elif Game.is_open:
+		var e: String = ["bus", "inspector", "outage", "ghost", "celeb"][rng.randi() % 5]
+		_note("event: %s starts" % e)
+		store.events.start(e)
+
+
 func _spy() -> void:
 	var spies := store.movers.filter(func(m): return m is RivalSpy and is_instance_valid(m) and m.can_be_caught())
 	if not spies.is_empty() and rng.randf() < 0.6:
@@ -1282,7 +1315,10 @@ func _check_people(dt: float, paused: bool) -> void:
 ## Stock only appears when it's ordered and only leaves the shelves, boxes,
 ## racks and hands when a shopper takes it (into their basket).
 func _check_stock() -> void:
-	var parts := {"shelves": 0, "boxes": 0, "racks": 0, "you": p.carry_count, "staff": 0, "on the way": 0}
+	var parts := {"shelves": 0, "boxes": 0, "racks": 0, "you": p.carry_count, "staff": 0, "on the way": 0, "ghosts": 0}
+	for m in store.movers:
+		if m is GhostThief and is_instance_valid(m):
+			parts.ghosts += (m as GhostThief).loot_count()
 	for s in store.shelves:
 		parts.shelves += s.stock
 	for b: StockBox in store.boxes.values():
@@ -1297,9 +1333,10 @@ func _check_stock() -> void:
 	var total := 0
 	for k in parts:
 		total += int(parts[k])
-	var taken := Customer.items_taken - _taken_seen + Turf.items_smashed - _smashed_seen
+	var taken := Customer.items_taken - _taken_seen + Turf.items_smashed - _smashed_seen + GhostThief.stolen - _stolen_seen
 	_taken_seen = Customer.items_taken
 	_smashed_seen = Turf.items_smashed
+	_stolen_seen = GhostThief.stolen
 	if baseline < 0:
 		baseline = total
 		ordered = 0

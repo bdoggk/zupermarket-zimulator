@@ -36,6 +36,7 @@ signal loan_defaulted  # the loan's last night came and it isn't paid: the lende
 signal tutorial_changed
 signal goal_done(goal: Dictionary)  # one of today's goals is done (its reward's paid)
 signal trophy_earned(trophy: Dictionary)
+signal event_started(event: String)  # today's event (Calendar, DayEvents) just started
 
 const OPEN_MINUTE := 8 * 60
 const CLOSE_MINUTE := 20 * 60
@@ -170,6 +171,7 @@ var trophies := Trophies.new()
 ## Game.stats go on top (Trophies.value). customers, revenue, happy,
 ## you_cleaned, knockouts, zt_likes, spies, raids, clean_closes, loans_repaid.
 var career := {}
+var calendar := Calendar.new()  # the week: weekdays, weather, the day's event (0.19)
 var _goal_tick := 0.0
 var rival_factor := {}  # product id -> the rival's price today / market price
 var rival_deal := ""  # the rival's deal of the day
@@ -241,6 +243,7 @@ func reset() -> void:
 	rating = StoreRating.new()
 	trophies = Trophies.new()
 	career = {}
+	calendar = Calendar.new()
 	_connect_goals()
 	rival_seen = {}
 	rival_spies = []
@@ -257,6 +260,7 @@ func reset() -> void:
 		prices[id] = PRODUCTS[id].base_price
 		if PRODUCTS[id].license <= 0.0:
 			licensed[id] = true
+	calendar.fill_week()
 	roll_rival_prices()
 	_reset_stats()
 
@@ -457,7 +461,7 @@ func pick_shopper_kind() -> Dictionary:
 	var weights: Array[float] = []
 	for id in Brand.SHOPPERS:
 		var k: Dictionary = Brand.SHOPPERS[id]
-		if level >= int(k.level):
+		if level >= int(k.level) or (id == "werewolf" and calendar.moon_out() and level >= Calendar.MOON_WEREWOLF_LEVEL):
 			pool.append(k)
 			weights.append(shopper_weight(k))
 			total += weights[-1]
@@ -476,6 +480,10 @@ func shopper_weight(k: Dictionary) -> float:
 	var w := float(k.weight)
 	if k.has("night"):
 		w *= float(k.night) if minute >= NIGHT_MINUTE else NIGHT_KIND_BY_DAY
+		if calendar.moon_out():
+			w *= Calendar.MOON_NIGHT_PULL  # (a full moon, 0.19)
+	if k == Brand.SHOPPERS.get("ghost"):
+		w *= calendar.weather_effect("ghosts")  # (fog)
 	w *= 1.0 + DECOR_PULL * mini(decorations_for(k), DECOR_PULL_MAX)  # cauldrons for witches...
 	return w * (1.0 + FAVORITE_PULL * favorites_on_shelves(k))
 
@@ -636,6 +644,7 @@ func roll_rival_spies() -> void:
 		return
 	var per_day: Array = Brand.RIVAL.get("spies_per_day", [1, 1])
 	var count: int = per_day[1] if level >= 3 else per_day[0]
+	count = roundi(count * calendar.weather_effect("spies"))  # (fog: they sneak in more, 0.19)
 	var span := (18 * 60 + 30) - (9 * 60)  # between 9 AM and 6:30 PM...
 	for i in count:  # ...spread out over the day
 		var lo := 9 * 60 + span * i / count
@@ -1459,6 +1468,7 @@ func to_dict() -> Dictionary:
 		"rival": {"factor": rival_factor, "deal": rival_deal, "seen": rival_seen, "spies": rival_spies},
 		"war": war.to_dict(),
 		"goals": goals.to_dict(), "rating": rating.to_dict(), "trophies": trophies.to_dict(), "career": career,
+		"calendar": calendar.to_dict(),
 		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden, "effects": effects, "loan": loan,
 		"market": {"factor": market.factor, "previous": market.previous, "demand": market.demand, "news": market.news},
 	}
@@ -1540,6 +1550,8 @@ func from_dict(d: Dictionary) -> void:
 	if cr is Dictionary:
 		for key: String in cr:
 			career[key] = maxf(0.0, float(cr[key]))  # (all counts and money: numbers)
+	calendar.from_dict(d.get("calendar", {}))
+	calendar.fill_week()
 	goals.roll()  # (a save from before goals, or from yesterday)
 	if bool(r.get("owned", false)):  # from when you could buy Bone Mart: Mr. Bones buys it back
 		money += float(Brand.RIVAL.old_buyout)
@@ -1649,6 +1661,7 @@ func end_day() -> void:
 	summary.profit = profit_today()
 	summary.goals = how
 	summary.rating = rating.stars()
+	summary.event = calendar.outcome
 	goals.remember(int(stats.customers), float(stats.revenue), float(summary.profit))
 	_end_of_day_career()
 	trophies.check()
@@ -1662,6 +1675,9 @@ func _end_of_day_career() -> void:
 		career[key] = float(career.get(key, 0.0)) + float(stats.get(key, 0.0))
 	career.spies = float(career.get("spies", 0.0)) + float(stats.get("spies_caught", 0))
 	career.raids = float(career.get("raids", 0.0)) + float(stats.get("raids_won", 0))
+	career.ghosts = float(career.get("ghosts", 0.0)) + float(stats.get("ghosts_caught", 0))  # (0.19)
+	for key in ["inspections_a", "viral", "tourists", "fuses_fixed"]:
+		career[key] = float(career.get(key, 0.0)) + float(stats.get(key, 0))
 	if in_game() and store.spills.is_empty() and int(stats.customers) >= 30:
 		career.clean_closes = float(career.get("clean_closes", 0.0)) + 1.0
 
@@ -1691,8 +1707,10 @@ func start_next_day() -> void:
 	roll_rival_prices()
 	roll_rival_spies()
 	goals.roll()
+	calendar.morning()
 	day_started.emit(day)
-	message.emit(Brand.SAY.morning % day)
+	var today := calendar.morning_text()
+	message.emit((Brand.SAY.morning % day).replace("Day %d." % day, Calendar.day_name(day) + ".") + (" " + today if today != "" else ""))
 	_loan_morning()
 	update_market(true)
 	war.morning()
@@ -1712,8 +1730,13 @@ func open_store() -> void:
 
 
 func clock_text() -> String:
-	var h := int(minute / 60.0)
-	var m := int(minute) % 60
+	return clock_text_at(minute)
+
+
+## "2:15 PM" for a time of day in minutes after midnight.
+static func clock_text_at(at: float) -> String:
+	var h := int(at / 60.0)
+	var m := int(at) % 60
 	var suffix := "AM" if h < 12 else "PM"
 	var h12 := h % 12
 	if h12 == 0:

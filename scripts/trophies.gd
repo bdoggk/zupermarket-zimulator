@@ -48,6 +48,10 @@ static func value(stat: String) -> float:
 			return float(c.get("zt_likes", 0)) + float(st.get("zt_likes", 0))
 		"clean_closes", "loans_repaid":
 			return float(c.get(stat, 0))
+		"inspections_a", "viral":
+			return float(c.get(stat, 0)) + float(st.get(stat, 0))
+		"ghosts":
+			return float(c.get("ghosts", 0)) + float(st.get("ghosts_caught", 0))
 		"level":
 			return float(Game.level)
 		"day":

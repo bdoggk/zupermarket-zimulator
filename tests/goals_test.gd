@@ -238,7 +238,7 @@ func _trophies() -> void:
 	for tr: Dictionary in Brand.TROPHIES:
 		ids[tr.id] = true
 	check(ids.size() == Brand.TROPHIES.size() and Brand.TROPHIES.size() >= 30, "%d trophies, all different" % Brand.TROPHIES.size())
-	var unknown := Brand.TROPHIES.filter(func(tr): return Trophies.value(tr.stat) == 0.0 and not tr.stat in ["customers", "revenue", "happy", "you_cleaned", "knockouts", "zt_likes", "spies", "raids", "zomtok", "clean_closes", "loans_repaid", "goals", "streak", "registers", "staff", "staff_level", "lots", "hearse", "vampires_today", "plots", "snake", "licensed"])
+	var unknown := Brand.TROPHIES.filter(func(tr): return Trophies.value(tr.stat) == 0.0 and not tr.stat in ["customers", "revenue", "happy", "you_cleaned", "knockouts", "zt_likes", "spies", "raids", "zomtok", "clean_closes", "loans_repaid", "goals", "streak", "registers", "staff", "staff_level", "lots", "hearse", "vampires_today", "plots", "snake", "licensed", "inspections_a", "ghosts", "viral"])
 	check(unknown.is_empty(), "every trophy counts something real (%s)" % [unknown.map(func(x): return x.id)])
 	check(int(Trophies.find("catalog").target) == Game.PRODUCTS.size(), "Full Catalog means every product (%d)" % Game.PRODUCTS.size())
 	var decor := Game.FURNITURE.keys().filter(func(id): return Game.FURNITURE[id].has("trophy"))

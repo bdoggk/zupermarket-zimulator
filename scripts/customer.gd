@@ -128,7 +128,7 @@ func _ready() -> void:
 	sprite.show_behind_parent = true  # so the basket (drawn in _draw) is in their hand, in front
 	_top = sprite.offset.y
 	modulate.a = 0.0
-	leaky = Brand.SPILLS and randf() < float(kind.get("leaky", 0.35))
+	leaky = Brand.SPILLS and randf() < minf(0.95, float(kind.get("leaky", 0.35)) * Game.calendar.weather_effect("leaky"))  # (rain: more, 0.19)
 	drip_timer = randf_range(DRIP_MIN * 0.3, DRIP_MAX)
 	if kind.get("sound") is AudioStream:
 		voice = AudioStreamPlayer2D.new()
@@ -643,6 +643,8 @@ func rate_visit(how := "") -> float:
 	score = clampf(score, 1.0, 5.0)
 	var product := _missed_id if reason in ["missing", "nothing"] else _pricey_id if reason == "pricey" else ""
 	Game.rating.record(score, reason, kind, product)
+	if kind == Brand.EVENT_SHOPPERS.celebrity and store.events:  # (0.19: it goes on ZomTok)
+		store.events.celebrity_rated(score)
 	if score >= StoreRating.HAPPY:
 		emote("heart", 2.5)
 	elif score <= StoreRating.UNHAPPY:

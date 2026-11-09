@@ -87,7 +87,9 @@ var _messages: Array = []  # on screen, oldest first: [label, seconds left, seco
 var _message_queue: Array[String] = []  # waiting for room
 var _message_width := MESSAGE_WIDTH
 var effects_box: VBoxContainer  # brews working right now, under the corner buttons
-var star_bar: StarBar  # the store's rating, on the top bar (0.18)
+var star_bar: StarBar
+var weather_icon: TextureRect  # today's weather (0.19)
+var event_icon: TextureRect  # today's event, if there is one  # the store's rating, on the top bar (0.18)
 var goals_panel: GoalsPanel  # today's goals, top left
 var trophy_toast: TrophyToast  # "TROPHY: ..." across the top
 var _effect_rows := {}  # brew id -> its Label in effects_box
@@ -173,6 +175,10 @@ func _ready() -> void:
 	Game.prompt_changed.connect(_on_prompt_changed)
 	Game.computer_requested.connect(open_computer)
 	Game.day_ended.connect(_on_day_ended)
+	if Game.in_game() and Game.store.events:  # (0.19: a power cut shuts the computer down)
+		Game.store.events.power_changed.connect(func(on: bool):
+			if not on and computer.visible:
+				computer.close())
 	Game.loan_defaulted.connect(_on_loan_defaulted)
 	Game.leveled_up.connect(_on_leveled_up)
 	Game.effects_changed.connect(_rebuild_effects)
@@ -219,7 +225,8 @@ func _process(delta: float) -> void:
 		mess_label.text = "Blood: %d (nobody minds yet: mop it before it dries)" % mess
 	else:
 		mess_label.text = "Blood: %d (-%d%% shoppers)" % [mess, roundi((1.0 - Game.store.mess_multiplier()) * 100.0)]
-	clock_label.text = "Day %d   %s   %s" % [Game.day, Game.clock_text(), "OPEN" if Game.is_open else "CLOSED"]
+	clock_label.text = "%s   %s   %s" % [Calendar.day_name(Game.day), Game.clock_text(), "OPEN" if Game.is_open else "CLOSED"]
+	_update_week_icons()
 	scanner_icon.visible = Game.has_upgrade("scanner")
 	loan_label.visible = Game.has_loan()
 	if loan_label.visible:
@@ -504,6 +511,9 @@ func _tick_messages(delta: float) -> void:
 
 
 func open_computer() -> void:
+	if Game.calendar.power_out:  # (0.19: no power, no computer)
+		show_message("The computer's dead: the power's out. Fix the fuse box next to it.")
+		return
 	rival_panel.close()
 	shop_panel.close()
 	rack_panel.close()
@@ -554,6 +564,15 @@ func _build_status() -> void:
 	row.add_child(star_bar)
 	clock_label = UI.label()
 	row.add_child(clock_label)
+	var icon_px := Vector2(22, 22) if is_touch else Vector2(18, 18)
+	weather_icon = UI.icon(Brand.CALENDAR.weather.clear.icon, icon_px)  # today's weather and event (0.19)
+	weather_icon.mouse_filter = Control.MOUSE_FILTER_PASS
+	weather_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(weather_icon)
+	event_icon = UI.icon(Brand.CALENDAR.weather.clear.icon, icon_px)
+	event_icon.mouse_filter = Control.MOUSE_FILTER_PASS
+	event_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(event_icon)
 	scanner_icon = UI.icon(Game.UPGRADES.scanner.icon, Vector2(24, 24))
 	scanner_icon.visible = false
 	row.add_child(scanner_icon)
@@ -1014,6 +1033,7 @@ func _show_summary(s: Dictionary) -> void:
 	summary_notes.text = "\n".join([
 		_goals_line(s.get("goals", {})),
 		_rating_line(s),
+		str(s.get("event", "")) if str(s.get("event", "")) != "" else "--",
 		_wanted_line(s.get("wanted", {})),
 		_spies_line(s),
 		_war_line(s),
@@ -1055,6 +1075,26 @@ static func _rating_line(s: Dictionary) -> String:
 	if not bad.is_empty():
 		text += ". Unhappy about: " + ", ".join(bad)
 	return text
+
+
+## The weather and event icons by the clock, and what they say when you
+## point at them.
+func _update_week_icons() -> void:
+	var cal := Game.calendar
+	var w: Dictionary = Brand.CALENDAR.weather[cal.weather()]
+	weather_icon.texture = w.icon
+	weather_icon.tooltip_text = "%s today: %s." % [w.name, str(w.does).to_lower()] if cal.weather() != "clear" else "Clear skies today."
+	var e := cal.event()
+	event_icon.visible = e != ""
+	if e != "":
+		var info: Dictionary = Brand.CALENDAR.events[e]
+		event_icon.texture = info.icon
+		var when := " (around %s)" % Game.clock_text_at(cal.event_minute()) if e != "moon" and cal.started != Game.day else ""
+		event_icon.tooltip_text = "%s today%s: %s." % [info.name, when, str(info.does).to_lower()]
+	if cal.power_out:
+		event_icon.modulate = Color(1, 1, 1, 0.5 + 0.5 * absf(sin(Time.get_ticks_msec() / 250.0)))  # blinking: fix it!
+	else:
+		event_icon.modulate = Color.WHITE
 
 
 ## What shoppers' reasons mean, in a few words (StoreRating, Brand.REVIEWS).

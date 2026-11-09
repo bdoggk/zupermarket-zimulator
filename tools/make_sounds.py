@@ -30,6 +30,13 @@ you like: keep the same file names.
 
   goal_done.wav      a daily goal done: a bright little three-note chime
   trophy.wav         a trophy earned: a short fanfare
+
+  bus_horn.wav       the tour bus pulling up: two honks
+  power_down.wav     a power cut: a whine winding down and a clunk
+  power_up.wav       the fuse box fixed: a clunk and the hum coming back
+  ghost_boo.wav      a ghost shoplifter caught: a wobbly "wooo"
+  camera.wav         the celebrity walking in: camera shutters
+  howl.wav           the full moon: a werewolf's howl
 """
 import wave
 from pathlib import Path
@@ -379,6 +386,72 @@ def trophy_fanfare():
     return np.concatenate(out)
 
 
+def bus_horn():
+    out = []
+    for sec in (0.18, 0.06, 0.32):
+        tt = t(sec)
+        if sec == 0.06:
+            out.append(np.zeros(len(tt)))
+            continue
+        tone = sum(np.sign(np.sin(2 * np.pi * f * tt)) * 0.5 + np.sin(2 * np.pi * f * tt) for f in (330.0, 415.3))
+        out.append(lowpass(tone, 1800) * envelope(len(tt), 0.01, 0.04))
+    return np.concatenate(out)
+
+
+def power_down():
+    tt = t(0.9)
+    freq = 420 * np.exp(-tt * 3.2) + 40
+    whine = np.sin(2 * np.pi * np.cumsum(freq) / RATE) * np.exp(-tt * 1.5)
+    clunk = np.zeros(len(tt))
+    at = int(RATE * 0.05)
+    n = int(RATE * 0.12)
+    clunk[at:at + n] = lowpass(rng.normal(0, 1, n), 600) * np.exp(-np.arange(n) / RATE * 40) * 2.0
+    return whine * 0.6 + clunk
+
+
+def power_up():
+    tt = t(0.8)
+    freq = 60 + 360 * (1 - np.exp(-tt * 5))
+    hum = np.sin(2 * np.pi * np.cumsum(freq) / RATE) * envelope(len(tt), 0.15, 0.2) * 0.5
+    clunk = np.zeros(len(tt))
+    n = int(RATE * 0.1)
+    clunk[:n] = lowpass(rng.normal(0, 1, n), 800) * np.exp(-np.arange(n) / RATE * 45) * 2.0
+    return hum + clunk
+
+
+def ghost_boo():
+    return _theremin([392.0, 523.25, 466.16, 349.23], 1.1)
+
+
+def camera():
+    out = np.zeros(int(RATE * 0.7))
+    for at in (0.0, 0.18, 0.26, 0.45):
+        n = int(RATE * 0.05)
+        i = int(RATE * at)
+        click = lowpass(rng.normal(0, 1, n), 5000) * np.exp(-np.arange(n) / RATE * 90)
+        out[i:i + n] += click
+    return out
+
+
+def howl():
+    tt = t(1.8)
+    rise = np.interp(tt, [0, 0.35, 1.3, 1.8], [300, 620, 560, 380])
+    vib = 1 + 0.015 * np.sin(2 * np.pi * 5 * tt)
+    phase = np.cumsum(rise * vib) / RATE
+    voice = np.sin(2 * np.pi * phase) + 0.35 * np.sin(4 * np.pi * phase) + 0.1 * np.sin(6 * np.pi * phase)
+    breath = lowpass(rng.normal(0, 0.15, len(tt)), 2000)
+    return (voice + breath) * envelope(len(tt), 0.25, 0.5)
+
+
+def events_sounds():
+    save("bus_horn", bus_horn(), 0.6)
+    save("power_down", power_down(), 0.7)
+    save("power_up", power_up(), 0.6)
+    save("ghost_boo", ghost_boo(), 0.55)
+    save("camera", camera(), 0.5)
+    save("howl", howl(), 0.55)
+
+
 def main():
     save("vlad_sting", sting(), 0.85)
     save("vlad_bats", bats(), 0.7)
@@ -407,6 +480,7 @@ def pc_apps_sounds():
 def goals_sounds():
     save("goal_done", goal_done(), 0.5)
     save("trophy", trophy_fanfare(), 0.55)
+    events_sounds()
 
 
 if __name__ == "__main__":

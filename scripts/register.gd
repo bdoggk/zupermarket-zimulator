@@ -132,8 +132,11 @@ func leave_line(c: Customer) -> void:
 			line[i].set_line_index(i)  # everyone shuffles forward
 
 
-## The customer standing at the front, ready to pay (or null).
+## The customer standing at the front, ready to pay (or null). Nobody can
+## pay in a power cut (0.19): the register's dead.
 func front_customer() -> Customer:
+	if Game.calendar.power_out:
+		return null
 	if not line.is_empty() and line[0].is_ready_for_checkout():
 		return line[0]
 	return null
@@ -171,6 +174,8 @@ func checkout() -> void:
 
 
 func get_prompt(_p: Player) -> String:
+	if Game.calendar.power_out:
+		return "No power! Fix the fuse box by the computer"
 	if has_cashier():
 		return "Take over the register from %s" % cashier.staff_name
 	var c := front_customer()
@@ -209,6 +214,8 @@ func waiting_cashier() -> Staff:
 
 
 func can_interact(_p: Player) -> bool:
+	if Game.calendar.power_out:
+		return false  # (the prompt says why)
 	return has_cashier() or front_customer() != null or waiting_cashier() != null
 
 

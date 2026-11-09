@@ -38,6 +38,28 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.19.0
+
+Every day is a little different now:
+- **A week.** Days have names (day 1 is a Moanday, then Tombsday, Wednesdead, Thirstday,
+  Frightday, Slaughterday and Sundead), and the weekend brings the most shoppers.
+- **Weather.** Rain (fewer shoppers, and they track in more blood), fog (ghosts love it,
+  and Bone Mart's spies sneak in more) and heat waves (everyone wants something from the
+  cooler). You see it fall and drift on screen.
+- **Daily events**, announced in the morning and on the calendar ahead of time:
+  - **The health inspector** looks round your store and grades it: an A pays and brings
+    shoppers for the rest of the day, a C is a fine. Mop up and fill those shelves!
+  - **A tour bus** pulls up and drops off a crowd of tourists with long shopping lists.
+  - **A power cut** kills the registers, the lights and the computer until you fix the
+    sparking fuse box next to the computer.
+  - **A ghost shoplifter** floats in and empties your shelves into its sack. Catch it and
+    it drops the lot.
+  - **A celebrity**, Mortimer Glam, comes shopping. A good visit goes viral on ZomTok
+    (30% more shoppers tomorrow); a bad one gets roasted.
+  - **A full moon** every Sundead: werewolves and vampires come out in packs.
+- **A Calendar app** on the computer shows the week ahead, plus three new trophies and
+  daily goals tied to the events.
+
 ## What's new in 0.18.0
 
 Something to aim for, every day and for the long run:
@@ -1093,6 +1115,37 @@ up down the street, then charge in together, and you can join the fight.
 - **A Bone Mart Express** (2 skeletons): win, and it's yours.
 - Lose, and your gang is out cold until tomorrow.
 
+### The week: weather and events
+Day 1 is a Moanday; the week goes Moanday, Tombsday, Wednesdead, Thirstday, Frightday,
+Slaughterday, Sundead. Moanday is the quietest day (15% fewer shoppers), Slaughterday the
+busiest (30% more) and Sundead close behind. The clock at the top shows the day, with
+today's weather and event as icons (point at them for what they do).
+
+| Weather | How often | What it does |
+|---|---|---|
+| Clear | about half the days | Nothing special |
+| Rain | 1 day in 5 | 15% fewer shoppers, more of them drip blood (more mopping) |
+| Fog | 1 day in 7 | Three times the ghosts, twice the spies from Bone Mart |
+| Heat wave | 1 day in 10 | Cold products sell much faster: keep the coolers full |
+
+From day 3 most days have an event, sometime between 10 AM and 4 PM (the morning message
+and the Calendar app say when). Which events can happen grows with the store level, and
+the same event never comes two days running:
+
+| Event | From level | What happens |
+|---|---|---|
+| Power cut | 2 | The registers, the lights and the computer go dead. Hold E (or tap) at the sparking fuse box by the computer for 3 seconds to fix it, or wait 2 hours for the power company. Shoppers in line lose patience meanwhile |
+| Health inspector | 3 | Looks at four shelves and the busiest line, then grades the store on the way out. Blood on the floor (10 points a puddle), empty shelves (8 each), a long line (10 or 20) and boxes lying around (3 each) cost points. 85+ is an A: $50 + $25 a level and 15% more shoppers for the rest of the day. Under 60 is a C: a fine of $30 + $15 a level and 15% fewer shoppers |
+| Tour bus | 3 | A bus pulls up outside and 7 to 11 tourists with long lists get off, one after another |
+| Ghost shoplifter | 4 | A ghost floats in, takes up to 3 items from each of two shelves and floats off with them. Walk up and press E (or click or tap it) to boo it away: it puts everything back and you get $15 + $5 a level. From level 8 a second one comes 90 minutes later |
+| Celebrity | 5 | Mortimer Glam goes shopping like anyone else. If they rate the visit 4 stars or more, their ZomTok post goes viral: 30% more shoppers tomorrow. 2.5 or less and they roast you: 15% fewer |
+| Full moon | any | Every 7th day (a Sundead). After 5 PM werewolves (from level 5 instead of 11) and vampires come 2.5 times as often |
+
+The week ahead is on the computer's **Calendar** app: the weather a week ahead, events
+three days ahead (further off it's a "?", since the store may grow into more by then).
+On an inspector day one of the daily goals may be to pass the inspection (an A or a B); on
+a ghost day, to catch the ghost. The day's summary says how the event went.
+
 ### Goals, the star rating and trophies
 **Daily goals.** From day 2 (day 1 has the tips), three goals come up every morning,
 picked to suit your store: serve so many shoppers, take so much money, sell so many of a
@@ -1125,7 +1178,8 @@ shoppers, $1,000 to $100,000 taken), store levels 5 to 20, every product license
 month of days, 25 goals, a week of Perfect Days, 4 and 5 stars, 500 happy shoppers, a
 spotless close, mopping, spies, registers, staff, the lots next door, the hearse, paying
 off a loan, 15 vampires in a night, 50 skeletons knocked out, 5 raids won, owning the
-turf, a Snake score of 30 and 50 likes on ZomTok. Each pays cash once. Five of them
+turf, a Snake score of 30, 50 likes on ZomTok, an A from the health inspector, 5 ghosts
+caught and a celebrity's 5-star post. Each pays cash once. Five of them
 unlock a decoration (Build > Decor) that shoppers come to see:
 
 | Decoration | Trophy | Cost | What it does |
@@ -1185,7 +1239,7 @@ its third new app, Goals, is above):
 | Pause menu | Esc or P | II button / back button |
 | Recent messages | M, or the Log button | Log button |
 | Close / cancel | Esc | Back button |
-| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-9 switch apps, Esc goes back | Tap |
+| Store computer | Arrow keys pick any button, Enter or Space presses it, Tab / Shift+Tab or 1-9 and 0 switch apps, Esc goes back | Tap |
 | Snake (store computer) | Arrows or WASD steer, Enter starts | Swipe on the board or tap the arrows; tap to start |
 | ZomTok (store computer) | Down / Up or the mouse wheel: next / last video; Space or L (or double-click): like; C: comments | Swipe up / down; double-tap or the heart; the bubble for comments |
 
@@ -1232,6 +1286,13 @@ scripts/
   store_rating.gd      The store's star rating and shoppers' reviews (Game.rating)
   trophies.gd          Trophies, counted from the whole game's totals (Game.trophies)
   char_art.gd          Walking frames made from each character's picture, and emotes
+  calendar.gd          The week: weekdays, weather, the day's event, picked ahead (Game.calendar)
+  day_events.gd        Starts the day's event and handles how it goes (Store.events)
+  visitor.gd           Someone who walks in on business of their own (base for the next two)
+  inspector.gd         The health inspector
+  ghost_thief.gd       The ghost shoplifter
+  tour_bus.gd          The tour bus and its tourists
+  weather_fx.gd        Rain and fog on screen
   store.gd             Builds the store from the map, furniture placement rules,
                        registers and their lines, deliveries, decor, staff, spills,
                        customer spawning, the lots next door
@@ -1268,7 +1329,7 @@ scripts/
   computer.gd          Opens the store computer
   floor.gd             Draws the floor tiles and the tap marker
   hud.gd               Main UI (status bar, prompts, messages, summary)
-  ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades / Loans / Turf / Goals / Snake / ZomTok
+  ui/computer_menu.gd  The computer: Stock & Prices / Products / Staff / Upgrades / Loans / Turf / Goals / Calendar / Snake / ZomTok
   ui/pc_snake.gd       The computer's Snake (Zombie Snake)
   ui/zomtok_app.gd     ZomTok: the phone-shaped video player, likes and comments
   zomtok_feed.gd       What's on ZomTok: who posts, the dances, captions and comments
@@ -1408,6 +1469,7 @@ godot --headless --path . --fixed-fps 60 res://tests/fp_test.tscn     # first pe
 godot --headless --path . --fixed-fps 60 res://tests/war_test.tscn    # the gang war: land, branches, raids both ways, fighting, the cutscene
 godot --headless --path . --fixed-fps 60 res://tests/pc_apps_test.tscn # the computer's Snake and ZomTok
 godot --headless --path . --fixed-fps 60 res://tests/goals_test.tscn   # goals, the star rating, trophies, walking frames, emotes, the Goals app
+godot --headless --path . --fixed-fps 60 res://tests/events_test.tscn  # the calendar, weather, every event, the Calendar app
 godot --headless --path . -s res://tests/roundtrip_test.gd            # save a store with everything in it, load it, save again: nothing lost
 xvfb-run godot --path . --rendering-driver opengl3 res://tests/rt_test.tscn  # ray tracing: the setting, the height map, shadows read back from the lightmap, both views
 SEED=1 MINUTES=240 godot --headless --path . --fixed-fps 60 -s res://tests/chaos_test.gd  # chaos play (below; TOUCH=1 for a touch screen)

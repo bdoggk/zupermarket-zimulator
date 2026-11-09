@@ -40,6 +40,8 @@ const TYPES := {
 	"clean": {"weight": 1.5, "hard": 1.0, "close": true},
 	"profit": {"weight": 1.5, "hard": 1.2, "close": true},
 	"rating": {"weight": 1.5, "hard": 1.2, "close": true},
+	"inspection": {"weight": 6.0, "hard": 1.0},  # only on the inspector's day (0.19)
+	"catch_ghost": {"weight": 6.0, "hard": 0.8},  # only on a ghost day
 }
 const CASH := 20.0  # a goal pays this (times how hard it is)...
 const CASH_PER_LEVEL := 10.0  # ...plus this for every store level
@@ -124,6 +126,10 @@ func can_pick(t: String) -> bool:
 			return war_on
 		"rating":
 			return Game.rating.stars() < 4.3
+		"inspection":
+			return Game.calendar.event() == "inspector"
+		"catch_ghost":
+			return Game.calendar.event() == "ghost"
 	return true
 
 
@@ -196,7 +202,7 @@ static func text(g: Dictionary) -> String:
 			return f % [int(g.target), Game.shopper_plural(k) if not k.is_empty() else "shoppers"]
 		"rating":
 			return f % ("%.1f" % float(g.target)).replace(".0", "")
-		"spy", "license", "decorate", "hire", "raid", "no_walkouts", "clean":
+		"spy", "license", "decorate", "hire", "raid", "no_walkouts", "clean", "inspection", "catch_ghost":
 			return f
 	return f % int(g.target)
 
@@ -243,6 +249,10 @@ static func progress(g: Dictionary) -> float:
 			return floorf(Game.profit_today())
 		"rating":
 			return Game.rating.stars()
+		"inspection":
+			return 1.0 if str(st.get("inspection", "")) in ["A", "B"] else 0.0
+		"catch_ghost":
+			return float(st.get("ghosts_caught", 0))
 	return 0.0
 
 
@@ -260,7 +270,7 @@ static func progress_text(g: Dictionary) -> String:
 			return "%s$%d/$%d" % ["-" if now < 0 else "", absi(now), int(g.target)]
 		"rating":
 			return "%s now" % ("%.1f" % Game.rating.stars())
-		"spy", "license", "decorate", "hire", "raid":
+		"spy", "license", "decorate", "hire", "raid", "inspection", "catch_ghost":
 			return ""
 	return "%d/%d" % [mini(int(progress(g)), int(g.target)), int(g.target)]
 

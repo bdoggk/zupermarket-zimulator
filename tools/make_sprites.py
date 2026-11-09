@@ -3998,7 +3998,7 @@ def pc_apps_content():
 # --------------------------------------------------------------------------
 # Goals, the store's rating and trophies (0.18)
 # --------------------------------------------------------------------------
-GOLD, GOLD_D, GOLD_L = (226, 182, 60), (168, 124, 34), (252, 228, 124)
+TROPHY_GOLD, TROPHY_GOLD_D, TROPHY_GOLD_L = (226, 182, 60), (168, 124, 34), (252, 228, 124)
 STONE, STONE_D, STONE_L = (132, 132, 140), (92, 92, 102), (176, 176, 184)
 
 
@@ -4041,7 +4041,7 @@ def star_icon(part):
     """The store's rating: a full, half or empty star (11x11)."""
     img = new(11, 11)
     cut = {1.0: None, 0.5: 5.5, 0.0: -1}[part]
-    _star(img, 5.5, 6.0, 5.4, 2.3, GOLD if part > 0 else (64, 60, 72), cut=cut)
+    _star(img, 5.5, 6.0, 5.4, 2.3, TROPHY_GOLD if part > 0 else (64, 60, 72), cut=cut)
     outline_outside(img)
     return img
 
@@ -4113,7 +4113,7 @@ def emote(kind):
             dot(img, 8, 3, blue)
             rect(img, 7, 4, 9, 4, blue)
         elif kind == "star":
-            _star(img, 6.5, 6.2, 4.6, 2.0, GOLD)
+            _star(img, 6.5, 6.2, 4.6, 2.0, TROPHY_GOLD)
     outline_outside(img)
     return img
 
@@ -4133,7 +4133,7 @@ def goals_app_icon():
             dot(img, 11, y + 2, (250, 250, 240))
             dot(img, 12, y, (250, 250, 240))
         rect(img, 14, y + 1, 21, y + 1, (120, 116, 110))
-    _star(img, 24, 23, 6.5, 2.8, GOLD)
+    _star(img, 24, 23, 6.5, 2.8, TROPHY_GOLD)
     outline_outside(img)
     return img
 
@@ -4141,7 +4141,7 @@ def goals_app_icon():
 def trophy_icon(gold=True):
     """A trophy cup (16x16): gold once you've earned it, grey before."""
     img = new(16, 16)
-    c, d, l = (GOLD, GOLD_D, GOLD_L) if gold else ((120, 118, 128), (88, 86, 96), (150, 148, 158))
+    c, d, l = (TROPHY_GOLD, TROPHY_GOLD_D, TROPHY_GOLD_L) if gold else ((120, 118, 128), (88, 86, 96), (150, 148, 158))
     rect(img, 4, 2, 11, 2, l)
     for y in range(3, 9):  # the cup
         w = 4 - max(0, y - 6)
@@ -4184,10 +4184,10 @@ def trophy_case():
         rect(img, 22, shelf_y, 41, shelf_y, wood_l)
     for (x, y, big) in [(25, top + 5, True), (33, top + 8, False), (37, top + 6, True), (27, top + 21, False), (34, top + 19, True), (24, top + 35, True), (31, top + 36, False), (37, top + 34, False)]:
         h = 9 if big else 6
-        rect(img, x, y, x + (4 if big else 3), y + h - 4, GOLD)
-        dot(img, x, y, GOLD_L)
-        rect(img, x + (1 if big else 1), y + h - 3, x + (3 if big else 2), y + h - 2, GOLD_D)
-        rect(img, x, y + h - 1, x + (4 if big else 3), y + h - 1, GOLD)
+        rect(img, x, y, x + (4 if big else 3), y + h - 4, TROPHY_GOLD)
+        dot(img, x, y, TROPHY_GOLD_L)
+        rect(img, x + (1 if big else 1), y + h - 3, x + (3 if big else 2), y + h - 2, TROPHY_GOLD_D)
+        rect(img, x, y + h - 1, x + (4 if big else 3), y + h - 1, TROPHY_GOLD)
     for i in range(5):  # a shine across the glass
         dot(img, 23 + i, top + 12 - i, (200, 220, 240))
         dot(img, 30 + i, top + 30 - i, (200, 220, 240))
@@ -4229,9 +4229,9 @@ def golden_gravestone():
     for y in range(top, cy + 1):
         w = 9 if y > top + 7 else int(9 * (1 - ((top + 7 - y) / 8.5) ** 2) ** 0.5) + 1
         for x in range(32 - w, 32 + w + 1):
-            dot(img, x, y, GOLD_L if x < 32 - w + 2 else (GOLD_D if x > 32 + w - 2 else GOLD))
-    rect(img, 30, top + 6, 33, top + 18, GOLD_D)  # a cross cut in it
-    rect(img, 27, top + 9, 36, top + 11, GOLD_D)
+            dot(img, x, y, TROPHY_GOLD_L if x < 32 - w + 2 else (TROPHY_GOLD_D if x > 32 + w - 2 else TROPHY_GOLD))
+    rect(img, 30, top + 6, 33, top + 18, TROPHY_GOLD_D)  # a cross cut in it
+    rect(img, 27, top + 9, 36, top + 11, TROPHY_GOLD_D)
     rect(img, 22, cy - 2, 42, cy + 1, (90, 120, 60))  # a tuft of grass
     for x, y in [(19, top + 2), (45, top + 6), (40, top - 2)]:  # sparkles
         dot(img, x, y, (255, 255, 230))
@@ -4250,11 +4250,11 @@ def five_star_plaque():
     _decor_shadow(img, cy, 10)
     rect(img, 30, cy - 24, 33, cy, (70, 60, 56))  # the post
     rect(img, 25, cy - 2, 38, cy + 1, (70, 60, 56))
-    rect(img, 10, cy - 48, 53, cy - 24, GOLD_D)  # the plaque
+    rect(img, 10, cy - 48, 53, cy - 24, TROPHY_GOLD_D)  # the plaque
     rect(img, 12, cy - 46, 51, cy - 26, (60, 30, 40))
     for i in range(5):
-        _star(img, 16.5 + i * 7.6, cy - 39.0, 3.9, 1.7, GOLD_L)
-    rect(img, 16, cy - 31, 47, cy - 30, GOLD)  # a line of writing
+        _star(img, 16.5 + i * 7.6, cy - 39.0, 3.9, 1.7, TROPHY_GOLD_L)
+    rect(img, 16, cy - 31, 47, cy - 30, TROPHY_GOLD)  # a line of writing
     outline_object(img, 0.6)
     return img
 
@@ -4342,11 +4342,261 @@ def goals_content():
         save(img, f"customer_{6 + i}")
 
 
+# --------------------------------------------------------------------------
+# The week: calendar, weather and the day's events (0.19)
+# --------------------------------------------------------------------------
+# ---- people
+
+def inspector():
+    """The health inspector: a zombie in a beige suit and a hat, with a clipboard."""
+    def extra(body):
+        rect(body, 4, 0, 11, 2, (92, 80, 62))  # a fedora
+        rect(body, 3, 3, 12, 3, (72, 62, 48))
+        rect(body, 4, 2, 11, 2, (50, 42, 34))  # its band
+        rect(body, 5, 7, 6, 7, (40, 40, 44))  # glasses
+        rect(body, 9, 7, 10, 7, (40, 40, 44))
+        dot(body, 7, 7, (40, 40, 44))
+        dot(body, 8, 7, (40, 40, 44))
+        rect(body, 7, 13, 8, 20, (120, 40, 40))  # a tie
+        rect(body, 11, 15, 15, 22, (150, 110, 70))  # the clipboard
+        rect(body, 12, 16, 14, 21, (236, 232, 220))
+        for y in (17, 19):
+            rect(body, 12, y, 14, y, (110, 110, 120))
+        rect(body, 12, 14, 14, 15, (170, 170, 176))  # its clip
+    return zombie((150, 166, 132), (70, 60, 50), (196, 176, 136), (150, 132, 100), seed=120,
+                  shoes=(60, 46, 36), reaching=False, extra=extra)
+
+
+def celebrity():
+    """A famous zombie: shades, a gold chain, a purple velvet jacket."""
+    def extra(body):
+        rect(body, 4, 0, 11, 3, (30, 26, 34))  # slicked-back hair
+        dot(body, 11, 4, (30, 26, 34))
+        rect(body, 5, 6, 10, 7, (20, 20, 24))  # shades
+        dot(body, 6, 6, (120, 160, 220))
+        dot(body, 9, 6, (120, 160, 220))
+        for x in range(5, 11):  # the gold chain
+            dot(body, x, 14 if x in (5, 10) else 15, (240, 200, 70))
+        dot(body, 8, 16, (250, 230, 120))
+        rect(body, 4, 13, 5, 24, (110, 50, 150))  # the jacket open over a white shirt
+        rect(body, 10, 13, 11, 24, (90, 40, 124))
+    return zombie((140, 170, 130), (30, 26, 34), (230, 228, 220), (36, 30, 44), seed=121,
+                  shoes=(220, 220, 226), reaching=False, bald=True, extra=extra)
+
+
+def tourist(shirt, hat, seed):
+    """A tourist off the bus: a loud shirt, a sun hat and a camera."""
+    def extra(body):
+        rect(body, 3, 1, 12, 2, hat)  # a wide-brimmed hat
+        rect(body, 5, 0, 10, 1, shade(hat, 0.85))
+        for x, y in [(5, 15), (9, 17), (6, 20), (10, 21), (7, 23)]:  # flowers on the shirt
+            dot(body, x, y, (240, 120, 150))
+        rect(body, 6, 17, 9, 19, (40, 40, 46))  # the camera round their neck
+        dot(body, 7, 18, (140, 180, 220))
+        dot(body, 6, 14, (40, 40, 46))
+        dot(body, 9, 14, (40, 40, 46))
+    return zombie((146, 168, 128), (120, 90, 60), shirt, (210, 200, 170), seed=seed, extra=extra)
+
+
+def ghost_thief():
+    """A ghost with a burglar's mask and a sack over its shoulder."""
+    img = ghost(sheet=(212, 220, 236), eyes=(30, 34, 52), seed=93)
+    px = img.load()
+    a = 230
+    for x in range(4, 12):  # the mask across the eyes
+        for y in range(8, 12):
+            if px[x, y][3] > 0:
+                px[x, y] = (24, 24, 30, a)
+    for ex in (5, 9):
+        rect(img, ex, 9, ex + 1, 10, (240, 240, 250))
+    for x, y in _ellipse_pixels(12.5, 15.5, 3.4, 3.4):  # the sack
+        if 0 <= x < 16:
+            px[x, y] = (150, 116, 70, 255) if x < 13 else (124, 94, 56, 255)
+    rect(img, 11, 11, 13, 12, (124, 94, 56))
+    dot(img, 12, 14, (90, 66, 40))  # a $ on it, sort of
+    dot(img, 12, 16, (90, 66, 40))
+    return img
+
+
+# ---- the bus
+
+def tour_bus():
+    """The tour bus, three tiles long (along +x), for the road (0.19). Its
+    origin, the middle of the back tile, is at (32, height - 46)."""
+    img = new(132, 100)
+    ox, oy = 34, img.height - 46
+    w = 0.42
+    ex, ey = (32, 16), (-32, 16)
+
+    def at(cx, cy):
+        return (cx * ex[0] + cy * ey[0], cx * ex[1] + cy * ey[1])
+    foot = [at(-0.45, -w), at(2.45, -w), at(2.45, w), at(-0.45, w)]
+    paint = (214, 170, 52)
+    glass = (50, 62, 78)
+    height = 30
+
+    left_x, left_y = ox + foot[3][0], oy + foot[3][1]
+    end_x, end_y = ox + foot[2][0], oy + foot[2][1]
+
+    def face(x, y, side, c):
+        if side == "left":  # the long side facing you: windows along the top, a red stripe
+            h = left_y + (x - left_x) * 0.5 - y  # pixels above the bottom edge
+            if 17 <= h <= 25 and int(x - left_x) % 12 not in (0, 1):
+                return glass if (x + y) % 9 else shade(glass, 1.5)
+            if 9 <= h <= 10:
+                return (180, 40, 40)
+            if h <= 2:
+                return shade(c, 0.7)
+            return c
+        h = end_y - (x - end_x) * 0.5 - y  # the front: a windscreen and headlights
+        if 15 <= h <= 26 and x < end_x + 24:
+            return glass if (x - y) % 7 else shade(glass, 1.5)
+        if 4 <= h <= 6 and int(x - end_x) in (3, 4, 19, 20):
+            return (250, 240, 190)
+        return c
+    para_prism(img, ox, oy, foot, height, shade(paint, 1.12), paint, shade(paint, 0.78), face)
+    pxl = img.load()
+    for cx in (0.0, 1.9):  # wheels on the near side
+        wx, wy = at(cx, w)
+        wx, wy = int(ox + wx), int(oy + wy)
+        for x, y in _ellipse_pixels(wx, wy, 3.5, 3.5):
+            if 0 <= x < img.width and 0 <= y < img.height:
+                pxl[x, y] = solid((28, 28, 30))
+        pxl[wx, wy] = solid((140, 140, 146))
+    outline_object(img, 0.6)
+    return img
+
+
+# ---- the fuse box
+
+def fuse_box(sparking):
+    """The store's fuse box (on the wall by the computer), 16x20."""
+    img = new(16, 22)
+    rect(img, 2, 2, 13, 19, (120, 124, 130))
+    rect(img, 12, 2, 13, 19, (96, 100, 106))
+    rect(img, 3, 3, 11, 4, (150, 154, 160))
+    for y in (7, 10, 13):  # the switches
+        rect(img, 4, y, 6, y + 1, (40, 40, 44))
+        rect(img, 8, y, 10, y + 1, (40, 40, 44))
+        dot(img, 5 if not sparking or y != 10 else 4, y, (220, 220, 210))
+        dot(img, 9, y, (220, 220, 210))
+    for x, y in [(7, 15), (6, 16), (7, 16), (8, 16), (7, 17)]:  # a warning bolt
+        dot(img, x, y, (240, 210, 60))
+    if sparking:
+        for x, y in [(12, 0), (14, 1), (13, 3), (15, 4), (0, 6), (1, 4), (11, 21), (14, 20)]:
+            dot(img, x, y, (255, 240, 120))
+        dot(img, 13, 1, (255, 255, 230))
+    outline_outside(img)
+    return img
+
+
+# ---- icons (16x16)
+
+def wicon(kind):
+    img = new(16, 16)
+    if kind == "sun":
+        for x, y in _ellipse_pixels(7.5, 7.5, 3.6, 3.6):
+            dot(img, x, y, (250, 210, 70))
+        for i in range(8):
+            a = i * math.pi / 4
+            dot(img, int(7.5 + math.cos(a) * 6), int(7.5 + math.sin(a) * 6), (250, 190, 60))
+    elif kind == "heat":
+        for x, y in _ellipse_pixels(7.5, 6.5, 4.2, 4.2):
+            dot(img, x, y, (250, 150, 50))
+        for x in range(2, 14, 4):  # heat waves
+            for y in range(11, 15):
+                dot(img, x + (y % 2), y, (240, 90, 60))
+    elif kind == "rain":
+        for cx, cy, r in [(5, 6, 3), (9, 5, 3.8), (12, 7, 2.6)]:
+            for x, y in _ellipse_pixels(cx, cy, r, r * 0.8):
+                dot(img, x, y, (150, 156, 170))
+        rect(img, 3, 7, 13, 8, (150, 156, 170))
+        for x, y in [(4, 11), (3, 13), (8, 11), (7, 13), (12, 11), (11, 13)]:
+            dot(img, x, y, (90, 150, 230))
+    elif kind == "fog":
+        for y, x0, x1 in [(4, 3, 12), (7, 1, 14), (10, 3, 13), (13, 2, 11)]:
+            rect(img, x0, y, x1, y, (190, 196, 204))
+    elif kind == "moon":
+        for x, y in _ellipse_pixels(7.5, 7.5, 6, 6):
+            dot(img, x, y, (236, 232, 200))
+        for x, y in [(5, 5), (9, 9), (10, 5), (6, 10)]:
+            dot(img, x, y, (200, 196, 166))
+    elif kind == "bus":
+        rect(img, 1, 4, 14, 12, (214, 170, 52))
+        rect(img, 2, 5, 13, 7, (50, 62, 78))
+        rect(img, 1, 9, 14, 9, (180, 40, 40))
+        for cx in (4, 11):
+            for x, y in _ellipse_pixels(cx + 0.5, 13, 1.8, 1.8):
+                dot(img, x, y, (28, 28, 30))
+    elif kind == "inspector":
+        rect(img, 3, 2, 12, 14, (150, 110, 70))
+        rect(img, 4, 4, 11, 13, (236, 232, 220))
+        rect(img, 6, 1, 9, 3, (170, 170, 176))
+        for y in (6, 8, 10):
+            rect(img, 5, y, 10, y, (110, 110, 120))
+        dot(img, 5, 12, (60, 160, 70))
+        dot(img, 6, 11, (60, 160, 70))
+    elif kind == "outage":
+        for x, y in [(9, 1), (8, 2), (8, 3), (7, 4), (7, 5), (6, 6), (6, 7), (7, 7), (8, 7), (9, 7), (9, 8), (8, 9), (8, 10), (7, 11), (7, 12), (6, 13), (6, 14)]:
+            dot(img, x, y, (250, 220, 60))
+            dot(img, x + 1, y, (230, 180, 40))
+    elif kind == "ghost":
+        g = ghost_thief()
+        img = g.crop((1, 5, 16, 31))
+        return img.resize((16, 16), 0)
+    elif kind == "star":
+        pts = []
+        for i in range(10):
+            r = 7.0 if i % 2 == 0 else 3.0
+            a = -math.pi / 2 + i * math.pi / 5
+            pts.append((7.5 + math.cos(a) * r, 8 + math.sin(a) * r))
+        for y in range(16):
+            for x in range(16):
+                if _in_poly(x + 0.5, y + 0.5, pts):
+                    dot(img, x, y, (250, 210, 70) if x < 9 else (230, 180, 50))
+    elif kind == "market":
+        rect(img, 2, 9, 4, 13, (90, 200, 100))
+        rect(img, 6, 6, 8, 13, (90, 200, 100))
+        rect(img, 10, 3, 12, 13, (90, 200, 100))
+    outline_outside(img)
+    return img
+
+
+def calendar_app_icon():
+    """32x32 desktop icon: a calendar page with a skull on today."""
+    img = new(32, 32)
+    rect(img, 4, 6, 27, 28, (236, 232, 222))
+    rect(img, 4, 6, 27, 11, (170, 50, 50))
+    for x in (9, 22):  # the rings
+        rect(img, x, 3, x + 1, 8, (130, 130, 136))
+    for row in range(3):
+        for col in range(5):
+            x, y = 6 + col * 4, 14 + row * 4
+            rect(img, x, y, x + 2, y + 2, (190, 186, 176))
+    rect(img, 14, 18, 16, 20, (80, 160, 80))  # today
+    outline_outside(img)
+    return img
+
+
+def events_content():
+    """The calendar, weather and events (0.19)."""
+    save(inspector(), "event_inspector")
+    save(celebrity(), "event_celebrity")
+    save(tourist((60, 160, 190), (230, 220, 180), 122), "event_tourist_0")
+    save(tourist((230, 120, 60), (240, 200, 210), 123), "event_tourist_1")
+    save(ghost_thief(), "event_ghost_thief")
+    save(tour_bus(), "event_bus")
+    save(fuse_box(False), "fuse_box")
+    save(fuse_box(True), "fuse_box_sparks")
+    for k in ["sun", "heat", "rain", "fog", "moon", "bus", "inspector", "outage", "ghost", "star"]:
+        save(wicon(k), f"cal_{k}")
+    save(calendar_app_icon(), "pc_app_calendar")
+
+
 def new_content():
     """Everything above, saved: called from main()."""
     loan_content()
     pc_apps_content()
-    goals_content()
     war_content()
     fp_content()
     save(mummy(), "shopper_mummy_0")
@@ -4369,6 +4619,8 @@ def new_content():
     save(drain_icon(), "upgrade_drains")
     save(golden_sign_icon(), "upgrade_golden_sign")
     save(mass_grave_icon(), "upgrade_zone_4")
+    goals_content()  # (0.18 and 0.19 last: their zombies reseed the random numbers the art above uses)
+    events_content()
 
 
 def main():

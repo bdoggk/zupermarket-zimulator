@@ -41,6 +41,7 @@ func _ready() -> void:
 
 	# ---- when they come
 	check(Game.rival_spies.is_empty(), "no spies on day 1")
+	Game.calendar.days[2] = {"weather": "clear", "event": "", "minute": 0}  # (fog would send twice as many, 0.19)
 	Game.start_next_day()
 	check(Game.rival_spies.size() == 1 and Game.rival_spies[0] >= 9 * 60 and Game.rival_spies[0] <= 18 * 60 + 30,
 		"from day 2, Bone Mart plans a spy for today (at %s)" % [Game.time_text(Game.rival_spies[0]) if not Game.rival_spies.is_empty() else "--"])

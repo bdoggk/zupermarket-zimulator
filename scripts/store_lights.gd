@@ -7,6 +7,8 @@ extends Node2D
 ##   High    the same, plus a flickering tube and dust floating in the air
 ##   Ray tracing  the same lights, and every one of them (these, the street
 ##           lamps, lanterns...) casts shadows: see RayTracer
+## In a power cut (0.19) the ceiling lights go out and the store goes dim;
+## the weather tints everything (Calendar).
 
 const LIGHT_SPACING := Vector2i(4, 3)  # cells between ceiling lights
 const DAY_AMBIENT: Color = Brand.LIGHT.day  # how dark it is away from lights
@@ -14,12 +16,15 @@ const NIGHT_AMBIENT: Color = Brand.LIGHT.night
 const NO_LIGHTS_NIGHT: Color = Brand.LIGHT.plain_night
 const LIGHT_COLOR: Color = Brand.LIGHT.lamp
 const LIGHT_ENERGY := 0.36
+const POWER_CUT := Color(0.58, 0.6, 0.72)  # the store's light in a power cut (times the usual)
+const WEATHER_TINT := {"rain": Color(0.84, 0.88, 0.98), "fog": Color(0.9, 0.92, 0.95), "heat": Color(1.0, 0.96, 0.86)}
 
 var lights: Array[PointLight2D] = []
 var flicker_light: PointLight2D
 var dust: CPUParticles2D
 var _flicker_timer := 3.0
 var _flicker_steps := 0
+var _dark := false  # the lights are out (a power cut)
 
 @onready var store: Store = get_parent()
 
@@ -115,7 +120,7 @@ static func _make_glow() -> Texture2D:
 
 func _apply_settings() -> void:
 	for l in lights:
-		l.enabled = Settings.lights_enabled()
+		l.enabled = Settings.lights_enabled() and not _dark
 		l.energy = LIGHT_ENERGY
 	if dust:
 		dust.emitting = Settings.effects_enabled()
@@ -123,12 +128,17 @@ func _apply_settings() -> void:
 
 
 func _process(delta: float) -> void:
+	var dark := Game.calendar.power_out
+	if dark != _dark:
+		_dark = dark
+		_apply_settings()
 	var dusk := clampf((Game.minute - 17 * 60) / 180.0, 0.0, 1.0)
-	if Settings.lights_enabled():
-		store.mood.color = DAY_AMBIENT.lerp(NIGHT_AMBIENT, dusk)
-	else:
-		store.mood.color = Color.WHITE.lerp(NO_LIGHTS_NIGHT, dusk)
-	if Settings.effects_enabled() and flicker_light:
+	var c := DAY_AMBIENT.lerp(NIGHT_AMBIENT, dusk) if Settings.lights_enabled() else Color.WHITE.lerp(NO_LIGHTS_NIGHT, dusk)
+	c *= WEATHER_TINT.get(Game.calendar.weather(), Color.WHITE)
+	if _dark:
+		c *= POWER_CUT
+	store.mood.color = Color(c.r, c.g, c.b, 1.0)
+	if Settings.effects_enabled() and flicker_light and not _dark:
 		_flicker(delta)
 
 

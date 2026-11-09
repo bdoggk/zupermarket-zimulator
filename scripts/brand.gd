@@ -838,6 +838,8 @@ const GOALS := {
 	"clean": "Close with no blood on the floor",
 	"profit": "Close with a $%d profit",
 	"rating": "Close at %s stars or better",
+	"inspection": "Pass the health inspection (A or B)",
+	"catch_ghost": "Catch the ghost shoplifter",
 }
 
 ## What shoppers write about you (StoreRating), by what made their visit
@@ -907,6 +909,9 @@ const TROPHIES := [
 	{"id": "kingpin", "name": "Kingpin", "text": "Own all four plots east of Bone Mart", "stat": "plots", "target": 4, "cash": 5000.0},
 	{"id": "snake_30", "name": "Snake Charmer", "text": "Score 30 at Snake", "stat": "snake", "target": 30, "cash": 100.0},
 	{"id": "zomtok_50", "name": "Doomscroller", "text": "Like 50 ZomTok videos", "stat": "zomtok", "target": 50, "cash": 50.0},
+	{"id": "clean_bill", "name": "Clean Bill of Health", "text": "Get an A from the health inspector", "stat": "inspections_a", "target": 1, "cash": 300.0},
+	{"id": "ghostbuster", "name": "Ghostbuster", "text": "Catch 5 ghost shoplifters", "stat": "ghosts", "target": 5, "cash": 400.0},
+	{"id": "viral", "name": "Gone Viral", "text": "Get a 5-star post from a celebrity", "stat": "viral", "target": 1, "cash": 500.0},
 ]
 
 ## Lighting. day/night: how dark it is away from the ceiling lights.
@@ -918,3 +923,87 @@ const LIGHT := {
 	"plain_night": Color(0.62, 0.7, 0.64),
 	"menu": Color(0.5, 0.58, 0.5),
 }
+
+
+# ---------------------------------------------------------------- the week (0.19)
+
+## The calendar (Calendar): day 1 is a Moanday. How busy each day of the
+## week is, what the weather does, and what each of the day's events says
+## (DayEvents). "%s" in an event's "says" is the time it's due.
+const CALENDAR := {
+	"days": ["Moanday", "Tombsday", "Wednesdead", "Thirstday", "Frightday", "Slaughterday", "Sundead"],
+	"traffic": [0.85, 0.9, 1.0, 1.0, 1.15, 1.3, 1.2],
+	"weather": {
+		"clear": {"name": "Clear", "icon": preload("res://assets/sprites/cal_sun.png"),
+			"says": "Clear skies.", "does": "Nothing special"},
+		"rain": {"name": "Rain", "icon": preload("res://assets/sprites/cal_rain.png"),
+			"says": "Rain all day: fewer shoppers, and they track in more blood.", "does": "15% fewer shoppers, more blood on the floor"},
+		"fog": {"name": "Fog", "icon": preload("res://assets/sprites/cal_fog.png"),
+			"says": "Thick fog: ghosts love it, and Bone Mart's spies sneak in more.", "does": "Three times the ghosts, twice the spies"},
+		"heat": {"name": "Heat wave", "icon": preload("res://assets/sprites/cal_heat.png"),
+			"says": "Heat wave: everyone wants something from the cooler.", "does": "Cold products sell much faster"},
+	},
+	"events": {
+		"moon": {"name": "Full moon", "icon": preload("res://assets/sprites/cal_moon.png"),
+			"says": "Full moon tonight: werewolves and vampires come out in packs after 5 PM.",
+			"starts": "The full moon's up! Werewolves and vampires are on their way.",
+			"does": "Werewolves (from level 5) and vampires come in packs after 5 PM"},
+		"bus": {"name": "Bus tour", "icon": preload("res://assets/sprites/cal_bus.png"),
+			"says": "A tour bus is due around %s: a crowd of tourists all at once.",
+			"starts": "The tour bus is here! Tourists coming your way.",
+			"does": "A busload of tourists with big shopping lists, all at once"},
+		"inspector": {"name": "Health inspector", "icon": preload("res://assets/sprites/cal_inspector.png"),
+			"says": "The health inspector visits around %s. Mop up and fill the shelves!",
+			"starts": "The health inspector is here! Keep the floor clean and the shelves full.",
+			"does": "Grades the store: A pays and brings shoppers, C is a fine"},
+		"outage": {"name": "Power cut", "icon": preload("res://assets/sprites/cal_outage.png"),
+			"says": "The power company warns of a power cut around %s.",
+			"starts": "The power's out! The registers are dead: fix the fuse box by the computer.",
+			"does": "The registers stop until you fix the fuse box by the computer"},
+		"ghost": {"name": "Ghost shoplifter", "icon": preload("res://assets/sprites/cal_ghost.png"),
+			"says": "A ghost shoplifter's been seen in town. Watch your shelves after %s.",
+			"starts": "A ghost is sneaking in to steal from your shelves! Catch it.",
+			"does": "Ghosts steal from your shelves unless you catch them"},
+		"celeb": {"name": "Celebrity visit", "icon": preload("res://assets/sprites/cal_star.png"),
+			"says": "Mortimer Glam is coming to shop around %s. Make it a 5-star visit: millions of followers are watching.",
+			"starts": "Mortimer Glam just walked in! Everyone's filming.",
+			"does": "A good visit goes viral: more shoppers tomorrow"},
+	},
+}
+
+## Shoppers who only come for an event (never picked by Game.pick_shopper_kind).
+const EVENT_SHOPPERS := {
+	"tourist": {
+		"name": "Tourist", "plural": "tourists", "weight": 0.0, "level": 1, "speed": 0.9, "patience": 0.8,
+		"items": [3, 6], "qty": [1, 2], "tolerance": 1.15, "leaky": 0.3, "rival": 0.0,
+		"looks": [preload("res://assets/sprites/event_tourist_0.png"), preload("res://assets/sprites/event_tourist_1.png")],
+	},
+	"celebrity": {
+		"name": "Mortimer Glam", "plural": "celebrities", "weight": 0.0, "level": 1, "speed": 1.0, "patience": 0.9,
+		"items": [4, 6], "qty": [1, 2], "tolerance": 1.0, "leaky": 0.0, "rival": 0.0,
+		"handle": "mortimer.glam",
+		"looks": [preload("res://assets/sprites/event_celebrity.png")],
+	},
+}
+
+## The health inspector's visit (Inspector) and what the grades mean.
+const INSPECTOR := {
+	"texture": preload("res://assets/sprites/event_inspector.png"),
+	"notes": ["Hmm.", "*scribbles*", "Is that... blood?", "Dusty.", "Noted.", "Tsk.", "Acceptable."],
+	"grades": {
+		"A": "Health inspection: grade A! +$%s, and shoppers flock to a clean store for the rest of the day.",
+		"B": "Health inspection: grade B. Nothing to worry about.",
+		"C": "Health inspection: grade C. A fine of $%s, and word gets around: fewer shoppers today.",
+	},
+}
+
+## The ghost shoplifter (GhostThief).
+const GHOST_THIEF := {
+	"texture": preload("res://assets/sprites/event_ghost_thief.png"),
+	"caught": "Boo! The ghost dropped what it took (%s) and fled. +$%s",
+	"escaped": "The ghost got away with %s.",
+}
+
+## The tour bus (TourBus) and the fuse box (power cuts).
+const BUS_TEXTURE := preload("res://assets/sprites/event_bus.png")
+const FUSE_BOX := [preload("res://assets/sprites/fuse_box.png"), preload("res://assets/sprites/fuse_box_sparks.png")]

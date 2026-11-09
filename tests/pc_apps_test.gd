@@ -9,8 +9,8 @@ extends Node
 #          the beat playing, likes (the heart, a double tap, A), comments
 #          (yours on top, quick replies, the poster likes yours), next and
 #          previous (keys, d-pad, wheel, swipe), B closing the comments first
-#  the PC  9 apps (Goals, 0.18, before Snake): LB / RB and 7 / 8 / 9 reach
-#          them, the taskbar fits
+#  the PC  10 apps (Goals and Calendar, 0.18-0.19, before Snake): LB / RB
+#          and 7 / 8 / 9 / 0 reach them, the taskbar fits
 #   godot --headless --path . --fixed-fps 60 res://tests/pc_apps_test.tscn
 
 var fails := 0
@@ -38,8 +38,8 @@ func _ready() -> void:
 	hud.levelup_panel.visible = false
 	hud.open_computer()
 	await _frames(2)
-	check(pc.desktop_icons.size() == 9 and pc.desktop_icons[6].text == "Goals" and pc.desktop_icons[7].text == "Snake" and pc.desktop_icons[8].text == "ZomTok", "the PC has Snake and ZomTok on the desktop")
-	check(pc.tab_buttons[7].text == "" and pc.tab_buttons[7].tooltip_text == "Snake" and pc.tab_buttons[8].icon != null, "and on the taskbar (just their icons)")
+	check(pc.desktop_icons.size() == 10 and pc.desktop_icons[6].text == "Goals" and pc.desktop_icons[7].text == "Calendar" and pc.desktop_icons[8].text == "Snake" and pc.desktop_icons[9].text == "ZomTok", "the PC has Snake and ZomTok on the desktop")
+	check(pc.tab_buttons[8].text == "" and pc.tab_buttons[8].tooltip_text == "Snake" and pc.tab_buttons[9].icon != null, "and on the taskbar (just their icons)")
 	await _snake()
 	await _zomtok()
 	await _pc()
@@ -328,6 +328,9 @@ func _pc() -> void:
 	check(pc.tab == pc.Tab.GOALS and pc.scroll.visible and not pc.snake.visible, "RB from Turf: Goals")
 	_pad(JOY_BUTTON_RIGHT_SHOULDER)
 	await _frames(2)
+	check(pc.tab == pc.Tab.CALENDAR and pc.scroll.visible, "RB again: Calendar")
+	_pad(JOY_BUTTON_RIGHT_SHOULDER)
+	await _frames(2)
 	check(pc.tab == pc.Tab.SNAKE and pc.snake.visible, "RB again: Snake")
 	_pad(JOY_BUTTON_RIGHT_SHOULDER)
 	await _frames(2)
@@ -340,10 +343,13 @@ func _pc() -> void:
 	check(pc.tab == pc.Tab.GOALS, "7 opens Goals")
 	_key(KEY_8)
 	await _frames(2)
-	check(pc.tab == pc.Tab.SNAKE, "8 opens Snake")
+	check(pc.tab == pc.Tab.CALENDAR, "8 opens Calendar")
 	_key(KEY_9)
 	await _frames(2)
-	check(pc.tab == pc.Tab.ZOMTOK, "9 opens ZomTok")
+	check(pc.tab == pc.Tab.SNAKE, "9 opens Snake")
+	_key(KEY_0)
+	await _frames(2)
+	check(pc.tab == pc.Tab.ZOMTOK, "0 opens ZomTok")
 	var room: float = pc.screen.size.x
 	check(pc.taskbar.get_combined_minimum_size().x <= room + 1.0, "the taskbar still fits (%d of %d)" % [pc.taskbar.get_combined_minimum_size().x, room])
 	pc.close()
