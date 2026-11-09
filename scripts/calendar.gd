@@ -209,7 +209,7 @@ func from_dict(dict: Dictionary) -> void:
 			var v: Variant = dd[k]
 			if v is Dictionary and WEATHER.has(str(v.get("weather", ""))):
 				var e := str(v.get("event", ""))
-				days[int(k)] = {"weather": str(v.weather), "event": e if (EVENTS.has(e) or e == "moon") else "", "minute": int(v.get("minute", 0))}
+				days[int(k)] = {"weather": str(v.weather), "event": e if (EVENTS.has(e) or e in ["moon", "showdown"]) else "", "minute": int(v.get("minute", 0))}
 	started = int(dict.get("started", 0))
 	power_out = bool(dict.get("power_out", false))
 	boost = clampf(float(dict.get("boost", 1.0)), 0.5, 2.0)

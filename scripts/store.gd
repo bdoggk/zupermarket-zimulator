@@ -1709,7 +1709,7 @@ func _new_shopper() -> void:
 	var kind := Game.pick_shopper_kind()
 	var list := _make_shopping_list(kind)
 	var full := shoppers_inside() >= max_customers()
-	if town and not Game.war.rival_closed and (full or randf() < Game.rival_pull(list, kind)):
+	if town and not Game.war.rival_closed and not Game.war.taken_over and (full or randf() < Game.rival_pull(list, kind)):
 		town.send_to_rival(kind)
 		Game.record_lost()
 	elif not full:

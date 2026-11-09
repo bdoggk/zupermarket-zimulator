@@ -617,9 +617,13 @@ func _kind_of(n: Node) -> String:
 	if n is Sprite2D:
 		var tex: Texture2D = (n as Sprite2D).texture
 		return "wall" if tex and tex.resource_path.get_file().begins_with("wall_") else "skip"
+	if n is House or (n is Prop and not (n as Prop).textures.is_empty() and (n as Prop).textures[0] == Brand.CRYPT.texture):
+		return "building"  # (0.20: the south side's houses and Mr. Bones' crypt)
 	if n is Prop:
 		for t in (n as Prop).textures:
 			var f := t.resource_path.get_file()
+			if f.begins_with("prop_bench"):
+				return "bench"
 			if f.begins_with("wall_"):
 				return "wall"
 			if f.begins_with("shop_shelf"):
@@ -716,6 +720,10 @@ func _sync_thing(n: Node, m: Array) -> void:
 			built = _counter_model(n)
 		"car":
 			built = _car(n)
+		"building":
+			built = _building(n)
+		"bench":
+			built = _bench(n)
 		"fence":
 			built = _fence(n)
 		"sprite":
@@ -955,6 +963,54 @@ func _counter_model(n: Interactable) -> Node3D:
 		if c is Sprite3D:
 			c.rotation.y = -body.rotation.y  # (a billboard: this only undoes the turn)
 	return body
+
+
+## A house on the south side, or Mr. Bones' crypt (0.20): drawn from its
+## front corner cell over a few cells (Brand.HOUSES' "fp"), so in 3D it's a
+## block of that size with a stepped roof, its door and lit windows facing
+## the path in front (+z).
+func _building(n: Prop) -> Node3D:
+	var info: Dictionary = (n as House).info.get("fp", {}) if n is House else Brand.CRYPT.get("fp", {})
+	var size: Vector2i = info.get("size", Vector2i.ONE)
+	var h: float = info.get("height", 1.0)
+	var root := Node3D.new()
+	root.position = to_3d(n.position) + Vector3(-(size.x - 1) / 2.0, 0, -(size.y - 1) / 2.0)
+	var w := size.x - 0.08
+	var d := size.y - 0.08
+	FpModels.box(root, Vector3(w, h, d), Vector3.ZERO, info.walls)
+	var steps: int = info.get("steps", 3)
+	for k in steps:  # the roof: smaller and smaller slabs
+		var f := 1.0 - float(k) / steps
+		FpModels.box(root, Vector3(w * f + 0.16, h * 0.22, d * f + 0.16), Vector3(0, h + k * h * 0.22, 0), (info.roof as Color).darkened(0.06 * k))
+	var front_x := (size.x - 1) / 2.0  # the door's on the front cell
+	FpModels.box(root, Vector3(0.36, minf(0.85, h * 0.7), 0.05), Vector3(front_x, 0, d / 2.0 + 0.01), info.door, true)
+	var lit: Color = info.windows
+	if lit.a > 0.0:
+		for x in range(size.x - 1):  # windows along the front...
+			FpModels.glow_box(root, Vector3(0.22, 0.24, 0.04), Vector3(-w / 2.0 + 0.5 + x, h * 0.45, d / 2.0 + 0.01), lit)
+		for z in size.y:  # ...and the side
+			FpModels.glow_box(root, Vector3(0.04, 0.24, 0.22), Vector3(w / 2.0 + 0.01, h * 0.45, -d / 2.0 + 0.5 + z), lit)
+	return root
+
+
+## A park bench in the town square: a seat, a back and four legs, along the
+## way it's drawn (bench_0 runs along the map's y, bench_1 along x).
+func _bench(n: Prop) -> Node3D:
+	var root := Node3D.new()
+	root.position = to_3d(n.position)
+	var along_x := n.textures[0].resource_path.get_file().begins_with("prop_bench_1")
+	var long := Vector3(0.9, 0, 0) if along_x else Vector3(0, 0, 0.9)
+	var wood := Color(0.55, 0.39, 0.25)
+	var metal := Color(0.24, 0.24, 0.26)
+	var seat := Vector3(long.x + 0.3 * (0.0 if along_x else 1.0), 0.06, long.z + 0.3 * (1.0 if along_x else 0.0))
+	FpModels.box(root, seat, Vector3(0, 0.3, 0), wood, true)
+	var back_at := Vector3(0, 0.36, -0.13) if along_x else Vector3(-0.13, 0.36, 0)
+	FpModels.box(root, Vector3(seat.x if along_x else 0.05, 0.22, 0.05 if along_x else seat.z), back_at, wood.darkened(0.1), true)
+	for e in [-0.4, 0.4]:
+		for s in [-0.11, 0.11]:
+			var at := Vector3(e, 0, s) if along_x else Vector3(s, 0, e)
+			FpModels.box(root, Vector3(0.05, 0.3, 0.05), at, metal)
+	return root
 
 
 ## A wrecked car (FpModels.car): its sprite is drawn from its front cell,

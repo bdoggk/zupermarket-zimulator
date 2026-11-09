@@ -38,6 +38,26 @@ It's the zombie twin of **Supermarket Sim**, which lives in its own folder. The 
 games started from the same code; since version 0.8 Zupermarket Zimulator has a lot
 more in it (see "Two games" below).
 
+## What's new in 0.20.0
+
+A bigger town, something to do in it, and an ending to the gang war:
+- **The south side of town.** The map is half as big again: walk down the paths past the
+  road and there's a town square with a fountain, benches and a notice board, four houses
+  (Count Vlad's mansion, the witches' cottage, Ramses' tomb and the werewolves' den), and a
+  graveyard with Mr. Bones' family crypt. Some of the townsfolk come in from down there now.
+- **Special orders.** From store level 4 the notice board in the square has three orders a
+  morning from the houses ("Count Vlad wants 6 Blood Bottles, for a little dinner party").
+  Take up to two, carry a box of what they want to their door before 6 PM, and they pay
+  more than twice the market price, plus XP. Taken orders show under today's goals, and an
+  arrow at the edge of the screen points the way while you carry the right box.
+- **The showdown with Mr. Bones.** Win 3 raids on Bone Mart (or own 3 branches) and Mr.
+  Bones calls you out: 6 PM, at his crypt. He's a boss fight (40 health, a big slow swing,
+  two more of his gang come out when he's down to half), your gang comes to back you up
+  against his guards, and you can always run off out of the graveyard to get your breath
+  back. Beat him and **Bone Mart is yours**: no more raids or spies, his branches are yours,
+  and its takings come to you every night. The game goes on after that.
+- **A new daily goal** (deliver a special order) and two new trophies.
+
 ## What's new in 0.19.0
 
 Every day is a little different now:
@@ -812,6 +832,32 @@ summary tells you how many shoppers went there instead of you.
 Bone Mart isn't for sale. From store level 15 it's war instead (see **The gang war**
 below).
 
+**The south side.** Past the road, two paths lead south to the rest of the town: the town
+square (a fountain, benches, lamps and the **notice board**), four houses where some of
+your regulars live, and the graveyard with Mr. Bones' family crypt. Read the gravestones.
+
+### Special orders
+From **store level 4**, the notice board in the town square has three special orders every
+morning, each from one of the houses on the south side:
+
+| House | Who | Likes |
+|---|---|---|
+| Count Vlad's mansion | Count Vlad | what vampires buy |
+| The witches' cottage | the witches | what witches buy |
+| Ramses' tomb | Ramses | what mummies buy |
+| The werewolves' den | the werewolves | what werewolves buy |
+
+- Use the board to see them and take up to **two at a time**. Each wants 3 to 8 of one
+  product (a little more as the store grows, never more than a box).
+- Carry a box of it to the house (a delivery box, a box off a storage rack, or take the
+  stock off a shelf with empty hands) and use the door before **6 PM**.
+- They pay **2.2 times the market price, plus $20 and $5 a store level**, and 15 XP plus 3
+  for every item. It counts in the day's profit, and the summary lists it.
+- Orders you've taken are under today's goals ("Got them!" once you're carrying enough),
+  and while you carry a box of what someone ordered, an arrow at the edge of the screen
+  points to their house.
+- At 6 PM any you haven't delivered are off (no fine, just no money).
+
 ### Spies
 **Bone Mart's spies:** from day 2, Bone Mart sends a spy over once a day (twice from
 store level 3), at some time between 9 AM and 6:30 PM while you're open: a skeleton in
@@ -1115,6 +1161,23 @@ up down the street, then charge in together, and you can join the fight.
 - **A Bone Mart Express** (2 skeletons): win, and it's yours.
 - Lose, and your gang is out cold until tomorrow.
 
+**The showdown.** Once you've won **3 raids** on Bone Mart (or own **3 branches**), Mr.
+Bones has had enough. The next morning there's a note from him: tonight at **6 PM**, his
+family crypt in the graveyard (that's the day's event, and Bone Mart sends no raids that
+day). At 6 PM he comes out with two of his gang and your gang goes over to the graveyard
+to wait for you. Walk up to the crypt and it starts (the arrow at the edge of the screen
+points the way until then).
+- **Mr. Bones** has 40 health and hits for 2 with a big slow swing. Only you can hurt
+  him; your gang takes on his guards, and his guards leave you alone unless you hit them.
+  At half health he calls two more of his gang out of the crypt.
+- He won't leave the graveyard: run far enough away and he walks back to his crypt, so you
+  can get your health back and go again.
+- Knocked out, or didn't turn up before closing? He'll be waiting again the next night.
+- **Beat him and Bone Mart is yours**: no more raids, no more spies, no shoppers lost to
+  it, all of its branches become yours, and Bone Mart's takings ($1,000 plus $50 a store
+  level past 15) come to you every night on top of your branches'. You get 500 XP and the
+  Bone Breaker trophy ($5,000). The game carries on from there.
+
 ### The week: weather and events
 Day 1 is a Moanday; the week goes Moanday, Tombsday, Wednesdead, Thirstday, Frightday,
 Slaughterday, Sundead. Moanday is the quietest day (15% fewer shoppers), Slaughterday the
@@ -1152,7 +1215,7 @@ picked to suit your store: serve so many shoppers, take so much money, sell so m
 product (often one that's in demand), serve so many of one kind of shopper, make so many
 shoppers happy, mop up yourself, ring people up yourself, sell above market price, throw
 out a spy, license a product, hire someone, knock out skeletons or win a raid in the gang
-war, even a Snake score. A few can only be checked at closing time: close with nobody
+war, deliver a special order (from store level 4), even a Snake score. A few can only be checked at closing time: close with nobody
 walking out, with a clean floor, with a profit, or at a star rating. The numbers grow
 with your store level and with how yesterday went. Each goal pays cash and XP as soon as
 it's done. Do all three and it's a **Perfect Day**: a bonus at closing that's bigger for
@@ -1179,7 +1242,8 @@ month of days, 25 goals, a week of Perfect Days, 4 and 5 stars, 500 happy shoppe
 spotless close, mopping, spies, registers, staff, the lots next door, the hearse, paying
 off a loan, 15 vampires in a night, 50 skeletons knocked out, 5 raids won, owning the
 turf, a Snake score of 30, 50 likes on ZomTok, an A from the health inspector, 5 ghosts
-caught and a celebrity's 5-star post. Each pays cash once. Five of them
+caught, a celebrity's 5-star post, 10 special orders delivered and beating Mr. Bones.
+Each pays cash once. Five of them
 unlock a decoration (Build > Decor) that shoppers come to see:
 
 | Decoration | Trophy | Cost | What it does |

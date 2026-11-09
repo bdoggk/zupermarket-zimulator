@@ -9,6 +9,7 @@ const BuildBar := preload("res://scripts/ui/build_bar.gd")
 const RivalPanel := preload("res://scripts/ui/rival_panel.gd")
 const ShopPanel := preload("res://scripts/ui/shop_panel.gd")
 const RackPanel := preload("res://scripts/ui/rack_panel.gd")
+const OrdersPanel := preload("res://scripts/ui/orders_panel.gd")
 const STICK_ZOOM_EVERY := 0.18  # seconds between zoom steps while the right stick is held
 const Tutorial := preload("res://scripts/ui/tutorial.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
@@ -81,6 +82,9 @@ var computer: ComputerMenu
 var rival_panel: PanelContainer
 var shop_panel: PanelContainer  # a little shop's wares (the witch's, the vampire's)
 var rack_panel: PanelContainer  # which box to take off a storage rack
+var orders_panel: PanelContainer  # the notice board's special orders (0.20)
+var guide: Control  # an arrow at the edge of the screen: where to take an order, or the showdown (0.20)
+var levelup_hint: Label
 var message_log: MessageLog  # M / Back / Log: the recent messages
 var log_button: Button
 var _messages: Array = []  # on screen, oldest first: [label, seconds left, seconds shown]
@@ -142,6 +146,14 @@ func _ready() -> void:
 	root.add_child(shop_panel)
 	rack_panel = RackPanel.new()
 	root.add_child(rack_panel)
+	orders_panel = OrdersPanel.new()
+	root.add_child(orders_panel)
+	guide = Control.new()
+	guide.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	guide.set_anchors_preset(Control.PRESET_FULL_RECT)
+	guide.draw.connect(_draw_guide)
+	root.add_child(guide)
+	root.move_child(guide, 0)
 	effects_box = VBoxContainer.new()
 	effects_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	effects_box.add_theme_constant_override("separation", 4)
@@ -166,7 +178,7 @@ func _ready() -> void:
 	options.closed.connect(_on_options_closed)
 	# Panels keep the mouse to themselves: scrolling or clicking on a menu
 	# mustn't zoom the view or walk you somewhere behind it.
-	for panel: Control in [status_panel, tutorial, goals_panel, computer, rival_panel, shop_panel, rack_panel, build_bar, summary_panel, pause_menu, options, day_over_bar, levelup_panel, message_log]:
+	for panel: Control in [status_panel, tutorial, goals_panel, computer, rival_panel, shop_panel, rack_panel, orders_panel, build_bar, summary_panel, pause_menu, options, day_over_bar, levelup_panel, message_log]:
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	Game.message.connect(show_message)
@@ -182,9 +194,11 @@ func _ready() -> void:
 	Game.loan_defaulted.connect(_on_loan_defaulted)
 	Game.leveled_up.connect(_on_leveled_up)
 	Game.effects_changed.connect(_rebuild_effects)
-	Game.shop_requested.connect(func(_id): computer.close(); rival_panel.close(); rack_panel.close())
-	Game.rack_requested.connect(func(_r): computer.close(); rival_panel.close(); shop_panel.close())
-	Game.rival_requested.connect(func(): rack_panel.close())
+	Game.shop_requested.connect(func(_id): computer.close(); rival_panel.close(); rack_panel.close(); orders_panel.close())
+	Game.rack_requested.connect(func(_r): computer.close(); rival_panel.close(); shop_panel.close(); orders_panel.close())
+	Game.rival_requested.connect(func(): rack_panel.close(); orders_panel.close())
+	Game.orders_requested.connect(func(): computer.close(); rival_panel.close(); shop_panel.close(); rack_panel.close())
+	Game.war.taken.connect(_on_taken_over)
 	_rebuild_effects()
 	Game.build_mode.changed.connect(_on_build_changed)
 	first_person = FirstPerson.new()
@@ -245,7 +259,7 @@ func _process(delta: float) -> void:
 	message_box.visible = not paused and not summary_panel.visible and not message_log.visible and not levelup_panel.visible  # (it would show through, or run over it)
 	build_button.visible = not building and not summary_panel.visible and not paused
 	pause_button.visible = not building and not paused
-	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or rack_panel.visible or summary_panel.visible or message_log.visible
+	var menu_open: bool = computer.visible or rival_panel.visible or shop_panel.visible or rack_panel.visible or orders_panel.visible or summary_panel.visible or message_log.visible
 	Game.menu_open = menu_open or Game.cutscene  # (the arrow keys pick buttons, not walk you away)
 	# After closing you can keep working (stock, order, build...) until you
 	# press Space for the summary and the next day.
@@ -300,6 +314,11 @@ func _process(delta: float) -> void:
 	_center(rival_panel, s)
 	_center(shop_panel, s)
 	_center(rack_panel, s)
+	orders_panel.custom_minimum_size = Vector2(minf(860.0, s.x - 2 * MARGIN), minf(560.0, s.y - 2 * MARGIN))
+	_center(orders_panel, s)
+	guide.visible = not building and not paused and not menu_open and not summing_up and not Game.cutscene
+	if guide.visible:
+		guide.queue_redraw()
 	effects_box.visible = not effects_box.get_children().is_empty() and not paused
 	_place(effects_box, Vector2(s.x - effects_box.size.x - MARGIN, corner_box.position.y + corner_box.size.y + 8))
 	for id: String in _effect_rows:
@@ -392,6 +411,8 @@ func _back(or_pause := true) -> void:
 		shop_panel.close()
 	elif rack_panel.visible:
 		rack_panel.close()
+	elif orders_panel.visible:
+		orders_panel.close()
 	elif or_pause:
 		open_pause()
 
@@ -415,6 +436,7 @@ func open_pause() -> void:
 	rival_panel.close()
 	shop_panel.close()
 	rack_panel.close()
+	orders_panel.close()
 	pause_menu.open()
 
 
@@ -517,6 +539,7 @@ func open_computer() -> void:
 	rival_panel.close()
 	shop_panel.close()
 	rack_panel.close()
+	orders_panel.close()
 	computer.open()
 
 
@@ -652,10 +675,10 @@ func _build_levelup_panel() -> void:
 	levelup_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	levelup_scroll.add_child(levelup_list)
 	col.add_child(levelup_scroll)
-	var hint := UI.label("License products and buy upgrades at the store computer.", UI.DIM)
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.custom_minimum_size.x = 560
-	col.add_child(hint)
+	levelup_hint = UI.label("", UI.DIM)
+	levelup_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	levelup_hint.custom_minimum_size.x = 560
+	col.add_child(levelup_hint)
 	var ok := UI.button("Nice!", func(): levelup_panel.visible = false, Vector2(160, 52))
 	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(ok)
@@ -670,6 +693,25 @@ func _on_leveled_up(from_level: int, to_level: int) -> void:
 		for line in Game.unlocks_at(lv):
 			lines.append("  •  " + line)
 	levelup_title.text = "STORE LEVEL %d!" % to_level
+	levelup_hint.text = "License products and buy upgrades at the store computer."
+	_show_big_news(lines, LEVELUP_SECONDS)
+
+
+## Beat Mr. Bones (0.20): Bone Mart's yours. The game goes on.
+func _on_taken_over() -> void:
+	levelup_title.text = "BONE MART IS YOURS!"
+	var lines: Array[String] = [
+		"  •  Mr. Bones is beaten, and his store is yours.",
+		"  •  No more raids and no more spies: the gang war is over.",
+		"  •  Bone Mart's takings come to you every night ($%d tonight)." % int(Game.war.takeover_take()),
+		"  •  Its branches on the east side of town are yours too.",
+	]
+	levelup_hint.text = "You did it in %d days. The town is yours to run now: keep going for a bigger store, Perfect Days and the rest of the trophies (%d of %d)." \
+		% [Game.day, Game.trophies.count(), Brand.TROPHIES.size()]
+	_show_big_news(lines, 30.0)
+
+
+func _show_big_news(lines: Array[String], seconds: float) -> void:
 	levelup_list.text = "\n".join(lines)
 	# As tall as the list, up to most of the screen; then it scrolls.
 	var fs := levelup_list.get_theme_font_size("font_size")
@@ -679,7 +721,7 @@ func _on_leveled_up(from_level: int, to_level: int) -> void:
 	levelup_scroll.scroll_vertical = 0
 	levelup_panel.reset_size()
 	levelup_panel.visible = true
-	_levelup_left = LEVELUP_SECONDS
+	_levelup_left = seconds
 
 
 func _build_corner_buttons() -> void:
@@ -846,6 +888,7 @@ func _on_build_changed() -> void:
 		rival_panel.close()
 		shop_panel.close()
 		rack_panel.close()
+		orders_panel.close()
 
 
 func _show_popup(world_pos: Vector2, text: String, color: Color) -> void:
@@ -876,6 +919,57 @@ func _popup_label(text: String, color: Color) -> Label:
 	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	l.add_theme_font_size_override("font_size", 20 if is_touch else 16)
 	return l
+
+
+## Where to go, if anywhere (0.20): the house you're carrying an order for,
+## or Mr. Bones' crypt when he's waiting. [world position, icon] or [].
+func _guide_target() -> Array:
+	var p: Player = Game.player
+	var town: Town = Game.store.town if Game.in_game() else null
+	if not is_instance_valid(p) or town == null:
+		return []
+	if town.turf and town.turf.fight.get("kind", "") == "showdown" and not bool(town.turf.fight.engaged) and town.crypt_cell != Town.NO_CELL:
+		return [Iso.cell_to_world(town.crypt_door()), Brand.CALENDAR.events.showdown.icon]
+	if p.is_carrying():
+		for o: Dictionary in Game.orders.open_orders():
+			var h: House = town.houses.get(o.house)
+			if o.product == p.carry_product and h:
+				return [h.position, Game.icon(o.product)]
+	return []
+
+
+## Draws the guide: an arrow at the edge of the screen pointing the way
+## (nothing once it's on screen: the house's parcel bobs over its door).
+func _draw_guide() -> void:
+	if is_instance_valid(first_person) and first_person.active:
+		return
+	var t := _guide_target()
+	if t.is_empty():
+		return
+	var at := _world_to_ui(t[0])
+	var r := Rect2(Vector2.ZERO, root.size).grow(-40.0)
+	if r.has_point(at):
+		return
+	var mid := r.get_center()
+	var dir := (at - mid).normalized()
+	var k := INF  # how far along dir until the edge of r
+	if absf(dir.x) > 0.001:
+		k = minf(k, (r.size.x / 2.0) / absf(dir.x))
+	if absf(dir.y) > 0.001:
+		k = minf(k, (r.size.y / 2.0) / absf(dir.y))
+	var edge := mid + dir * k
+	var bob := sin(Time.get_ticks_msec() / 200.0) * 4.0
+	var tip := edge + dir * (18.0 + bob)
+	var side := Vector2(-dir.y, dir.x)
+	var pts := PackedVector2Array([tip, edge - dir * 8.0 + side * 16.0, edge - dir * 8.0 - side * 16.0])
+	guide.draw_colored_polygon(pts, Color(1.0, 0.82, 0.3))
+	guide.draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[0]]), Color(0.1, 0.08, 0.05), 2.0)
+	var icon: Texture2D = t[1]
+	if icon:
+		var sz := icon.get_size() * (2.0 if icon.get_width() <= 24 else 1.0)
+		var c := edge - dir * (34.0 + maxf(sz.x, sz.y) / 2.0)
+		guide.draw_circle(c, maxf(sz.x, sz.y) / 2.0 + 6.0, Color(0.08, 0.08, 0.1, 0.85))
+		guide.draw_texture_rect(icon, Rect2(c - sz / 2.0, sz), false)
 
 
 ## Where a spot in the store is, in the HUD's own units (which Options >
@@ -1015,7 +1109,8 @@ func _show_summary(s: Dictionary) -> void:
 		"Stock bought: $%.2f" % s.spent,
 		"Store upgrades: $%.2f" % s.invested,
 		("Wages (staff and gang): $%.2f" if Game.war.gang_size() > 0 else "Staff wages: $%.2f") % s.wages,
-		"Your branches made: $%.2f" % float(s.get("branches", 0.0)) if float(s.get("branches", 0.0)) > 0.0 else "--",
+		("Your branches and Bone Mart made: $%.2f" if Game.war.taken_over else "Your branches made: $%.2f") % float(s.get("branches", 0.0)) if float(s.get("branches", 0.0)) > 0.0 else "--",
+		"Special orders (%d): $%.2f" % [int(s.get("orders", 0)), float(s.get("orders_paid", 0.0))] if float(s.get("orders_paid", 0.0)) > 0.0 else "--",
 		"Taken from %s: $%.2f" % [Brand.RIVAL.name, float(s.get("looted", 0.0))] if float(s.get("looted", 0.0)) > 0.0 else "--",
 		"Robbed by %s's gang: $%.2f" % [Brand.RIVAL.name, float(s.get("robbed", 0.0))] if float(s.get("robbed", 0.0)) > 0.0 else "--",
 		"Profit: $%.2f" % s.profit,
@@ -1123,7 +1218,7 @@ static func _war_line(s: Dictionary) -> String:
 
 ## Your store reached level 15: the gang war starts with a cutscene.
 func _start_war_cutscene() -> void:
-	for panel in [computer, rival_panel, shop_panel, rack_panel]:
+	for panel in [computer, rival_panel, shop_panel, rack_panel, orders_panel]:
 		panel.close()
 	message_log.close()
 	visible = false
@@ -1187,13 +1282,21 @@ func _update_fight_panel(hidden: bool) -> void:
 	elif not fight.is_empty():
 		var target := int(fight.target)
 		var where: String = "your %s on %s" % [Brand.WAR.your_branch, GangWar.plot_name(target)]
-		if fight.kind == "defend":
+		if fight.kind == "showdown":
+			var boss: Variant = fight.get("boss")
+			if not bool(fight.engaged):
+				text = "%s is waiting at his crypt in the graveyard" % Brand.SHOWDOWN.name
+			elif is_instance_valid(boss):
+				text = "SHOWDOWN!  %s: %d/%d" % [Brand.SHOWDOWN.name, maxi(0, (boss as BossBones).hp), (boss as BossBones).max_hp]
+			else:
+				text = "SHOWDOWN!"
+		elif fight.kind == "defend":
 			text = "RAID! %s's gang is %s" % [Brand.RIVAL.name, "at your store" if target == GangWar.MAIN else "taking " + where]
 		else:
 			text = "Your gang is raiding %s" % (Brand.RIVAL.name if target == GangWar.MAIN else "%s on %s" % [Brand.WAR.bone_branch, GangWar.plot_name(target)])
 	fight_label.text = text
 	fight_label.visible = text != ""
-	UI.set_color(fight_label, UI.BAD if fight.get("kind", "defend") == "defend" or p.knocked_out > 0.0 else UI.WARN)
+	UI.set_color(fight_label, UI.BAD if fight.get("kind", "defend") in ["defend", "showdown"] or p.knocked_out > 0.0 else UI.WARN)
 	health_bar.queue_redraw()
 	var w := Game.war.weapon()
 	weapon_icon.texture = Brand.WAR.textures["icon_" + w]
@@ -1211,7 +1314,7 @@ func _on_loan_defaulted() -> void:
 		return
 	if is_instance_valid(first_person):
 		first_person.force_off()  # (he comes in the normal view)
-	for panel in [computer, rival_panel, shop_panel, rack_panel]:
+	for panel in [computer, rival_panel, shop_panel, rack_panel, orders_panel]:
 		panel.close()
 	summary_panel.visible = false
 	levelup_panel.visible = false

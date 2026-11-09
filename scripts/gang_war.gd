@@ -6,6 +6,12 @@ extends RefCounted
 ## gang, your weapons, today's raids, and whether Bone Mart is closed after
 ## your gang smashed it up. Game.war is the one in play; Turf
 ## (scripts/turf.gd) plays it out in town, and ui/war_cutscene.gd starts it.
+##
+## The end (0.20): once the war's going your way (SHOWDOWN_RAIDS raids won,
+## or SHOWDOWN_PLOTS plots), Mr. Bones calls you out to his crypt in the
+## graveyard (showdown "due": every evening until you win). Beat him and
+## Bone Mart is yours (taken_over): no more raids or spies, its branches
+## are yours, and its takings come to you every night.
 
 signal started  # the cutscene is over: it's war
 signal changed  # land, gang or weapons changed (the Turf app redraws)
@@ -13,6 +19,7 @@ signal plot_changed(i: int)  # plot i has a new owner (the town rebuilds it)
 signal raid_due(target: int)  # a Bone Mart gang sets off for your store (MAIN) or branch `target`
 signal raid_sent(target: int)  # you sent your gang to Bone Mart (MAIN) or its branch `target`
 signal rival_closed_changed  # Bone Mart closed (smashed up) or open again
+signal taken  # you beat Mr. Bones: Bone Mart is yours (0.20)
 
 const LEVEL := 15  # the store level the war starts at
 const MAIN := -1  # a raid on the main store (yours or Bone Mart's), not a branch
@@ -36,6 +43,11 @@ const ROB_MAX := 2500.0  # ...up to this
 const LOOT := 500.0  # what your gang takes from Bone Mart's till...
 const LOOT_PER_LEVEL := 50.0  # ...plus this for every store level past LEVEL
 const WIN_XP := 10.0  # for every skeleton you (or your gang) knock out
+const SHOWDOWN_RAIDS := 3  # raids won on Bone Mart before Mr. Bones calls you out...
+const SHOWDOWN_PLOTS := 3  # ...or plots of land you own
+const SHOWDOWN_MINUTE := 18 * 60  # he's at his crypt from 6 PM
+const TAKEOVER_TAKE := 1000.0  # Bone Mart's takings each night once it's yours...
+const TAKEOVER_TAKE_PER_LEVEL := 50.0  # ...plus this for every store level past LEVEL
 
 var on := false  # the war has started (the cutscene played)
 var pending := false  # the store reached LEVEL: the cutscene is waiting to play
@@ -46,6 +58,9 @@ var raids: Array = []  # today's raids on you: [[game minute, target]], soonest 
 var rival_closed := false  # Bone Mart is closed for the rest of today
 var bone_bought_day := 0  # when Bone Mart last bought land
 var bought_back := false  # you'd bought Bone Mart (before 0.13): Mr. Bones bought it back
+var showdown := ""  # "" (not yet), "due" (Mr. Bones is waiting for you tonight), "won"
+var taken_over := false  # you beat Mr. Bones: Bone Mart is yours
+var challenges := 0  # nights he's waited for you at his crypt
 var _next_id := 1
 
 
@@ -142,6 +157,8 @@ func set_plot(i: int, who: String) -> void:
 ## Bone Mart buys land: right away when the war starts, then every
 ## BONE_BUYS_EVERY days while there's any left.
 func _bone_buys(now := false) -> void:
+	if taken_over:
+		return
 	var free := free_plots()
 	if free.is_empty() or (not now and Game.day - bone_bought_day < BONE_BUYS_EVERY):
 		return
@@ -274,14 +291,65 @@ func morning() -> void:
 		Game.message.emit(Brand.WAR.bone_reopened)
 	_bone_buys()
 	roll_raids()
+	if showdown == "due" and Game.calendar.event() == "showdown":  # (plan_showdown: no raids today, he's saving his gang for it)
+		raids = []
+		Game.message.emit(Brand.SHOWDOWN.challenge if challenges <= 1 else Brand.SHOWDOWN.again)
 	changed.emit()
+
+
+# ---------------------------------------------------------------- the showdown (0.20)
+
+## The war's going your way: Mr. Bones wants to settle it himself.
+func showdown_ready() -> bool:
+	if not on or taken_over:
+		return false
+	var won := int(Game.career.get("raids", 0.0)) + int(Game.stats.get("raids_won", 0))
+	return won >= SHOWDOWN_RAIDS or owned_by(YOU).size() >= SHOWDOWN_PLOTS
+
+
+## Each morning while it's due (Game.start_next_day, before the day's
+## goals and the morning message): tonight's the showdown, instead of the
+## day's event. (morning() hands you his note.)
+func plan_showdown() -> void:
+	if showdown == "won" or not showdown_ready():
+		return
+	showdown = "due"
+	challenges += 1
+	var info := Game.calendar.day_info(Game.day)
+	info.event = "showdown"
+	info.minute = SHOWDOWN_MINUTE
+	Game.calendar.started = 0
+
+
+## You beat Mr. Bones: Bone Mart (and its branches) are yours.
+func showdown_won() -> void:
+	showdown = "won"
+	taken_over = true
+	raids = []
+	for i in plots.size():
+		if plots[i] == BONE:
+			set_plot(i, YOU)
+	if rival_closed:
+		rival_closed = false
+		rival_closed_changed.emit()
+	Game.message.emit(Brand.SHOWDOWN.won)
+	Game.message.emit(Brand.SHOWDOWN.takeover)
+	Game.calendar.outcome = "You beat Mr. Bones. Bone Mart is yours!"
+	Game.add_xp(500.0)
+	changed.emit()
+	taken.emit()
+
+
+## What Bone Mart sends you each night once it's yours.
+func takeover_take() -> float:
+	return TAKEOVER_TAKE + TAKEOVER_TAKE_PER_LEVEL * maxi(0, Game.level - LEVEL) if taken_over else 0.0
 
 
 ## Today's raids: one, or two once Bone Mart has a couple of branches, at
 ## random times while you're open.
 func roll_raids() -> void:
 	raids = []
-	if not on:
+	if not on or taken_over:
 		return
 	var count := 2 if owned_by(BONE).size() >= 2 else 1
 	var span := RAID_TO - RAID_FROM
@@ -404,7 +472,7 @@ func raid_lost() -> void:
 
 ## What your branches made today (added to your money at closing).
 func branch_income() -> float:
-	return branch_take() * owned_by(YOU).size() if on else 0.0
+	return branch_take() * owned_by(YOU).size() + takeover_take() if on else 0.0
 
 
 # ---------------------------------------------------------------- saving
@@ -412,7 +480,7 @@ func branch_income() -> float:
 func to_dict() -> Dictionary:
 	return {"on": on, "plots": plots.duplicate(), "gang": gang.duplicate(true), "weapons": weapons.keys(),
 		"raids": raids.duplicate(true), "closed": rival_closed, "bone_day": bone_bought_day, "next_id": _next_id,
-		"bought_back": bought_back}
+		"bought_back": bought_back, "showdown": showdown, "taken_over": taken_over, "challenges": challenges}
 
 
 func from_dict(d: Dictionary, level: int) -> void:
@@ -434,5 +502,8 @@ func from_dict(d: Dictionary, level: int) -> void:
 	rival_closed = bool(d.get("closed", false))
 	bone_bought_day = int(d.get("bone_day", 0))
 	bought_back = bool(d.get("bought_back", false))
+	showdown = str(d.get("showdown", "")) if str(d.get("showdown", "")) in ["", "due", "won"] else ""
+	taken_over = bool(d.get("taken_over", false))
+	challenges = int(d.get("challenges", 0))
 	pending = false
 	check_level(level)

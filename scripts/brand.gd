@@ -94,11 +94,32 @@ const TOWN := [
 	";;v;;;,,,,,,:,,,v,,,,,,,,,T,,,;;;;;;;;;,:,,;;;;;,,,;,,,,;,,,,;,,,,;B,,",
 	";;;;;;,,T,,,:,,,,,,,,T,,,,,,,,;;;;;v;;;,:,,;;;T;,,;,T,,;,,,,;v,,,;,,,,",
 	";;;;;;,,,,,,:,,,,,,,,,,,,,,,,,;;;;;;;;;,:,,;;;;;,;,,,,;,,,,;,,,,x,,,,;",
+	# the south side of town (0.20): the houses special orders go to (A I J L,
+	# their walls X), the square (its fountain F, benches E, notice board N)
+	# and the graveyard (gravestones G, Mr. Bones' crypt M)
+	",,,,;,,,,;;,:;,;;;,;;,,,;,;;;,;,;;;,,;;;:;;,,;;,,;;,,,,,;;,,;,,;,;,;,,",
+	",,T,;,;;,;;;_____________________________;;;,;;,;,;,,;T;,,,,,,,;;,;,;,",
+	",;,,;;;,,;v;:,,;,;l_______________l;;,;;:,,T,,;,;,;;,,,;,,,,,,v,,,,,;;",
+	",;,;XXX,,,;;:,;;T;___N_____________;;;v;:,,,;;,XXX;;v,;;,;,,;;;;,T;;,,",
+	";,,,XXX,;,;,:,;,,,________E________;T,,,:,;,,;;XXX;,;,,,;XX,,,;;;,;;;,",
+	";;;,XXA;;;,,:,,;;,_________________,,,;,:,;;;,,XXJ;,;,,;,XL,;;;,,,v,,;",
+	";;;;;;:::::::;;,;;_________________;;;,,:,,,;,,,;:;,,,,,,;:;;;,,;;,,T,",
+	";;,,;;;;,;;,:,;v,,_____E__F__E_____;;,,,:::::::::::::::::::,;,;;;;;,,;",
+	";,,v;;;;;,,,:,,,;,_________________;,,,,:,;,;,;,,;;,;,,,,,,,;;;;,;;,;;",
+	";,,;,,,;;T;,:,;,;;_________________;;,,,:;,,T,,,,,,,,,,,,,,,T,,,,,T,,,",
+	";,;,,,;;;,,,:,,;,;________E________;T,;,:,;,,,G,,G,,G,,G,,,,,,,G,,,,,,",
+	",,,;;XX,;,;,:,;;T,_________________,,,,;:;;,,,,,,,,,,,,,,,,,,,,,,,,;,,",
+	",,,;;XI,;;,,:,,,;;l_______________l;;,,;:,,,,,,,,,,,,,,,,,,,,,,,,,G,;,",
+	";;,,,;:::::::;,,;,;;,,,,,,,;,,,;,,;;,,,,:;,,,,G,,G,,G,,,,XXX,,,G,,,;,;",
+	";,,,,,,,,,;,:;;;;;,,,,;;,,;v;;;,,,,,T,;,:,,,,,,,,,,,,,,,,XXM,,,,,,,,;;",
+	";;T;,,,,,,;,:,T,,;,;,v;;,,;,,,T,;;,;,,,;:,;;,,,,,,,,,,,,,,,:,,,,,,,,,,",
+	",;;;,;,,,;;,:;;,;,;,;,;,,,;;;;,,,,,,,,;,:;,,T,G,,G,,,,,,,,,,,,,G,,,;,;",
+	",,;;,,;;;,;,:,,,;;,,,,;,,;,,;,,,,;;;,,;,:,;;;,;;;;;;,,;;,,,,;;,,,,;,;;",
 ]
 
 ## Where shoppers walk into town from (and leave by): the ends of the road
 ## and the paths at the bottom of the map.
-const TOWN_SPAWNS := [Vector2i(0, 15), Vector2i(0, 17), Vector2i(69, 15), Vector2i(69, 17), Vector2i(12, 31), Vector2i(40, 31)]
+const TOWN_SPAWNS := [Vector2i(0, 15), Vector2i(0, 17), Vector2i(69, 15), Vector2i(69, 17), Vector2i(12, 49), Vector2i(40, 49)]
 
 ## The lots next door (1, 2, 3 in TOWN), bought in Build mode. Each one
 ## makes the store 4 tiles wider.
@@ -839,6 +860,7 @@ const GOALS := {
 	"profit": "Close with a $%d profit",
 	"rating": "Close at %s stars or better",
 	"inspection": "Pass the health inspection (A or B)",
+	"deliver": "Deliver %d special order%s",
 	"catch_ghost": "Catch the ghost shoplifter",
 }
 
@@ -912,6 +934,8 @@ const TROPHIES := [
 	{"id": "clean_bill", "name": "Clean Bill of Health", "text": "Get an A from the health inspector", "stat": "inspections_a", "target": 1, "cash": 300.0},
 	{"id": "ghostbuster", "name": "Ghostbuster", "text": "Catch 5 ghost shoplifters", "stat": "ghosts", "target": 5, "cash": 400.0},
 	{"id": "viral", "name": "Gone Viral", "text": "Get a 5-star post from a celebrity", "stat": "viral", "target": 1, "cash": 500.0},
+	{"id": "courier", "name": "Special Delivery", "text": "Deliver 10 special orders", "stat": "orders", "target": 10, "cash": 400.0},
+	{"id": "bone_breaker", "name": "Bone Breaker", "text": "Beat Mr. Bones and take over Bone Mart", "stat": "takeover", "target": 1, "cash": 5000.0},
 ]
 
 ## Lighting. day/night: how dark it is away from the ceiling lights.
@@ -964,6 +988,10 @@ const CALENDAR := {
 			"says": "A ghost shoplifter's been seen in town. Watch your shelves after %s.",
 			"starts": "A ghost is sneaking in to steal from your shelves! Catch it.",
 			"does": "Ghosts steal from your shelves unless you catch them"},
+		"showdown": {"name": "Showdown with Mr. Bones", "icon": preload("res://assets/sprites/cal_bones.png"),
+			"says": "Mr. Bones is waiting at his crypt in the graveyard from %s.",
+			"starts": "Mr. Bones is at his crypt in the graveyard. Go settle this.",
+			"does": "Beat Mr. Bones at his crypt and Bone Mart is yours"},
 		"celeb": {"name": "Celebrity visit", "icon": preload("res://assets/sprites/cal_star.png"),
 			"says": "Mortimer Glam is coming to shop around %s. Make it a 5-star visit: millions of followers are watching.",
 			"starts": "Mortimer Glam just walked in! Everyone's filming.",
@@ -1007,3 +1035,65 @@ const GHOST_THIEF := {
 ## The tour bus (TourBus) and the fuse box (power cuts).
 const BUS_TEXTURE := preload("res://assets/sprites/event_bus.png")
 const FUSE_BOX := [preload("res://assets/sprites/fuse_box.png"), preload("res://assets/sprites/fuse_box_sparks.png")]
+
+
+# ---------------------------------------------------------------- the south side of town (0.20)
+
+## The houses on the south side (A I J L in TOWN), where special orders go
+## (SpecialOrders). "origin": where the middle of the building's front tile
+## is in its picture (tools/make_sprites.py prints it).
+const HOUSES := {
+	"A": {"id": "vlad", "who": "Count Vlad", "place": "Count Vlad's mansion", "kind": "vampire",
+		"texture": preload("res://assets/sprites/house_vlad.png"), "origin": Vector2(94, 195),
+		"fp": {"size": Vector2i(3, 3), "height": 2.3, "walls": Color(0.24, 0.22, 0.28), "roof": Color(0.13, 0.11, 0.15), "steps": 4, "windows": Color(0.95, 0.2, 0.2), "door": Color(0.3, 0.06, 0.08)},
+		"text": "Count Vlad's mansion. The curtains are always drawn."},
+	"I": {"id": "witches", "who": "the witches", "place": "the witches' cottage", "kind": "witch",
+		"texture": preload("res://assets/sprites/house_witches.png"), "origin": Vector2(64, 134),
+		"fp": {"size": Vector2i(2, 2), "height": 1.15, "walls": Color(0.45, 0.33, 0.22), "roof": Color(0.22, 0.45, 0.22), "steps": 3, "windows": Color(0.45, 1.0, 0.4), "door": Color(0.35, 0.18, 0.45)},
+		"text": "The witches' cottage. Something green is coming out of the chimney."},
+	"J": {"id": "mummy", "who": "Ramses", "place": "Ramses' tomb", "kind": "mummy",
+		"texture": preload("res://assets/sprites/house_mummy.png"), "origin": Vector2(94, 163),
+		"fp": {"size": Vector2i(3, 3), "height": 1.3, "walls": Color(0.78, 0.68, 0.43), "roof": Color(0.84, 0.74, 0.48), "steps": 4, "windows": Color(1.0, 0.75, 0.3), "door": Color(0.12, 0.1, 0.08)},
+		"text": "Ramses' tomb. A sign says: NO VISITORS (DELIVERIES OK)."},
+	"L": {"id": "wolf", "who": "the werewolves", "place": "the werewolves' den", "kind": "werewolf",
+		"texture": preload("res://assets/sprites/house_wolf.png"), "origin": Vector2(64, 112),
+		"fp": {"size": Vector2i(2, 2), "height": 1.0, "walls": Color(0.38, 0.26, 0.17), "roof": Color(0.28, 0.19, 0.12), "steps": 2, "windows": Color(1.0, 0.78, 0.35), "door": Color(0.2, 0.13, 0.08)},
+		"text": "The werewolves' den. Mind the claw marks."},
+}
+
+## Mr. Bones' family crypt in the graveyard (M in TOWN): where the showdown is.
+const CRYPT := {
+	"texture": preload("res://assets/sprites/crypt.png"), "origin": Vector2(95, 125.5),
+	"fp": {"size": Vector2i(3, 2), "height": 1.4, "walls": Color(0.5, 0.5, 0.53), "roof": Color(0.36, 0.36, 0.39), "steps": 2, "windows": Color(0, 0, 0, 0), "door": Color(0.05, 0.05, 0.06)},
+	"text": "Mr. Bones' family crypt. Something rattles inside.",
+}
+
+## Special orders on the notice board in the town square (SpecialOrders).
+const ORDERS := {
+	"board": "The notice board: special orders, delivered to the door",
+	"taken": "Order taken: %d %s for %s, by %s. Bring a box of them to %s.",
+	"done": "Delivered %d %s to %s! +$%s, +%d XP",
+	"late": "%s gave up waiting for their %s.",
+	"lines": {
+		"vlad": ["for a little dinner party", "the castle's run dry", "guests from Transylvania"],
+		"witches": ["for this week's potion", "the cauldron's hungry", "coven night"],
+		"mummy": ["for the afterlife", "3,000 years is a long time without", "for my cat"],
+		"wolf": ["full moon's coming", "the pack's starving", "pup's birthday"],
+	},
+	"icon": preload("res://assets/sprites/order.png"),
+}
+
+## The showdown with Mr. Bones (GangWar.showdown, Turf.start_showdown).
+const SHOWDOWN := {
+	"boss": preload("res://assets/sprites/boss_bones.png"),
+	"name": "Mr. Bones",
+	"challenge": "A note from Mr. Bones: \"You've taken enough from me. Tonight, 6 PM, my family crypt in the graveyard. Just you and me... and a couple of friends.\"",
+	"again": "Mr. Bones is waiting at his crypt again tonight from 6 PM.",
+	"starts": "Mr. Bones is at his crypt in the graveyard. Go settle this.",
+	"taunts": ["Is that all you've got?", "I'll grind you into bonemeal!", "Bone Mart forever!", "You call that a punch?"],
+	"lost": "Mr. Bones laughs: \"Come back when you've grown a backbone!\" He'll be waiting again tomorrow night.",
+	"no_show": "Mr. Bones waited at his crypt all night. He'll be there again tomorrow.",
+	"won": "Mr. Bones falls apart into a heap of bones! \"Fine... FINE! Bone Mart is yours!\"",
+	"takeover": "Bone Mart is yours! No more raids, no more spies, and its takings come to you every night.",
+	"takings": "Bone Mart's takings",
+}

@@ -5,7 +5,8 @@ extends Node2D
 ## (yours or Bone Mart's) with its shelves, counter and crew. And it plays
 ## out the fighting (Gangster): your gang standing guard outside your
 ## store, Bone Mart's gangs raiding your store or a branch, and your gang
-## raiding Bone Mart or one of its branches. One fight at a time.
+## raiding Bone Mart or one of its branches. One fight at a time. And the
+## showdown (0.20): Mr. Bones (BossBones) and his guards at his crypt.
 
 const NO_CELL := Vector2i(-1, -1)
 const TAKEOVER_SECONDS := 20.0  # Bone Mart's gang holding your branch's counter this long takes it
@@ -13,6 +14,9 @@ const RALLY_SECONDS := 10.0  # your gang waits this long at most for everyone be
 const FIGHT_LIMIT := 180.0  # seconds: a fight still going after this (someone stuck somewhere) just ends
 const VISIT_MIN := 10.0  # seconds between townsfolk shopping at a branch
 const VISIT_MAX := 22.0
+const SHOWDOWN_SIGHT := 7  # cells from Mr. Bones' crypt: walk this close and the showdown's on
+const SHOWDOWN_GUARDS := 2  # with him from the start (and two more when he's down to half)
+const SHOWDOWN_RALLY := Vector2i(-9, 1)  # from the crypt's door: where your gang waits for you (out of their sight)
 const SOUNDS := {
 	"punch": preload("res://assets/sounds/war_punch.wav"),
 	"nunchucks": preload("res://assets/sounds/war_nunchucks.wav"),
@@ -29,8 +33,9 @@ var plot_cells := {}  # every cell of every plot (and its sign) -> plot number
 var gangsters: Array[Gangster] = []  # everyone in the war who's out and about
 var members := {}  # your gang: GangWar id -> Gangster
 var guard_spots: Array[Vector2i] = []  # outside your store, where your gang hangs out
-## The fight going on, or {}: {kind: "defend" (Bone Mart raids you) or
-## "attack" (you raid it), target (GangWar.MAIN or a plot), bone: [Gangster],
+## The fight going on, or {}: {kind: "defend" (Bone Mart raids you),
+## "attack" (you raid it) or "showdown" (you and Mr. Bones, at his crypt:
+## boss, engaged, day), target (GangWar.MAIN or a plot), bone: [Gangster],
 ## downed (skeletons knocked out), done (robbed you or took your branch:
 ## they're leaving), takeover (seconds holding your branch's counter)}.
 var fight := {}
@@ -505,10 +510,14 @@ func on_knocked_out(g: Gangster, _by: Node2D) -> void:
 		Game.count("knockouts")
 
 
-## You hit one of Bone Mart's: the rest of them come for you.
-func bone_angry() -> void:
-	for g in enemies():
+## You hit one of Bone Mart's (`g`): the rest of them come for you. (At
+## the showdown, just that one: the rest are busy with your gang.)
+func bone_angry(g: Gangster = null) -> void:
+	if fight.get("kind", "") == "showdown" and g != null:
 		g.angry = true
+		return
+	for e in enemies():
+		e.angry = true
 
 
 func shelf_to_smash(g: Gangster) -> Shelf:
@@ -572,6 +581,9 @@ func raid_done(g: Gangster) -> void:
 
 ## You got knocked out in a fight: Bone Mart's gang helps itself to your till.
 func player_knocked_out() -> void:
+	if fight.get("kind", "") == "showdown":
+		_showdown_over(Brand.SHOWDOWN.lost)
+		return
 	Game.message.emit(Brand.WAR.knocked_out)
 	if raid_on_store() and not bool(fight.done):
 		fight.done = true
@@ -637,13 +649,16 @@ func _run_fight(delta: float) -> void:
 	var bone: Array = (fight.bone as Array).filter(func(g): return is_instance_valid(g))
 	fight.bone = bone
 	fight.t = float(fight.get("t", 0.0)) + delta
-	if float(fight.t) > FIGHT_LIMIT:
+	if float(fight.t) > FIGHT_LIMIT and fight.kind != "showdown":
 		for g: Gangster in bone:
 			if not g.is_out():
 				g.vanish()
 		_end_fight()
 		return
 	var standing := bone.filter(func(g): return not g.is_out())
+	if fight.kind == "showdown":
+		_run_showdown(standing)
+		return
 	if fight.kind == "defend":
 		var target := int(fight.target)
 		if target != GangWar.MAIN and not bool(fight.done):
@@ -693,6 +708,109 @@ func _end_fight() -> void:
 			m.holding = false
 			m.hp = m.max_hp  # (patched up on the way back)
 			m.go_home(m.home)
+
+
+# ---------------------------------------------------------------- the showdown (0.20)
+
+## Mr. Bones and a couple of his gang wait at his crypt (GangWar.showdown).
+## False if a fight's on (DayEvents tries again once it's over).
+func start_showdown() -> bool:
+	if Game.war.taken_over or town.crypt_cell == NO_CELL:
+		return true  # (nothing to wait for)
+	if fighting():
+		return false
+	var at := town.crypt_door()
+	fight = {"kind": "showdown", "target": GangWar.MAIN, "bone": [], "downed": 0, "done": false, "takeover": 0.0,
+		"engaged": false, "boss": null, "day": Game.day}
+	var boss := BossBones.new()
+	boss.setup(store, self, Gangster.BONE, str(Brand.SHOWDOWN.name), Brand.SHOWDOWN.boss, at)
+	boss.make_boss()
+	store.world.add_child(boss)
+	store.movers.append(boss)
+	gangsters.append(boss)
+	boss.job = Gangster.Job.DEFEND
+	boss.spot = _spot_near(at + Vector2i(0, 1), 0)
+	boss.home = at
+	fight.bone.append(boss)
+	fight.boss = boss
+	for k in SHOWDOWN_GUARDS:
+		_showdown_guard(k + 1)
+	var k := 0
+	for m: Gangster in members.values():  # your gang heads over to back you up (they wait for you)
+		if is_instance_valid(m) and not m.is_out():
+			m.job = Gangster.Job.GUARD
+			m.spot = _spot_near(at + SHOWDOWN_RALLY, k)
+			k += 1
+	if k > 0:
+		Game.message.emit("Your gang heads to the graveyard to back you up.")
+	return true
+
+
+func _showdown_guard(k: int) -> Gangster:
+	var names: Array = Brand.WAR.bone_names
+	var looks: Array = Brand.WAR.textures.bone_gang
+	var at := town.crypt_door()
+	var g := _spawn(Gangster.BONE, str(names[k % names.size()]), looks[k % looks.size()], at)
+	g.job = Gangster.Job.DEFEND
+	g.spot = _spot_near(at + Vector2i(0, 1), k)
+	g.home = at
+	g.angry = false
+	g.leaves_you = true  # (they go for your gang, and you only once you hit them: you're his)
+	fight.bone.append(g)
+	return g
+
+
+## Mr. Bones is down to half: two more of his gang come out of the crypt.
+func boss_summons(_boss: BossBones) -> void:
+	if fight.get("kind", "") != "showdown":
+		return
+	Game.show_popup(Iso.cell_to_world(town.crypt_door()) + Vector2(0, -50), "BOYS! GET OUT HERE!", Color(0.95, 0.92, 0.8))
+	for k in 2:
+		_showdown_guard(k + 4)
+
+
+func _run_showdown(standing: Array) -> void:
+	var boss: BossBones = fight.boss if is_instance_valid(fight.boss) else null
+	if int(fight.day) != Game.day:  # (a new day: he's gone home)
+		_showdown_over("")
+		return
+	if boss == null or boss.is_out():  # (null: he went down and faded away)
+		if not bool(fight.done):
+			fight.done = true
+			Settings.vibrate(1.0, 0.6)
+			play("crack", boss.position if boss else Iso.cell_to_world(town.crypt_door()))
+			for g: Gangster in standing:
+				g.go_home(town.crypt_door())
+			Game.war.showdown_won()
+		_end_fight()
+		return
+	if not bool(fight.engaged):
+		var p: Player = store.player
+		var near := p and p.knocked_out <= 0.0 and Iso.chebyshev(p.current_cell(), town.crypt_cell) <= SHOWDOWN_SIGHT
+		if near or standing.any(func(g): return g.angry):  # (walked up, or took a shot from further off)
+			fight.engaged = true
+			Game.message.emit("%s: \"So you came. Let's dance.\"" % Brand.SHOWDOWN.name)
+			if boss:
+				boss.angry = true
+			var k := 0
+			for m: Gangster in members.values():  # your gang's got your back (Mr. Bones' guards are theirs)
+				if is_instance_valid(m) and not m.is_out():
+					m.job = Gangster.Job.RESPOND
+					m.spot = _spot_near(town.crypt_door() + Vector2i(0, 2), k)
+					k += 1
+		elif Game.day_over:
+			_showdown_over(Brand.SHOWDOWN.no_show)
+
+
+## The showdown's over without a win (you got knocked out, didn't come, or
+## the day ended): Mr. Bones and his gang go back into the crypt.
+func _showdown_over(say: String) -> void:
+	if say != "":
+		Game.message.emit(say)
+	for g: Gangster in (fight.get("bone", []) as Array):
+		if is_instance_valid(g) and not g.is_out():
+			g.vanish()
+	_end_fight()
 
 
 # ---------------------------------------------------------------- the rest

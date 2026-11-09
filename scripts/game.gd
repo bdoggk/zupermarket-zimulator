@@ -37,6 +37,7 @@ signal tutorial_changed
 signal goal_done(goal: Dictionary)  # one of today's goals is done (its reward's paid)
 signal trophy_earned(trophy: Dictionary)
 signal event_started(event: String)  # today's event (Calendar, DayEvents) just started
+signal orders_requested  # used the notice board (0.20): the HUD shows today's special orders
 
 const OPEN_MINUTE := 8 * 60
 const CLOSE_MINUTE := 20 * 60
@@ -172,6 +173,7 @@ var trophies := Trophies.new()
 ## you_cleaned, knockouts, zt_likes, spies, raids, clean_closes, loans_repaid.
 var career := {}
 var calendar := Calendar.new()  # the week: weekdays, weather, the day's event (0.19)
+var orders := SpecialOrders.new()  # special orders from the notice board (0.20)
 var _goal_tick := 0.0
 var rival_factor := {}  # product id -> the rival's price today / market price
 var rival_deal := ""  # the rival's deal of the day
@@ -244,6 +246,7 @@ func reset() -> void:
 	trophies = Trophies.new()
 	career = {}
 	calendar = Calendar.new()
+	orders = SpecialOrders.new()
 	_connect_goals()
 	rival_seen = {}
 	rival_spies = []
@@ -280,6 +283,7 @@ func _process(delta: float) -> void:
 		_goal_tick = 0.5
 		goals.check()
 		trophies.check()
+		orders.tick()
 	if not is_open:
 		return
 	minute += delta / SECONDS_PER_GAME_MINUTE
@@ -615,6 +619,8 @@ func scout_rival(ids: Array) -> void:
 func rival_pull(list: Array, kind: Dictionary) -> float:
 	if war.rival_closed or has_effect("stake"):
 		return 0.0  # your gang smashed it up today, or there's a stake in its door
+	if war.taken_over:
+		return 0.0  # (Bone Mart's yours: nobody goes over there instead, 0.20)
 	var pull: float = Brand.RIVAL.share + float(kind.get("rival", 0.0)) + war.rival_pull_change()
 	if not list.is_empty():
 		var diff := 0.0
@@ -640,7 +646,7 @@ func rival_pull(list: Array, kind: Dictionary) -> float:
 ## while it's closed). Called each morning.
 func roll_rival_spies() -> void:
 	rival_spies = []
-	if war.rival_closed or Brand.RIVAL.is_empty() or day < int(Brand.RIVAL.get("spy_from_day", 1 << 20)):
+	if war.rival_closed or war.taken_over or Brand.RIVAL.is_empty() or day < int(Brand.RIVAL.get("spy_from_day", 1 << 20)):
 		return
 	var per_day: Array = Brand.RIVAL.get("spies_per_day", [1, 1])
 	var count: int = per_day[1] if level >= 3 else per_day[0]
@@ -1173,7 +1179,7 @@ func record_checkout(c: Customer, by_you: bool) -> void:
 
 ## Today's profit so far (what the day's summary will say, before wages).
 func profit_today() -> float:
-	return float(stats.revenue) + float(stats.branches) + float(stats.looted) - float(stats.spent) - float(stats.invested) - float(stats.wages) - float(stats.robbed)
+	return float(stats.revenue) + float(stats.branches) + float(stats.looted) + float(stats.get("orders_paid", 0.0)) - float(stats.spent) - float(stats.invested) - float(stats.wages) - float(stats.robbed)
 
 
 ## Something today counts toward a goal or a trophy (Game.stats key).
@@ -1468,7 +1474,7 @@ func to_dict() -> Dictionary:
 		"rival": {"factor": rival_factor, "deal": rival_deal, "seen": rival_seen, "spies": rival_spies},
 		"war": war.to_dict(),
 		"goals": goals.to_dict(), "rating": rating.to_dict(), "trophies": trophies.to_dict(), "career": career,
-		"calendar": calendar.to_dict(),
+		"calendar": calendar.to_dict(), "orders": orders.to_dict(),
 		"tutorial": tutorial.keys(), "tutorial_hidden": tutorial_hidden, "effects": effects, "loan": loan,
 		"market": {"factor": market.factor, "previous": market.previous, "demand": market.demand, "news": market.news},
 	}
@@ -1552,6 +1558,7 @@ func from_dict(d: Dictionary) -> void:
 			career[key] = maxf(0.0, float(cr[key]))  # (all counts and money: numbers)
 	calendar.from_dict(d.get("calendar", {}))
 	calendar.fill_week()
+	orders.from_dict(d.get("orders", {}))
 	goals.roll()  # (a save from before goals, or from yesterday)
 	if bool(r.get("owned", false)):  # from when you could buy Bone Mart: Mr. Bones buys it back
 		money += float(Brand.RIVAL.old_buyout)
@@ -1676,7 +1683,7 @@ func _end_of_day_career() -> void:
 	career.spies = float(career.get("spies", 0.0)) + float(stats.get("spies_caught", 0))
 	career.raids = float(career.get("raids", 0.0)) + float(stats.get("raids_won", 0))
 	career.ghosts = float(career.get("ghosts", 0.0)) + float(stats.get("ghosts_caught", 0))  # (0.19)
-	for key in ["inspections_a", "viral", "tourists", "fuses_fixed"]:
+	for key in ["inspections_a", "viral", "tourists", "fuses_fixed", "orders"]:
 		career[key] = float(career.get(key, 0.0)) + float(stats.get(key, 0))
 	if in_game() and store.spills.is_empty() and int(stats.customers) >= 30:
 		career.clean_closes = float(career.get("clean_closes", 0.0)) + 1.0
@@ -1706,8 +1713,10 @@ func start_next_day() -> void:
 	day_over = false
 	roll_rival_prices()
 	roll_rival_spies()
-	goals.roll()
 	calendar.morning()
+	war.plan_showdown()  # (before the goals and the morning message: it's tonight's event)
+	orders.roll()  # (before the goals: one may be to deliver an order)
+	goals.roll()
 	day_started.emit(day)
 	var today := calendar.morning_text()
 	message.emit((Brand.SAY.morning % day).replace("Day %d." % day, Calendar.day_name(day) + ".") + (" " + today if today != "" else ""))
@@ -1751,4 +1760,5 @@ func _reset_stats() -> void:
 		# goals, the rating and trophies (0.18):
 		"sold": {}, "served_kinds": {}, "over_market": 0, "you_rang": 0, "you_cleaned": 0, "knockouts": 0,
 		"licenses": 0, "decor_bought": 0, "hired": 0, "zt_likes": 0, "snake": 0, "goals_done": 0, "goal_cash": 0.0,
-		"ratings": 0, "stars_sum": 0.0, "happy": 0, "unhappy": 0, "why": {}}
+		"ratings": 0, "stars_sum": 0.0, "happy": 0, "unhappy": 0, "why": {},
+		"orders": 0, "orders_paid": 0.0}  # (0.20)

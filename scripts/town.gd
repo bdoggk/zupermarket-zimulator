@@ -39,7 +39,8 @@ const GROUND := {
 	"e": ["ground_bone_mat"],
 }
 ## What's on the ground under things that stand on a fixed kind of floor.
-const UNDER := {"l": "_", "h": "_", "S": "_", "C": "=", "c": "=", "s": "b", "r": "b", "m": "b", "p": "b", "k": "b"}
+const UNDER := {"l": "_", "h": "_", "S": "_", "C": "=", "c": "=", "s": "b", "r": "b", "m": "b", "p": "b", "k": "b",
+	"F": "_", "E": "_", "N": "_", "G": ",", "X": ",", "A": ",", "I": ",", "J": ",", "L": ",", "M": ","}
 const FENCE_X := preload("res://assets/sprites/prop_fence_x.png")
 const FENCE_Y := preload("res://assets/sprites/prop_fence_y.png")
 const FOR_SALE := preload("res://assets/sprites/prop_for_sale.png")
@@ -59,6 +60,7 @@ var rival_desk: RivalDesk
 var rival_sign: Prop
 var owner_cell := NO_CELL
 var rival_staff: Array[Wanderer] = []
+var rival_owner: Wanderer  # Mr. Bones behind his counter (until you beat him)
 var walkers: Array[Wanderer] = []  # shoppers going to the rival, shamblers
 var lamps: Array[PointLight2D] = []
 var fires: Array[PointLight2D] = []
@@ -76,6 +78,10 @@ var _vampires: Array[Wanderer] = []  # out for the night
 var _vampires_out := false
 var folk: Array[Wanderer] = []  # townsfolk with a kind (meta "kind": a Brand.SHOPPERS key): they talk
 var turf: Turf  # the land east of Bone Mart and the gang war (P in the map)
+var houses := {}  # Brand.HOUSES id -> House (the south side, 0.20)
+var notice_board: NoticeBoard  # in the town square: special orders
+var crypt_cell := NO_CELL  # Mr. Bones' crypt (M), where the showdown is
+var fountain: Prop
 var _talk_timer := 6.0
 var _clock := 0.0
 
@@ -166,6 +172,31 @@ func build(s: Store) -> void:
 					var pot := _prop(cell, ["prop_cauldron"], "Something green is bubbling in the cauldron.")
 					fires.append(pot.add_light(Color(0.45, 1.0, 0.4), Vector2(0, -14), 0.8, 1.6))
 					pot.flicker = true
+				"X":
+					store._make_solid(cell)  # (inside a house or the crypt: drawn from its front tile)
+				"A", "I", "J", "L":
+					var h := House.new(Brand.HOUSES[ch])
+					h.tall = true
+					_place(h, cell, true)
+					houses[h.id] = h
+				"M":
+					var crypt := Prop.new([Brand.CRYPT.texture], str(Brand.CRYPT.text))
+					crypt.origin = Brand.CRYPT.origin
+					crypt.tall = true
+					_place(crypt, cell, true)
+					crypt_cell = cell
+				"F":
+					fountain = _prop(cell, ["prop_fountain"], "The town fountain. The water is a worrying shade of red.")
+					fires.append(fountain.add_light(Color(1.0, 0.35, 0.3), Vector2(0, -10), 0.5, 1.8))
+				"E":
+					_prop(cell, [variant("prop_bench_%d", 2, cell)], "A bench. Someone has carved \"R.I.P.\" into it.")
+				"N":
+					notice_board = NoticeBoard.new()
+					notice_board.origin = Vector2(24, 66)
+					_place(notice_board, cell, true)
+				"G":
+					var grave := _prop(cell, [variant("prop_grave_%d", 3, cell)], _epitaph(cell))
+					grave.origin = Vector2(16, 35)
 	_build_lots()
 	if not plot_cells.is_empty():
 		turf = Turf.new()
@@ -277,11 +308,13 @@ static func counter_step(info: Dictionary) -> int:
 func start() -> void:
 	Game.day_started.connect(func(_d): refresh_rival_stock())
 	Game.war.rival_closed_changed.connect(_on_rival_closed_changed)
+	Game.war.taken.connect(_on_taken_over)
 	Game.rival_spy_sent.connect(send_rival_spy)
 	Settings.changed.connect(_apply_settings)
 	refresh_rival_stock()
 	if not Game.war.rival_closed:
 		_hire_rival_staff()
+	_update_rival_sign()
 	for id: String in _keeper_cells:
 		var keeper := _walker(Brand.SHOPS[id].keeper_look, _keeper_cells[id], [], 1.0)
 		keeper.stay = true
@@ -539,13 +572,14 @@ func add_ground_tiles(layer: FloorLayer) -> void:
 # ---------------------------------------------------------------- the rival
 
 func _hire_rival_staff() -> void:
-	if owner_cell != NO_CELL:
+	if owner_cell != NO_CELL and not Game.war.taken_over:  # (once you've beaten him, he's off it)
 		var boss := _walker(Brand.RIVAL.textures.owner, owner_cell, [], 1.0)
 		boss.stay = true
 		boss.modulate.a = 1.0
 		if rival_desk:
 			boss.face(rival_desk.position)
 		rival_staff.append(boss)
+		rival_owner = boss
 	var stops := []
 	for sh in rival_shelves:
 		var c := store.stand_cell_for(sh.cell, sh.cell)
@@ -732,7 +766,43 @@ func _on_rival_closed_changed() -> void:
 	elif rival_staff.is_empty():
 		_hire_rival_staff()
 	refresh_rival_stock()
-	if rival_sign:
+	_update_rival_sign()
+
+
+func _update_rival_sign() -> void:
+	if not rival_sign:
+		return
+	var closed := Game.war.rival_closed
+	if Game.war.taken_over:
+		rival_sign.textures = [Brand.RIVAL.textures.sign_sold]
+		rival_sign.prompt = "Bone Mart: under new management (yours). Its takings come to you every night."
+	else:
 		rival_sign.textures = [Brand.RIVAL.textures.sign_closed if closed else Brand.RIVAL.textures.sign]
 		rival_sign.prompt = "Closed for the day: your gang smashed it up!" if closed else Brand.RIVAL.slogan
-		rival_sign.queue_redraw()
+	rival_sign.queue_redraw()
+
+
+## You beat Mr. Bones: he's off behind his counter, and the sign says SOLD.
+func _on_taken_over() -> void:
+	if is_instance_valid(rival_owner):
+		rival_owner.leave()
+		rival_owner.stops = [[rival_door, 0.0], [spawns.pick_random(), 0.0]]
+		rival_staff.erase(rival_owner)
+	rival_owner = null
+	_update_rival_sign()
+
+
+## The cell in front of Mr. Bones' crypt (where he and his gang come out).
+func crypt_door() -> Vector2i:
+	return crypt_cell + Vector2i(0, 1) if crypt_cell != NO_CELL else NO_CELL
+
+
+const EPITAPHS := [
+	"Here lies Bob. He's fine, really. Just resting.", "R.I.P. Gertrude. Back in five minutes.",
+	"Here lies a Bone Mart shopper. Should've gone to Zupermarket.", "Dug up for the third time. Sorry.",
+	"Here lies Steve. He ate the expired milk.", "Gone but not forgotten. Back on Sundead.",
+]
+
+
+static func _epitaph(cell: Vector2i) -> String:
+	return "A gravestone: \"%s\"" % EPITAPHS[_hash(cell) % EPITAPHS.size()]

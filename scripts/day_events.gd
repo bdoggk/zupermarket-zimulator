@@ -37,6 +37,7 @@ const SOUNDS := {
 
 var store: Store
 var _ghost_due := -1.0  # game minute the second ghost comes (-1: none)
+var _showdown_wait := false  # a gang fight was on at showdown time: Mr. Bones comes out once it's over
 var _power_off_at := 0.0  # game minute the power went off
 
 
@@ -56,6 +57,8 @@ func _process(_delta: float) -> void:
 	if _ghost_due >= 0.0 and Game.is_open and Game.minute >= _ghost_due:
 		_ghost_due = -1.0
 		send_ghost()
+	if _showdown_wait and store.town and store.town.turf and not store.town.turf.fighting():
+		_showdown_wait = not store.town.turf.start_showdown()
 
 
 ## Starts event `e` now.
@@ -81,6 +84,10 @@ func start(e: String) -> void:
 		"moon":
 			cal.outcome = "A full moon brought out the werewolves and vampires."
 			play("howl")
+		"showdown":
+			var town := store.town
+			if town and town.turf:
+				_showdown_wait = not town.turf.start_showdown()
 	Game.event_started.emit(e)
 
 
@@ -270,5 +277,6 @@ func play(sound: String) -> void:
 ## A new day: nothing's due from yesterday.
 func morning() -> void:
 	_ghost_due = -1.0
+	_showdown_wait = false
 	if Game.calendar.power_out:
 		restore_power("The power's back on.")

@@ -4593,6 +4593,366 @@ def events_content():
     save(calendar_app_icon(), "pc_app_calendar")
 
 
+# --------------------------------------------------------------------------
+# The south side of town (0.20): houses, the square, the graveyard, Mr. Bones
+# --------------------------------------------------------------------------
+# ---- buildings: an iso box w x d tiles, its anchor (origin) the middle of
+# ---- its front tile (the bottom corner of the footprint)
+
+def _bld_fill(img, pts, color, ox, oy, pattern=None):
+    xs = [p[0] + ox for p in pts]
+    ys = [p[1] + oy for p in pts]
+    poly = [(p[0] + ox, p[1] + oy) for p in pts]
+    px = img.load()
+    for y in range(max(0, int(min(ys))), min(img.height, int(max(ys)) + 1)):
+        for x in range(max(0, int(min(xs))), min(img.width, int(max(xs)) + 1)):
+            if _in_poly(x + 0.5, y + 0.5, poly):
+                c = pattern(x, y, color) if pattern else color
+                if c is not None:
+                    px[x, y] = solid(c) if len(c) == 3 else c
+
+
+def _bld_footprint(w, d):
+    """The corners of a w x d footprint around anchor (0, 0): top, right, bottom, left."""
+    top = ((-(w - 1) + (d - 1)) * 32, (-(w - 1) - (d - 1)) * 16 - 16)
+    right = ((d - 1) * 32 + 32, -(d - 1) * 16)
+    bottom = (0, 16)
+    left = (-(w - 1) * 32 - 32, -(w - 1) * 16)
+    return top, right, bottom, left
+
+
+def _bld_up(p, h):
+    return (p[0], p[1] - h)
+
+
+def _bld_box(w, d, height, wall, roof, roof_h, style="pyramid", inset=4, pad_top=0, brick=None, sides=None):
+    """Draws the box and its roof. Returns (img, ox, oy, corners) so details
+    can be added: corners are the footprint's (top, right, bottom, left)."""
+    t, r, b, l = _bld_footprint(w, d)
+    # pull the walls in a little from the tile edges
+    cx = (t[0] + b[0]) / 2
+    cy = (t[1] + b[1]) / 2
+    shrink = lambda p: (p[0] + (cx - p[0]) * inset / 64, p[1] + (cy - p[1]) * inset / 64)
+    t, r, b, l = shrink(t), shrink(r), shrink(b), shrink(l)
+    width = int(r[0] - l[0]) + 8
+    top_y = t[1] - height - roof_h - pad_top
+    img = new(width, int(b[1] - top_y) + 6)
+    ox = -l[0] + 4
+    oy = -top_y + 2
+    pat_l = (lambda x, y, c: brick(x, y, c, "left")) if brick else None
+    pat_r = (lambda x, y, c: brick(x, y, c, "right")) if brick else None
+    _bld_fill(img, [l, b, _bld_up(b, height), _bld_up(l, height)], shade(wall, 0.92), ox, oy, pat_l)  # the left face
+    _bld_fill(img, [b, r, _bld_up(r, height), _bld_up(b, height)], shade(wall, 0.72), ox, oy, pat_r)  # the right face
+    T, R, B, L = _bld_up(t, height), _bld_up(r, height), _bld_up(b, height), _bld_up(l, height)
+    if style == "pyramid":
+        peak = ((T[0] + B[0]) / 2, (T[1] + B[1]) / 2 - roof_h)
+        _bld_fill(img, [T, R, peak], shade(roof, 0.62), ox, oy)
+        _bld_fill(img, [T, L, peak], shade(roof, 0.82), ox, oy)
+        _bld_fill(img, [L, B, peak], shade(roof, 1.0), ox, oy)
+        _bld_fill(img, [B, R, peak], shade(roof, 0.74), ox, oy)
+    elif style == "gable":  # the ridge runs along x (left to right on screen: from L-B mid to T-R mid)
+        a = ((L[0] + T[0]) / 2, (L[1] + T[1]) / 2 - roof_h)  # ridge ends
+        z = ((B[0] + R[0]) / 2, (B[1] + R[1]) / 2 - roof_h)
+        _bld_fill(img, [T, R, z, a], shade(roof, 0.7), ox, oy)
+        _bld_fill(img, [L, B, z, a], shade(roof, 1.0), ox, oy)
+        _bld_fill(img, [B, R, z], shade(wall, 0.72), ox, oy)  # the gable end
+    elif style == "flat":
+        _bld_fill(img, [T, R, B, L], shade(roof, 1.0), ox, oy)
+        lip = 3
+        _bld_fill(img, [L, B, _bld_up(B, lip), _bld_up(L, lip)], shade(roof, 0.85), ox, oy)
+        _bld_fill(img, [B, R, _bld_up(R, lip), _bld_up(B, lip)], shade(roof, 0.7), ox, oy)
+    return img, ox, oy, (t, r, b, l)
+
+
+def _bld_on_face(p0, p1, along, h):
+    """A point `along` (0..1) from p0 to p1 on a wall face, `h` up."""
+    return (p0[0] + (p1[0] - p0[0]) * along, p0[1] + (p1[1] - p0[1]) * along - h)
+
+
+def _bld_quad(p0, p1, a0, a1, h0, h1):
+    return [_bld_on_face(p0, p1, a0, h0), _bld_on_face(p0, p1, a1, h0), _bld_on_face(p0, p1, a1, h1), _bld_on_face(p0, p1, a0, h1)]
+
+
+def _bld_door(img, ox, oy, corners, along=0.78, width=0.16, height=26, color=(60, 40, 30), frame=(30, 20, 16)):
+    t, r, b, l = corners
+    _bld_fill(img, _bld_quad(l, b, along - width / 2 - 0.02, along + width / 2 + 0.02, 0, height + 3), frame, ox, oy)
+    _bld_fill(img, _bld_quad(l, b, along - width / 2, along + width / 2, 0, height), color, ox, oy)
+    knob = _bld_on_face(l, b, along + width * 0.3, height * 0.45)
+    dot(img, int(knob[0] + ox), int(knob[1] + oy), (220, 190, 90))
+
+
+def _bld_windows(img, ox, oy, corners, side, alongs, h0, h1, lit=(250, 210, 110), frame=(40, 34, 30)):
+    t, r, b, l = corners
+    p0, p1 = (l, b) if side == "left" else (b, r)
+    for a in alongs:
+        _bld_fill(img, _bld_quad(p0, p1, a - 0.06, a + 0.06, h0 - 1, h1 + 1), frame, ox, oy)
+        _bld_fill(img, _bld_quad(p0, p1, a - 0.045, a + 0.045, h0, h1), lit, ox, oy)
+
+
+def _bld_stone(dark=0.85, light=1.08):
+    def pat(x, y, c, side):
+        row = y // 5
+        col = (x + (row % 2) * 4) // 8
+        if y % 5 == 0 or (x + (row % 2) * 4) % 8 == 0:
+            return shade(c, dark)
+        return shade(c, light) if (row * 7 + col * 3) % 5 == 0 else c
+    return pat
+
+
+def _bld_logs():
+    def pat(x, y, c, side):
+        return shade(c, 0.75) if y % 4 == 0 else (shade(c, 1.1) if y % 4 == 1 else c)
+    return pat
+
+
+def house_vlad_art():
+    """Count Vlad's mansion: dark stone, a steep slate roof, red-lit windows."""
+    img, ox, oy, c = _bld_box(3, 3, 64, (92, 80, 104), (52, 44, 64), 52, "pyramid", brick=_bld_stone())
+    _bld_windows(img, ox, oy, c, "left", [0.22, 0.48], 30, 44, lit=(220, 60, 60))
+    _bld_windows(img, ox, oy, c, "right", [0.3, 0.62], 30, 44, lit=(220, 60, 60))
+    _bld_windows(img, ox, oy, c, "left", [0.22, 0.48, 0.78], 50, 58, lit=(180, 40, 50))
+    _bld_door(img, ox, oy, c, along=0.78, width=0.14, height=28, color=(70, 20, 30))
+    # a bat weathervane
+    t, r, b, l = c
+    peak = ((t[0] + b[0]) / 2 + ox, (t[1] + b[1]) / 2 - 64 - 52 + oy)
+    rect(img, int(peak[0]), int(peak[1]) - 8, int(peak[0]), int(peak[1]), (30, 26, 34))
+    for dx in (-3, -2, -1, 1, 2, 3):
+        dot(img, int(peak[0]) + dx, int(peak[1]) - 8 + (1 if abs(dx) == 2 else 0), (30, 26, 34))
+    outline_outside(img)
+    return img, (ox, oy)
+
+
+def house_witches_art():
+    """The witches' cottage: crooked timber walls and a tall pointed roof."""
+    img, ox, oy, c = _bld_box(2, 2, 40, (150, 120, 90), (70, 110, 70), 46, "pyramid", brick=_bld_logs())
+    _bld_windows(img, ox, oy, c, "right", [0.5], 18, 30, lit=(120, 240, 120))
+    _bld_door(img, ox, oy, c, along=0.7, width=0.2, height=24, color=(80, 50, 90))
+    t, r, b, l = c
+    # a chimney on the roof, with green smoke
+    R = _bld_up(r, 40)
+    peak = ((t[0] + b[0]) / 2, (t[1] + b[1]) / 2 - 40 - 46)
+    base = (R[0] + (peak[0] - R[0]) * 0.42, R[1] + (peak[1] - R[1]) * 0.42)
+    cx = int(base[0] + ox)
+    cy = int(base[1] + oy)
+    rect(img, cx - 3, cy - 12, cx + 3, cy + 4, (110, 90, 80))
+    rect(img, cx + 1, cy - 12, cx + 3, cy + 4, (88, 72, 64))
+    rect(img, cx - 4, cy - 14, cx + 4, cy - 12, (90, 74, 66))
+    for i, (sx, sy) in enumerate([(cx, cy - 17), (cx + 3, cy - 22), (cx + 1, cy - 27)]):
+        for x, y in _ellipse_pixels(sx, sy, 2.5 - i * 0.4, 2.0):
+            if 0 <= x < img.width and 0 <= y < img.height:
+                img.load()[x, y] = (140, 230, 140, 170)
+    outline_outside(img)
+    return img, (ox, oy)
+
+
+def house_mummy_art():
+    """Ramses' tomb: sandstone, a flat stepped top, a dark doorway with hieroglyphs."""
+    img, ox, oy, c = _bld_box(3, 3, 40, (212, 182, 120), (200, 170, 108), 44, "pyramid", brick=_bld_stone(0.9, 1.04))
+    t, r, b, l = c
+    _bld_fill(img, _bld_quad(l, b, 0.66, 0.9, 0, 30), (40, 30, 24), ox, oy)  # the doorway
+    for a in (0.6, 0.95):  # columns
+        _bld_fill(img, _bld_quad(l, b, a - 0.03, a + 0.03, 0, 40), (230, 204, 150), ox, oy)
+    for k, a in enumerate([0.12, 0.22, 0.32, 0.42]):  # hieroglyphs
+        p = _bld_on_face(l, b, a, 24 + (k % 2) * 6)
+        rect(img, int(p[0] + ox), int(p[1] + oy), int(p[0] + ox) + 2, int(p[1] + oy) + 3, (120, 90, 50))
+    outline_outside(img)
+    return img, (ox, oy)
+
+
+def house_wolf_art():
+    """The werewolves' den: a log cabin with a gable roof and claw marks."""
+    img, ox, oy, c = _bld_box(2, 2, 36, (120, 84, 56), (90, 70, 60), 28, "gable", brick=_bld_logs())
+    _bld_windows(img, ox, oy, c, "right", [0.5], 16, 26, lit=(250, 190, 90))
+    _bld_door(img, ox, oy, c, along=0.6, width=0.22, height=24, color=(70, 46, 30))
+    t, r, b, l = c
+    for k in range(3):  # claw marks by the door
+        p = _bld_on_face(l, b, 0.25 + k * 0.04, 22)
+        for j in range(6):
+            dot(img, int(p[0] + ox) + j // 2, int(p[1] + oy) + j, (60, 36, 24))
+    outline_outside(img)
+    return img, (ox, oy)
+
+
+def crypt_art():
+    """Mr. Bones' crypt in the graveyard: grey stone, columns, a skull over the door."""
+    img, ox, oy, c = _bld_box(3, 2, 46, (150, 150, 156), (120, 120, 128), 16, "gable", brick=_bld_stone(0.82, 1.05))
+    t, r, b, l = c
+    for a in (0.55, 0.75, 0.95):
+        _bld_fill(img, _bld_quad(l, b, a - 0.035, a + 0.035, 0, 44), (190, 190, 196), ox, oy)
+    _bld_fill(img, _bld_quad(l, b, 0.62, 0.88, 0, 30), (24, 22, 28), ox, oy)  # the iron door, open
+    p = _bld_on_face(l, b, 0.75, 38)  # the skull
+    px, py = int(p[0] + ox), int(p[1] + oy)
+    for x, y in _ellipse_pixels(px, py, 3.5, 3.0):
+        dot(img, x, y, (236, 232, 214))
+    dot(img, px - 1, py, (30, 30, 30))
+    dot(img, px + 2, py, (30, 30, 30))
+    rect(img, px - 1, py + 3, px + 2, py + 3, (236, 232, 214))
+    outline_outside(img)
+    return img, (ox, oy)
+
+
+# ---- smaller things (one tile)
+
+def fountain_art():
+    """The town square's fountain: a stone basin of bubbling blood."""
+    img = new(64, 64)
+    cx, cy = 32, 46
+    for x, y in _ellipse_pixels(cx, cy, 28, 14):
+        dot(img, x, y, (130, 126, 132))
+    for x, y in _ellipse_pixels(cx, cy - 4, 28, 14):
+        dot(img, x, y, (170, 166, 172))
+    for x, y in _ellipse_pixels(cx, cy - 4, 23, 11):
+        dot(img, x, y, (150, 20, 26))
+    for x, y in _ellipse_pixels(cx - 6, cy - 7, 8, 3):
+        dot(img, x, y, (190, 40, 46))
+    rect(img, cx - 3, cy - 30, cx + 3, cy - 6, (160, 156, 162))  # the column
+    rect(img, cx + 1, cy - 30, cx + 3, cy - 6, (128, 124, 130))
+    for x, y in _ellipse_pixels(cx, cy - 31, 9, 4):
+        dot(img, x, y, (170, 166, 172))
+    for x, y in _ellipse_pixels(cx, cy - 32, 7, 3):
+        dot(img, x, y, (150, 20, 26))
+    for dx, dy in [(-7, -28), (-9, -24), (-10, -18), (7, -28), (9, -24), (10, -18), (0, -36), (0, -39)]:
+        dot(img, cx + dx, cy + dy, (200, 40, 46))  # spurts
+    outline_outside(img)
+    return img
+
+
+def bench_art(flip):
+    img = new(64, 40)
+    pts = [(14, 26), (40, 13), (50, 18), (24, 31)] if not flip else [(14, 18), (24, 13), (50, 26), (40, 31)]
+    _bld_fill(img, pts, (120, 84, 56), 0, 0)
+    _bld_fill(img, [(p[0], p[1] - 4) for p in pts], (150, 108, 72), 0, 0)
+    for p in pts:
+        rect(img, int(p[0]), int(p[1]) - 4, int(p[0]) + 1, int(p[1]) + 3, (60, 60, 64))
+    outline_outside(img)
+    return img
+
+
+def notice_board_art():
+    img = new(48, 72)
+    rect(img, 10, 30, 12, 66, (90, 64, 44))
+    rect(img, 35, 30, 37, 66, (90, 64, 44))
+    rect(img, 6, 14, 41, 44, (130, 92, 60))
+    rect(img, 8, 16, 39, 42, (160, 118, 78))
+    rect(img, 4, 10, 43, 14, (100, 70, 46))  # its little roof
+    papers = [(10, 18, 18, 28, (236, 230, 210)), (21, 19, 30, 31, (240, 220, 160)), (31, 17, 37, 25, (220, 236, 230)),
+              (11, 30, 19, 40, (230, 210, 220)), (24, 33, 36, 40, (236, 230, 210))]
+    for x0, y0, x1, y1, col in papers:
+        rect(img, x0, y0, x1, y1, col)
+        for yy in range(y0 + 2, y1 - 1, 2):
+            rect(img, x0 + 1, yy, x1 - 2, yy, shade(col, 0.6))
+        dot(img, (x0 + x1) // 2, y0, (200, 40, 40))  # a pin
+    outline_outside(img)
+    return img
+
+
+def gravestone_art(k):
+    img = new(32, 40)
+    rnd = random.Random(400 + k)
+    col = [(140, 140, 146), (120, 124, 120), (150, 144, 136)][k % 3]
+    if k % 3 == 0:  # rounded
+        rect(img, 10, 14, 21, 34, col)
+        for x, y in _ellipse_pixels(15.5, 14, 5.6, 5):
+            dot(img, x, y, col)
+    elif k % 3 == 1:  # a cross
+        rect(img, 14, 8, 17, 34, col)
+        rect(img, 9, 14, 22, 17, col)
+    else:  # a slab
+        rect(img, 9, 16, 22, 34, col)
+    rect(img, 7, 34, 24, 36, (90, 80, 70))
+    for _ in range(4):
+        dot(img, rnd.randint(11, 20), rnd.randint(18, 30), shade(col, 0.75))
+    outline_outside(img)
+    return img
+
+
+def boss_bones_art():
+    """Mr. Bones for the showdown: a big skeleton in a top hat and a red sash, with a cane."""
+    w, h = 24, 50
+    img = new(w, h)
+    bone = (236, 232, 214)
+    dark = (40, 36, 40)
+    rect(img, 7, 0, 16, 7, (30, 28, 34))  # top hat
+    rect(img, 5, 7, 18, 8, (30, 28, 34))
+    rect(img, 7, 6, 16, 6, (170, 30, 40))
+    for x, y in _ellipse_pixels(11.5, 13, 5.5, 5):  # skull
+        dot(img, x, y, bone)
+    rect(img, 9, 12, 10, 13, dark)
+    rect(img, 13, 12, 14, 13, dark)
+    rect(img, 9, 17, 14, 18, bone)
+    for x in range(9, 15, 2):
+        dot(img, x, 18, dark)
+    rect(img, 6, 20, 17, 32, (40, 36, 44))  # the suit
+    for y in range(21, 31, 2):  # ribs showing
+        rect(img, 9, y, 14, y, bone)
+    for i in range(12):  # the sash
+        dot(img, 7 + i, 21 + i, (190, 30, 40))
+        dot(img, 7 + i, 22 + i, (190, 30, 40))
+    rect(img, 3, 21, 5, 31, bone)  # arms
+    rect(img, 18, 21, 20, 31, bone)
+    rect(img, 20, 22, 21, 46, (60, 40, 30))  # the cane
+    for x, y in _ellipse_pixels(20.5, 21, 2, 2):
+        dot(img, x, y, (230, 190, 80))
+    rect(img, 8, 33, 10, 45, bone)  # legs
+    rect(img, 13, 33, 15, 45, bone)
+    rect(img, 6, 45, 10, 47, dark)
+    rect(img, 13, 45, 17, 47, dark)
+    for x, y in _ellipse_pixels(11.5, 48, 9, 1.6):  # shadow
+        if img.load()[x, y][3] == 0:
+            img.load()[x, y] = (0, 0, 0, 70)
+    outline_outside(img)
+    return img
+
+
+def order_icon_art():
+    """16x16: a parcel with a tag (special orders)."""
+    img = new(16, 16)
+    rect(img, 2, 5, 13, 14, (190, 140, 80))
+    rect(img, 2, 5, 13, 6, (210, 162, 100))
+    rect(img, 7, 5, 8, 14, (150, 40, 40))
+    rect(img, 2, 9, 13, 9, (150, 40, 40))
+    rect(img, 10, 1, 14, 4, (236, 230, 210))
+    outline_outside(img)
+    return img
+
+
+
+
+def bones_icon_art():
+    """16x16: Mr. Bones' skull in his top hat (the showdown on the calendar)."""
+    img = new(16, 16)
+    rect(img, 4, 0, 11, 4, (30, 28, 34))
+    rect(img, 2, 5, 13, 5, (30, 28, 34))
+    rect(img, 4, 4, 11, 4, (170, 30, 40))
+    for x, y in _ellipse_pixels(7.5, 10, 5, 4.6):
+        dot(img, x, y, (236, 232, 214))
+    rect(img, 5, 9, 6, 10, (40, 36, 40))
+    rect(img, 9, 9, 10, 10, (40, 36, 40))
+    for x in range(5, 11, 2):
+        dot(img, x, 14, (40, 36, 40))
+    outline_outside(img)
+    return img
+
+
+def south_content():
+    """The south side of town (0.20). Prints each building's origin (the
+    middle of its front tile in the picture): Brand.SOUTH needs them."""
+    for name, fn in [("house_vlad", house_vlad_art), ("house_witches", house_witches_art), ("house_mummy", house_mummy_art),
+                     ("house_wolf", house_wolf_art), ("crypt", crypt_art)]:
+        img, origin = fn()
+        save(img, name)
+        print("  %s origin %s" % (name, origin))
+    save(fountain_art(), "prop_fountain")
+    save(bench_art(False), "prop_bench_0")
+    save(bench_art(True), "prop_bench_1")
+    save(notice_board_art(), "prop_notice_board")
+    for k in range(3):
+        save(gravestone_art(k), f"prop_grave_{k}")
+    save(boss_bones_art(), "boss_bones")
+    save(order_icon_art(), "order")
+    save(bones_icon_art(), "cal_bones")
+
+
 def new_content():
     """Everything above, saved: called from main()."""
     loan_content()
@@ -4619,8 +4979,9 @@ def new_content():
     save(drain_icon(), "upgrade_drains")
     save(golden_sign_icon(), "upgrade_golden_sign")
     save(mass_grave_icon(), "upgrade_zone_4")
-    goals_content()  # (0.18 and 0.19 last: their zombies reseed the random numbers the art above uses)
+    goals_content()  # (0.18 and later last: their zombies reseed the random numbers the art above uses)
     events_content()
+    south_content()
 
 
 def main():

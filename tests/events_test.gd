@@ -207,7 +207,7 @@ func _bus() -> void:
 	check(bus != null and bus.state == TourBus.State.ARRIVING, "the tour bus drives in")
 	var stopped := false
 	var most := 0  # tourists in the store at once
-	for i in 1500:
+	for i in 2400:  # (up to 11 tourists, then the length of the road)
 		await get_tree().process_frame
 		if is_instance_valid(bus) and bus.state == TourBus.State.UNLOADING:
 			stopped = true

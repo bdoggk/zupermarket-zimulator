@@ -45,6 +45,7 @@ var ordered := 0
 var _taken_seen := 0  # Customer.items_taken last time
 var _smashed_seen := 0  # Turf.items_smashed last time
 var _stolen_seen := 0  # GhostThief.stolen last time
+var _orders_seen := 0  # SpecialOrders.items_out last time
 var war_cuts := 0  # the gang war's cutscene played
 var _last_nonbasket := -1
 
@@ -344,9 +345,11 @@ func _act() -> void:
 		"mop": 5.0, "computer": 3.0, "build": 1.5, "shop": 1.5, "rival": 0.5, "pause": 0.5,
 		"saveload": 0.5 if saveload else 0.0, "spawn": 2.0, "zoom": 1.0, "staff": 2.0, "teleport": 3.0,
 		"settings": 0.4, "wait": 6.0, "click": 4.0, "key": 4.0, "wheel": 0.5, "spy": 1.0,
-		"finger": 6.0 if touch else 0.0, "loan": 0.8, "view": 0.6, "war": 1.5, "event": 1.0,
+		"finger": 6.0 if touch else 0.0, "loan": 0.8, "view": 0.6, "war": 1.5, "event": 1.0, "order": 1.2,
 	})
 	match what:
+		"order":
+			await _order()
 		"event":
 			_event()
 		"war":
@@ -701,6 +704,15 @@ func _war() -> void:
 		var t: int = targets[rng.randi() % targets.size()]
 		_note("war: send the gang to %d (%s)" % [t, war.send_problem(t, turf.fighting())])
 		war.send_raid(t, turf.fighting())
+	elif r < 0.64 and not war.taken_over and not turf.fighting() and store.town.crypt_cell != Store.NO_CELL:
+		_note("war: the showdown with Mr. Bones")
+		war.showdown = "due"
+		if turf.start_showdown():
+			var c := store.town.crypt_door() + Vector2i(-3, 1)
+			if store.is_walkable(c):
+				p.cancel_action()
+				p.path.clear()
+				p.position = Iso.cell_to_world(c)
 	elif r < 0.72:
 		if Game.is_open and not turf.fighting():
 			var targets: Array = [GangWar.MAIN] + war.owned_by(GangWar.YOU)
@@ -921,6 +933,68 @@ func _event() -> void:
 		var e: String = ["bus", "inspector", "outage", "ghost", "celeb"][rng.randi() % 5]
 		_note("event: %s starts" % e)
 		store.events.start(e)
+
+
+## Special orders (0.20): look at the notice board, take one, fetch a box of
+## it off a shelf and take it to the house.
+func _order() -> void:
+	var orders: SpecialOrders = Game.orders
+	var town: Town = store.town
+	if town == null or town.notice_board == null:
+		return
+	if orders.list.is_empty():
+		if Game.level < SpecialOrders.FROM_LEVEL and rng.randf() < 0.2:
+			_note("order: up to level %d" % SpecialOrders.FROM_LEVEL)
+			Game.add_xp(maxf(0.0, Game.xp_for_level(SpecialOrders.FROM_LEVEL) - Game.xp) + 1.0)
+		elif orders.day != Game.day or rng.randf() < 0.3:
+			orders.day = 0
+			orders.roll()
+			_note("order: the board has %d" % orders.list.size())
+		return
+	var r := rng.randf()
+	var open := orders.open_orders()
+	if r < 0.25:
+		_note("order: the notice board")
+		Game.orders_requested.emit()
+		await _frames(3)
+		var takeable := orders.list.filter(func(o): return orders.can_take(o))
+		if not takeable.is_empty() and rng.randf() < 0.7:
+			var o: Dictionary = takeable[rng.randi() % takeable.size()]
+			_note("order: take %s for %s" % [SpecialOrders.amount(o), o.house])
+			orders.take(o)
+		await _frames(2)
+		hud.orders_panel.close()
+	elif r < 0.6 and not open.is_empty():
+		var o: Dictionary = open[rng.randi() % open.size()]
+		if p.is_carrying():
+			return
+		for s: Shelf in store.shelves:
+			if s.product_id == o.product and s.stock >= int(o.qty):
+				var c := store.stand_cell_for(s.cell, p.current_cell())
+				if c != Store.NO_CELL:
+					_note("order: fetch %s off a shelf at %s" % [o.product, s.cell])
+					p.cancel_action()
+					p.path.clear()
+					p.position = Iso.cell_to_world(c)
+					s.interact(p)
+				return
+	elif not open.is_empty():
+		for o in open:
+			var h: House = town.houses.get(o.house)
+			if h == null:
+				continue
+			var c := h.cell + Vector2i(0, 1)
+			_note("order: to %s's door (%s, carrying %d %s)" % [o.house, c, p.carry_count, p.carry_product])
+			if store.is_walkable(c):
+				p.cancel_action()
+				p.path.clear()
+				p.position = Iso.cell_to_world(c)
+				await _frames(2)
+				if rng.randf() < 0.5:
+					p.try_interact()
+				else:
+					p._on_tap(h.position + Vector2(0, -20))
+			return
 
 
 func _spy() -> void:
@@ -1333,10 +1407,11 @@ func _check_stock() -> void:
 	var total := 0
 	for k in parts:
 		total += int(parts[k])
-	var taken := Customer.items_taken - _taken_seen + Turf.items_smashed - _smashed_seen + GhostThief.stolen - _stolen_seen
+	var taken := Customer.items_taken - _taken_seen + Turf.items_smashed - _smashed_seen + GhostThief.stolen - _stolen_seen + SpecialOrders.items_out - _orders_seen
 	_taken_seen = Customer.items_taken
 	_smashed_seen = Turf.items_smashed
 	_stolen_seen = GhostThief.stolen
+	_orders_seen = SpecialOrders.items_out
 	if baseline < 0:
 		baseline = total
 		ordered = 0

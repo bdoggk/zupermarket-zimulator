@@ -269,6 +269,11 @@ func _ready() -> void:
 	await _frames(3)
 	check(not war.rival_closed and town.rival_sign.textures[0] == Brand.RIVAL.textures.sign, "the next morning Bone Mart is open again")
 	check(war.ready_gang().size() == war.gang_size() and turf.members.size() == war.gang_size(), "and your gang is back")
+	if war.showdown == "due":  # (0.20: you've won enough raids for Mr. Bones to want a showdown instead)
+		check(war.raids.is_empty() and Game.calendar.event() == "showdown", "%d raids won: no raids today, Mr. Bones wants a showdown tonight" % int(Game.career.get("raids", 0)))
+		war.showdown = ""
+		Game.career.raids = 0.0
+		war.roll_raids()
 	check(not war.raids.is_empty() and war.raids.all(func(r): return int(r[0]) >= GangWar.RAID_FROM and int(r[0]) <= GangWar.RAID_TO), "Bone Mart's gangs will come today at %s" % [war.raids.map(func(r): return Game.time_text(int(r[0])))])
 
 	# ---- saving

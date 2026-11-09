@@ -48,7 +48,7 @@ func _ready() -> void:
 	Game.xp = 500.0
 	Game.level = Game.level_for(Game.xp)
 	Game.roll_rival_spies()
-	check(Game.rival_spies.size() == 2 and Game.rival_spies[1] - Game.rival_spies[0] >= 60,
+	check(Game.rival_spies.size() == 2 and Game.rival_spies[1] - Game.rival_spies[0] >= 30 and Game.rival_spies[0] < 13 * 60 + 45 and Game.rival_spies[1] > 13 * 60 + 45,
 		"from store level 3, two, spread out over the day (%s)" % [Game.rival_spies.map(func(m): return Game.time_text(m))])
 
 	# ---- one that gets away

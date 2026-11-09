@@ -4,6 +4,7 @@ extends PanelContainer
 ## along you are, for each of Game.goals.list, with the Perfect Day streak
 ## at the top. A goal that's just been done lights up green for a moment.
 ## Click or tap the title to fold it down to one line ("Goals 1/3").
+## Special orders you've taken (0.20, SpecialOrders) go underneath.
 
 const BOX := preload("res://assets/sprites/goal_box.png")
 const TICK := preload("res://assets/sprites/goal_done.png")
@@ -14,6 +15,8 @@ var title: Label
 var streak_label: Label
 var rows: Array = []  # [HBoxContainer, TextureRect, Label (what), Label (how far)]
 var list_box: VBoxContainer
+var orders_title: Label
+var order_rows: Array = []  # [HBoxContainer, TextureRect (the product), Label (what), Label (by when)]
 var _flash := {}  # goal index -> seconds left lit up
 var _shown := ""  # what's on screen (it's only rebuilt when that changes)
 
@@ -55,6 +58,26 @@ func _init() -> void:
 		how.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		row.add_child(how)
 		rows.append([row, tick, what, how])
+	orders_title = UI.label("SPECIAL ORDERS", UI.DIM)
+	orders_title.add_theme_font_size_override("font_size", small)
+	list_box.add_child(orders_title)
+	for i in SpecialOrders.TAKE_MAX:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		list_box.add_child(row)
+		var pic := UI.icon(null, Vector2(big + 1, big + 5))
+		pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(pic)
+		var what := UI.label("", Color.WHITE)
+		what.add_theme_font_size_override("font_size", big)
+		row.add_child(what)
+		var how := UI.label("", UI.INFO)
+		how.add_theme_font_size_override("font_size", big)
+		how.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		how.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(how)
+		order_rows.append([row, pic, what, how])
 	gui_input.connect(_on_input)
 	Game.goal_done.connect(_on_goal_done)
 
@@ -74,7 +97,7 @@ func _on_goal_done(g: Dictionary) -> void:
 
 ## Whether there's anything to show today.
 static func has_goals() -> bool:
-	return not Game.goals.list.is_empty() and Game.goals.day == Game.day
+	return (not Game.goals.list.is_empty() and Game.goals.day == Game.day) or not Game.orders.open_orders().is_empty()
 
 
 func _process(delta: float) -> void:
@@ -84,12 +107,16 @@ func _process(delta: float) -> void:
 		_flash[i] -= delta
 		if _flash[i] <= 0.0:
 			_flash.erase(i)
-	var list: Array[Dictionary] = Game.goals.list
+	var list: Array[Dictionary] = Game.goals.list if Game.goals.day == Game.day else ([] as Array[Dictionary])
 	var done := Game.goals.done_count()
 	var streak := Game.goals.streak
 	var lines: Array[String] = []
 	for g in list:
 		lines.append("%s|%s|%s" % [Goals.text(g), Goals.progress_text(g), g.done])
+	var open := Game.orders.open_orders()
+	var p: Player = Game.player
+	for o in open:
+		lines.append("o%s|%s|%s" % [o.house, o.product, Game.orders.can_deliver(o.house, p) if is_instance_valid(p) else false])
 	var key := "%s|%d|%d|%s|%s" % [folded, done, streak, "\n".join(lines), _flash.keys()]
 	if key == _shown:
 		return
@@ -114,4 +141,19 @@ func _process(delta: float) -> void:
 		how.text = "+$%d" % int(g.cash) if g.done else Goals.progress_text(g)
 		UI.set_color(how, UI.GOOD if g.done else UI.INFO)
 		row.tooltip_text = "Reward: $%d and %d XP" % [int(g.cash), int(g.xp)]
+	orders_title.visible = not open.is_empty()
+	for i in order_rows.size():
+		var r: Array = order_rows[i]
+		(r[0] as HBoxContainer).visible = i < open.size()
+		if i >= open.size():
+			continue
+		var o: Dictionary = open[i]
+		(r[1] as TextureRect).texture = Game.icon(o.product)
+		(r[2] as Label).text = "%s to %s" % [SpecialOrders.amount(o), SpecialOrders.house(o.house).who]
+		var ready := is_instance_valid(p) and Game.orders.can_deliver(o.house, p)
+		(r[3] as Label).text = "Got them!" if ready else "by %s" % Game.clock_text_at(SpecialOrders.DUE)
+		UI.set_color(r[3] as Label, UI.GOOD if ready else UI.INFO)
+		(r[0] as HBoxContainer).tooltip_text = "%s pays $%d and %d XP. Use the door of %s." % [str(SpecialOrders.house(o.house).who), int(o.pay), int(o.xp), SpecialOrders.house(o.house).place]
+	if title.text == "TODAY'S GOALS" and list.is_empty():
+		title.text = ""
 	reset_size()

@@ -42,6 +42,7 @@ const TYPES := {
 	"rating": {"weight": 1.5, "hard": 1.2, "close": true},
 	"inspection": {"weight": 6.0, "hard": 1.0},  # only on the inspector's day (0.19)
 	"catch_ghost": {"weight": 6.0, "hard": 0.8},  # only on a ghost day
+	"deliver": {"weight": 2.0, "hard": 1.1},  # special orders (0.20)
 }
 const CASH := 20.0  # a goal pays this (times how hard it is)...
 const CASH_PER_LEVEL := 10.0  # ...plus this for every store level
@@ -130,6 +131,8 @@ func can_pick(t: String) -> bool:
 			return Game.calendar.event() == "inspector"
 		"catch_ghost":
 			return Game.calendar.event() == "ghost"
+		"deliver":
+			return Game.level >= SpecialOrders.FROM_LEVEL and not Game.orders.list.is_empty()
 	return true
 
 
@@ -179,6 +182,8 @@ func _make(t: String, rng: RandomNumberGenerator) -> Dictionary:
 			g.target = rng.randi_range(3, 5)
 		"snake":
 			g.target = clampi(10 + floori(Game.snake_best / 4.0), 10, 25)
+		"deliver":
+			g.target = 2 if Game.level >= 9 else 1
 		"zomtok":
 			g.target = 5
 		"profit":
@@ -202,6 +207,8 @@ static func text(g: Dictionary) -> String:
 			return f % [int(g.target), Game.shopper_plural(k) if not k.is_empty() else "shoppers"]
 		"rating":
 			return f % ("%.1f" % float(g.target)).replace(".0", "")
+		"deliver":
+			return f % [int(g.target), "" if int(g.target) == 1 else "s"]
 		"spy", "license", "decorate", "hire", "raid", "no_walkouts", "clean", "inspection", "catch_ghost":
 			return f
 	return f % int(g.target)
@@ -241,6 +248,8 @@ static func progress(g: Dictionary) -> float:
 			return float(st.get("raids_won", 0))
 		"snake":
 			return float(st.get("snake", 0))
+		"deliver":
+			return float(st.get("orders", 0))
 		"zomtok":
 			return float(st.get("zt_likes", 0))
 		"no_walkouts", "clean":

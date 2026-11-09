@@ -54,6 +54,7 @@ var home := Store.NO_CELL  # where it goes back to
 var spot := Store.NO_CELL  # where its job has it stand
 var foe: Node2D = null  # who it's fighting: a Gangster or the Player
 var angry := false  # Bone Mart's: you've hit one of their gang
+var leaves_you := false  # Mr. Bones' guards at the showdown: they only go for you once you've hit them
 var down := false
 var retired := false  # fired from your gang: walking off, out of the war
 var holding := false  # waiting for the rest of the gang (on a raid): only fights back
@@ -212,7 +213,7 @@ func hurt(amount: int, from: Node2D) -> void:
 	hp -= amount
 	_hit_flash = 0.15
 	if from is Player and side == BONE:
-		turf.bone_angry()  # the whole gang comes for you now
+		turf.bone_angry(self)  # the whole gang comes for you now
 	if from != null:
 		var pushed := position + (position - from.position).normalized() * 3.0  # knocked back a little...
 		if store.is_walkable(Iso.world_to_cell(pushed)):  # ...but never into a wall
@@ -242,6 +243,8 @@ func _knocked_out(by: Node2D) -> void:
 func _can_fight(n: Node2D) -> bool:
 	if not is_instance_valid(n):
 		return false
+	if n is BossBones and side == ZOMBIE:  # (only you can take Mr. Bones down: they leave him to you)
+		return false
 	if n is Gangster:
 		return not (n as Gangster).is_out() and (n as Gangster).side != side
 	if n is Player:
@@ -265,7 +268,7 @@ func _pick_foe() -> Node2D:
 	var p: Player = store.player
 	if side == BONE and p and _can_fight(p):
 		var d := float(Iso.chebyshev(p.current_cell(), here))
-		if (d <= PLAYER_SIGHT or (angry and d <= sight + 4)) and d < best_d + 0.5:
+		if ((d <= PLAYER_SIGHT and not leaves_you) or (angry and d <= sight + 4)) and d < best_d + 0.5:
 			best = p
 	return best
 
